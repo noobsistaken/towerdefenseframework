@@ -1,0 +1,36 @@
+[package]
+name = "template/template-project"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+license = "MIT"
+exclude = ["**"]
+
+# Wally needs to know where each realm lands in the datamodel so it can write
+# correct link files. THESE MUST MATCH default.project.json. If you move a
+# Packages folder in the Rojo tree, change it here too or requires break at
+# runtime with no build-time error.
+[place]
+shared-packages = "game.ReplicatedStorage.Packages"
+server-packages = "game.ServerScriptService.ServerPackages"
+
+# Every version below was resolved against the live Wally index on 2026-08-13.
+# Do not bump these casually. See ARCHITECTURE.md -> "Locked Dependencies".
+
+[dependencies]
+Promise = "evaera/promise@4.0.0"      # async primitive
+Signal = "sleitnick/signal@2.0.3"     # events
+Janitor = "howmanysmall/janitor@1.18.3" # cleanup
+Charm = "littensy/charm@0.11.0"       # reactive client state
+React = "jsdotlua/react@17.2.1"       # UI
+ReactRoblox = "jsdotlua/react-roblox@17.2.1" # UI renderer
+
+# ProfileStore is realm = "server", so Wally requires it here, not in
+# [dependencies]. It installs into ServerPackages/, not Packages/.
+[server-dependencies]
+ProfileStore = "lm-loleris/profilestore@1.0.3" # player data
+
+# Installs into DevPackages/. Never shipped in a production build.
+[dev-dependencies]
+Jest = "jsdotlua/jest@3.10.0"
+JestGlobals = "jsdotlua/jest-globals@3.10.0"

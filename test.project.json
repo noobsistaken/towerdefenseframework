@@ -1,0 +1,56 @@
+{
+	"name": "template-project-tests",
+	"globIgnorePaths": [
+		"**/.git/**",
+		"**/.github/**",
+		"**/node_modules/**",
+		"**/Packages/**/default.project.json",
+		"**/ServerPackages/**/default.project.json",
+		"**/DevPackages/**/default.project.json"
+	],
+	"tree": {
+		"$className": "DataModel",
+
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Packages": {
+				"$path": "Packages"
+			},
+			"DevPackages": {
+				"$path": "DevPackages"
+			},
+			"Shared": {
+				"$path": "src/shared"
+			},
+			"Net": {
+				"$path": "net/generated/client.luau"
+			}
+		},
+
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"ServerPackages": {
+				"$path": "ServerPackages"
+			},
+			"Net": {
+				"$path": "net/generated/server.luau"
+			},
+			"Server": {
+				"$path": "src/server"
+			},
+			"Tests": {
+				"$path": "tests"
+			}
+		},
+
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"Client": {
+					"$path": "src/client"
+				}
+			}
+		}
+	}
+}

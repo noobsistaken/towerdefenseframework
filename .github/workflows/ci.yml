@@ -1,0 +1,103 @@
+name: CI
+
+# What this proves: the code lints, is formatted, typechecks, and builds.
+# What this does NOT prove: that the game behaves correctly. Jest-Lua runs
+# inside a Roblox VM and there is no Roblox Studio on a GitHub-hosted runner,
+# so no test in tests/ is executed here. A green tick is not a passing test
+# suite. Behaviour is verified in Studio - see AGENTS.md -> "Tests".
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: CompeyDev/setup-rokit@v0.2.1
+        with:
+          cache: "true"
+
+      - name: Show resolved tool versions
+        run: |
+          rojo --version
+          wally --version
+          selene --version
+          stylua --version
+          luau-lsp --version
+          zap --version
+
+      # Packages/ ServerPackages/ DevPackages/ are committed on purpose, so
+      # the build is deterministic and needs no network. Fail loudly if that
+      # invariant was broken rather than silently resolving something else.
+      - name: Check vendored dependencies are present
+        run: |
+          for dir in Packages ServerPackages DevPackages; do
+            if [ ! -d "$dir" ]; then
+              echo "::error::$dir/ is missing. It is committed on purpose - see .gitignore."
+              exit 1
+            fi
+          done
+          echo "All three package directories present."
+
+      # Generated from test.project.json because that tree is a superset of
+      # the shipping tree, so one sourcemap resolves requires for src and tests.
+      - name: Generate sourcemap
+        run: rojo sourcemap test.project.json --output sourcemap.json
+
+      - name: Networking schema is up to date
+        run: |
+          zap --no-warnings net/schema.zap
+          if ! git diff --exit-code -- net/generated/; then
+            echo "::error::net/generated/ is stale. Run 'zap --no-warnings net/schema.zap' and commit the result."
+            exit 1
+          fi
+
+      - name: Lint (selene)
+        run: selene src tests
+
+      - name: Format (stylua --check)
+        run: stylua --check .
+
+      - name: Typecheck (luau-lsp analyze)
+        run: |
+          luau-lsp analyze \
+            --sourcemap=sourcemap.json \
+            --defs=types/globalTypes.d.luau \
+            --ignore="**/Packages/**" \
+            --ignore="**/ServerPackages/**" \
+            --ignore="**/DevPackages/**" \
+            src tests
+
+      # Not a test run. This only proves the test place assembles - if it
+      # fails, the suite could not have run in Studio either.
+      - name: Build test place (does not execute tests)
+        run: |
+          mkdir -p build
+          rojo build test.project.json --output build/test.rbxl
+          echo "::notice::Test place built. Jest-Lua needs Roblox Studio; no tests were executed."
+
+      - name: Build shipping place
+        run: rojo build default.project.json --output build/game.rbxl
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: places-${{ github.sha }}
+          path: |
+            build/game.rbxl
+            build/test.rbxl
+          if-no-files-found: error
+          retention-days: 14

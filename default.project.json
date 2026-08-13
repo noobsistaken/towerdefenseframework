@@ -1,0 +1,54 @@
+{
+	"name": "template-project",
+	"globIgnorePaths": [
+		"**/.git/**",
+		"**/.github/**",
+		"**/node_modules/**",
+		"**/Packages/**/*.spec.luau",
+		"**/Packages/**/*.spec.lua",
+		"**/ServerPackages/**/*.spec.luau",
+		"**/DevPackages/**/*.spec.luau",
+		"**/Packages/**/default.project.json",
+		"**/ServerPackages/**/default.project.json",
+		"**/DevPackages/**/default.project.json"
+	],
+	"tree": {
+		"$className": "DataModel",
+
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Packages": {
+				"$path": "Packages"
+			},
+			"Shared": {
+				"$path": "src/shared"
+			},
+			"Net": {
+				"$path": "net/generated/client.luau"
+			}
+		},
+
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"ServerPackages": {
+				"$path": "ServerPackages"
+			},
+			"Net": {
+				"$path": "net/generated/server.luau"
+			},
+			"Server": {
+				"$path": "src/server"
+			}
+		},
+
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"Client": {
+					"$path": "src/client"
+				}
+			}
+		}
+	}
+}

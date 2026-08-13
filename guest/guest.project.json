@@ -1,0 +1,54 @@
+{
+	"name": "guest-subtree",
+
+	"//": [
+		"SCOPED sync for working inside someone else's Roblox project.",
+		"",
+		"This maps ONLY your own subtree. It deliberately does not map",
+		"ReplicatedStorage, ServerScriptService, or StarterPlayer wholesale -",
+		"a broad mapping plus Rojo's default sync behaviour can delete their",
+		"instances that have no counterpart on disk.",
+		"",
+		"Before using: replace YourName below with your actual folder name,",
+		"and confirm with the project owner that these three folders are yours",
+		"to own. Then create them in Studio ONCE, by hand, before serving.",
+		"",
+		"Never point `rojo serve` at this without reading guest/README.md."
+	],
+
+	"tree": {
+		"$className": "DataModel",
+
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"$ignoreUnknownInstances": true,
+
+			"YourName_Shared": {
+				"$path": "src/shared"
+			}
+		},
+
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"$ignoreUnknownInstances": true,
+
+			"YourName_Server": {
+				"$path": "src/server"
+			}
+		},
+
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"$ignoreUnknownInstances": true,
+
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"$ignoreUnknownInstances": true,
+
+				"YourName_Client": {
+					"$path": "src/client"
+				}
+			}
+		}
+	}
+}

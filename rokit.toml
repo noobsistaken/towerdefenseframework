@@ -1,0 +1,16 @@
+# Pinned toolchain. Every tool here is resolved to an exact published release.
+# Bump deliberately, never opportunistically: a tool version change is a
+# change to the verification layer, and the verification layer is the only
+# thing catching bad code before it ships.
+#
+# Install everything with:  rokit install
+# Versions resolved 2026-08-13 (see SETUP-LOG.md).
+
+[tools]
+rojo = "rojo-rbx/rojo@7.7.0"
+wally = "UpliftGames/wally@0.3.2"
+selene = "Kampfkarren/selene@0.31.0"
+stylua = "JohnnyMorganz/StyLua@2.5.2"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.69.0"
+lune = "lune-org/lune@0.10.5"
+zap = "red-blox/zap@0.6.29"

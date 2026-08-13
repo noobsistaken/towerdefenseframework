@@ -1,0 +1,19 @@
+std = "roblox"
+
+# Vendored dependency source stays out of the lint path. Two reasons:
+#   1. Speed and context - we do not need 58 packages of noise in every run.
+#   2. An agent that sees a warning inside a library will try to "fix" it.
+#      Bugs get fixed in our code, never inside Packages/.
+# net/generated is machine-written by Zap - fix the schema, not the output.
+exclude = [
+	"Packages/",
+	"ServerPackages/",
+	"DevPackages/",
+	"net/generated/",
+	"types/",
+]
+
+[lints]
+# Wally link files and Roblox idioms make these fire on correct code.
+mixed_table = "warn"
+shadowing = "warn"

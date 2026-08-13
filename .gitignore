@@ -1,0 +1,42 @@
+# Every pattern here is ANCHORED to the repo root with a leading slash.
+#
+# That is deliberate, not stylistic. An unanchored pattern like `sourcemap.json`
+# also matches `ServerPackages/_Index/.../profilestore/sourcemap.json`, which
+# ships inside a vendored package. Silently dropping a file out of a committed
+# dependency tree defeats the whole reason those trees are committed.
+
+# Regenerated on demand by `rojo sourcemap`. Never committed - it encodes
+# tree state and would conflict on every branch.
+/sourcemap.json
+
+# Build artifacts
+/build/
+/*.rbxl
+/*.rbxlx
+/*.rbxm
+/*.rbxmx
+/*.rbxl.lock
+/*.rbxlx.lock
+
+# Claude Code local overrides - machine-specific, never shared
+/.claude/settings.local.json
+/CLAUDE.local.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+/.vscode/settings.local.json
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY NOT IGNORED - do not "clean this up":
+#
+#   Packages/ ServerPackages/ DevPackages/  are COMMITTED.
+#   wally.lock                              is COMMITTED.
+#   net/generated/                          is COMMITTED.
+#   types/globalTypes.d.luau                is COMMITTED.
+#   roblox.yml (selene's Roblox std)        is COMMITTED.
+#
+# Committing them makes builds deterministic and offline-resolvable, and means
+# a fresh clone can typecheck before it can reach the network. If you add
+# Packages/ to this file, every acceptance gate in AGENTS.md becomes a lie.
+# ---------------------------------------------------------------------------

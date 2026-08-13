@@ -1,0 +1,167 @@
+# ARCHITECTURE — {{PROJECT_NAME}}
+
+> **This is a template. Fill it in as the project takes shape.**
+> `AGENTS.md` says *what to do*. This file says *why*, and it is where
+> decisions get recorded so they stop being re-litigated every session.
+>
+> Placeholders look like `{{THIS}}`. An unfilled section is a real gap, not a
+> formatting problem — if an agent asks a question this file should have
+> answered, the answer belongs here afterwards.
+
+---
+
+## 1. What this game is
+
+{{ One paragraph. What the player does, and the core loop. An agent that does
+not know this will make locally-sensible, globally-wrong choices. }}
+
+**Target platform(s):** {{ PC / mobile / console }}
+**Expected concurrent players per server:** {{ N }}
+
+---
+
+## 2. Module layout
+
+| Path | Datamodel location | Owns |
+|---|---|---|
+| `src/server/` | `ServerScriptService.Server` | authority, data sessions, validation |
+| `src/client/` | `StarterPlayer.StarterPlayerScripts.Client` | input, UI, prediction |
+| `src/shared/` | `ReplicatedStorage.Shared` | types, pure logic, constants |
+| `net/generated/` | `ReplicatedStorage.Net` / `ServerScriptService.Net` | wire format |
+
+**Rules that hold regardless of feature:**
+
+- `src/shared/` must stay free of side effects at require time. It is loaded
+  on both realms; anything that touches `Players` or DataStores at module
+  scope will break one of them.
+- The server never trusts a client value. Zap validates *shape*; it cannot
+  validate *permission*. Ownership and affordability checks are ours.
+- The client never holds authoritative state. It holds a replica.
+
+**Module conventions for this project:**
+
+{{ e.g. "one folder per feature under src/server/Features/, each exporting
+`start()`" — write the actual convention once you have one. }}
+
+---
+
+## 3. Networking
+
+**Schema:** [`net/schema.zap`](net/schema.zap) — the single source of truth.
+**Generated:** `net/generated/{server,client}.luau` — committed, never edited.
+**Regenerate:** `zap --no-warnings net/schema.zap`
+
+Hand-written `RemoteEvent`s are banned. The reason is specific: a schema is a
+small typed surface that an agent edits in one place and a human can review in
+under a minute. Hand-rolled remotes are an unbounded surface whose failure
+modes — a typo'd event name, an unvalidated payload from an exploiter — are
+invisible at build time.
+
+**Message inventory:**
+
+| Message | Direction | Reliability | Purpose |
+|---|---|---|---|
+| `PlayerScoreChanged` | S→C | reliable | {{ replace }} |
+| `RequestPurchase` | C→S | reliable | {{ replace }} |
+| `ReportInput` | C→S | unreliable | {{ replace }} |
+| `GetLeaderboard` | C→S→C | funct | {{ replace }} |
+
+{{ Keep this table current. It is the fastest way for a reviewer to see the
+entire trust boundary at once. }}
+
+---
+
+## 4. Data schema and versioning
+
+**Schema:** [`src/shared/DataSchema.luau`](src/shared/DataSchema.luau)
+**Store:** ProfileStore, store name `{{ PlayerData_v1 }}`
+**Current version:** `{{ 1 }}`
+
+Versioning contract:
+
+1. Never change the meaning of an existing field. Add a new one.
+2. Every shape change bumps `CURRENT_VERSION` **and** adds exactly one
+   migration step for the previous version.
+3. Migrations run oldest → newest, one version at a time.
+4. A missing migration step is a hard error, never a guess. A wrong guess
+   silently corrupts data belonging to real players, and there is no undo.
+
+**Version history:**
+
+| Version | Date | Change | Migration |
+|---|---|---|---|
+| 1 | {{ date }} | initial shape | — |
+
+**DataStore-safety constraints** (ProfileStore will reject or silently drop
+these): no Instances, no userdata (`Vector3`/`CFrame`/`Color3`), no functions,
+no mixed tables, no sparse arrays. Serialise before storing.
+
+---
+
+## 5. Replication model
+
+**Client state:** Charm atoms in `src/client/`. The client renders from atoms;
+React reads them and stores no second copy.
+
+{{ Decide and record: }}
+
+- **What replicates:** {{ which state the server pushes, and when }}
+- **How:** {{ full snapshot on join + deltas? per-message? }}
+- **Rate:** {{ e.g. "score changes are event-driven; position is unreliable at
+  20Hz" }}
+- **What is client-authoritative:** {{ ideally nothing; if something is, say
+  so explicitly and say why it is acceptable }}
+
+---
+
+## 6. Locked Dependencies
+
+> **Read this before proposing any dependency change.**
+>
+> Everything here was decided once, deliberately. An agent that proposes a
+> migration mid-task is burning the session on a settled question. If you
+> think one of these is wrong, say so in one sentence and continue with the
+> task — do not start the migration.
+
+| Package | Version | Locked because |
+|---|---|---|
+| `evaera/promise` | 4.0.0 | async primitive; only Promise implementation allowed |
+| `sleitnick/signal` | 2.0.3 | events |
+| `howmanysmall/janitor` | 1.18.3 | cleanup |
+| `lm-loleris/profilestore` | 1.0.3 | player data; server realm |
+| `littensy/charm` | 0.11.0 | reactive client state |
+| `jsdotlua/react` | 17.2.1 | UI |
+| `jsdotlua/react-roblox` | 17.2.1 | UI renderer |
+| `jsdotlua/jest` | 3.10.0 | tests (dev only) |
+| `jsdotlua/jest-globals` | 3.10.0 | tests (dev only) |
+
+**Banned, with reasons:**
+
+| Package | Reason |
+|---|---|
+| Knit | unmaintained since ~2024 |
+| ProfileService | retired upstream in favour of ProfileStore |
+| BridgeNet2 | archived by the author |
+| `sleitnick/comm` | Knit-era; superseded by Zap schema codegen |
+| `howmanysmall/typed-promise` | would mean two Promise implementations |
+
+**Toolchain** is pinned in [`rokit.toml`](rokit.toml). A tool version bump is a
+change to the verification layer — treat it as a real change, not maintenance.
+
+**Known upstream quirks** (add to this list as you hit them):
+
+- Wally's re-export link files do not propagate Luau **type** exports. Write
+  `type T = typeof(Pkg.new())` instead of `Pkg.T`.
+- `ProfileStore:StartSessionAsync`'s published type omits the documented
+  `Cancel` param. `src/server/init.server.luau` casts around it deliberately.
+
+---
+
+## 7. Project-specific decisions
+
+{{ Append here as decisions get made. Date them. One line each is fine —
+the value is that nobody re-argues them next session. }}
+
+| Date | Decision | Why |
+|---|---|---|
+| {{ date }} | {{ decision }} | {{ reason }} |
