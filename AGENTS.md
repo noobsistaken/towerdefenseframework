@@ -28,7 +28,24 @@ Setup (once per clone):
 ```bash
 rokit install     # pinned toolchain: rojo wally selene stylua luau-lsp lune zap
 wally install     # dependencies -> Packages/ ServerPackages/ DevPackages/
+mkdir -p build    # rojo will NOT create the output directory itself
 ```
+
+**Check that the toolchain is actually reachable before trusting any gate:**
+
+```bash
+for t in rojo wally selene stylua luau-lsp lune zap; do printf '%-10s ' "$t"; $t --version 2>&1 | head -1; done
+```
+
+> Rokit installs its shims to `~/.rokit/bin`. If that is not on `PATH` — or if
+> a stale `~/.aftman/bin` sits ahead of it — every command in this file
+> silently does nothing useful, and `.claude/hooks/post-edit-luau.sh` exits 0
+> having verified **zero** files. A green gate that ran no checks is worse than
+> a red one. If the loop above does not print seven versions, fix `PATH` first:
+>
+> ```bash
+> export PATH="$HOME/.rokit/bin:$PATH"
+> ```
 
 Sourcemap — regenerate after any file add/move/rename, before typechecking:
 

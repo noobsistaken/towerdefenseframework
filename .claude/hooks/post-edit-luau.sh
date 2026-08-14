@@ -30,6 +30,17 @@
 
 set -uo pipefail
 
+# Rokit installs its tool shims to ~/.rokit/bin, which is NOT guaranteed to be
+# on PATH for a non-login shell — and on a machine that previously used Aftman,
+# a stale ~/.aftman/bin sits on PATH ahead of it with shims that error out.
+#
+# This matters more than it looks. Every tool below is invoked behind
+# `command -v`, and a missing tool is deliberately a no-op (see the exit-code
+# policy above). So without this line the hook silently runs zero checks and
+# exits 0 — the gate reports success having verified nothing, which is the
+# exact failure this template exists to prevent.
+[ -d "$HOME/.rokit/bin" ] && PATH="$HOME/.rokit/bin:$PATH" && export PATH
+
 payload="$(cat)"
 
 # jq is the only hard dependency. Without it we cannot read the payload, so
