@@ -1,0 +1,74 @@
+--!strict
+--[[
+	Tuning constants that are not per-map, per-enemy or per-difficulty.
+
+	Anything that belongs to a piece of content lives in Config/. What is here
+	is the shape of the match loop itself.
+]]
+
+local Constants = {}
+
+-- ===========================================================================
+-- Simulation
+-- ===========================================================================
+
+--- The enemy simulation runs on a FIXED timestep, accumulating real frame
+--- time and stepping in whole ticks.
+---
+--- Fixed rather than variable for two reasons, both load-bearing:
+---   * Determinism. The same inputs produce the same result regardless of
+---     server frame rate, which is what lets a test step the simulation by
+---     hand and assert on exact positions.
+---   * Fairness. Enemy speed and damage-over-time tick rates stop depending
+---     on how busy the server happens to be.
+Constants.SIMULATION_HZ = 30
+Constants.SIMULATION_STEP = 1 / Constants.SIMULATION_HZ
+
+--- Ceiling on how many fixed steps one frame may run. Without it, a server
+--- hitch produces a spiral of death: the accumulator grows, the catch-up
+--- steps take longer than real time, and the accumulator grows further.
+--- Hitting this ceiling means the simulation falls behind wall-clock, which
+--- is strictly better than locking the server.
+Constants.MAX_STEPS_PER_FRAME = 5
+
+-- ===========================================================================
+-- Match loop
+-- ===========================================================================
+
+--- Build time before the first wave. Longer than later phases because the
+--- player starts with nothing placed.
+Constants.FIRST_PREPARE_SECONDS = 25
+
+--- Build time before every subsequent wave.
+Constants.PREPARE_SECONDS = 15
+
+--- Breather after a wave is cleared, before the next prepare phase.
+Constants.INTERMISSION_SECONDS = 3
+
+--- How long the results screen shows before players are returned to lobby.
+Constants.RESULTS_SECONDS = 12
+
+-- ===========================================================================
+-- World
+-- ===========================================================================
+
+--- CollectionService tag on every buildable pad, so placement validation can
+--- find them by query rather than by walking the map model.
+Constants.BUILDABLE_TAG = "TDBuildable"
+
+--- Attribute names written on server-owned instances. These are the
+--- replication channel for per-entity state (ARCHITECTURE.md D5), so a typo
+--- here is a silent client-side failure - reference the constant, never the
+--- literal.
+Constants.ATTR_HEALTH = "Health"
+Constants.ATTR_MAX_HEALTH = "MaxHealth"
+Constants.ATTR_ENEMY_ID = "EnemyId"
+Constants.ATTR_SURFACE_TYPE = "SurfaceType"
+
+--- Folder names inside workspace. MapBuilder owns these and clears them
+--- between matches.
+Constants.MAP_FOLDER = "TDMap"
+Constants.ENEMY_FOLDER = "TDEnemies"
+Constants.TOWER_FOLDER = "TDTowers"
+
+return Constants

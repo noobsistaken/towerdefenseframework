@@ -1,11 +1,16 @@
 --!strict
 --[[
-	Server entry point.
+	Match place server entry point.
 
 	Responsibilities, in order:
 	  1. Own player data sessions (ProfileStore).
-	  2. Bind the networking schema's server handlers (net/schema.zap).
-	  3. Nothing else. Feature logic goes in modules under src/server/.
+	  2. Boot the match.
+	  3. Bind the networking schema's server handlers (net/schema.zap).
+	  4. Nothing else. Feature logic goes in modules under src/match/server/.
+
+	This is the MATCH place. The lobby place is a separate build target with
+	its own entry point (Phase 4). Both share src/shared/ and one generated
+	networking module.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,7 +21,8 @@ local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ServerScriptService.Net)
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
-local Types = require(ReplicatedStorage.Shared.Types)
+
+local MatchController = require(script.Match.MatchController)
 
 local PlayerStore = ProfileStore.New("PlayerData_v1", DataSchema.TEMPLATE)
 
@@ -38,6 +44,20 @@ type JanitorInstance = typeof(Janitor.new())
 
 local profiles: { [Player]: Profile } = {}
 local janitors: { [Player]: JanitorInstance? } = {}
+
+-- ---------------------------------------------------------------------------
+-- Match
+--
+-- Built before the first player is handled, so nobody can arrive into a
+-- server with no map and no state to report.
+-- ---------------------------------------------------------------------------
+
+local match = MatchController.new()
+match:start()
+
+-- ---------------------------------------------------------------------------
+-- Data sessions
+-- ---------------------------------------------------------------------------
 
 local function onPlayerAdded(player: Player)
 	--[[
@@ -83,9 +103,13 @@ local function onPlayerAdded(player: Player)
 
 	profiles[player] = profile
 	janitors[player] = janitor
+
+	match:addPlayer(player)
 end
 
 local function onPlayerRemoving(player: Player)
+	match:removePlayer(player)
+
 	local janitor = janitors[player]
 	if janitor ~= nil then
 		janitor:Destroy()
@@ -110,32 +134,23 @@ Players.PlayerRemoving:Connect(onPlayerRemoving)
 -- Networking. Every handler below is generated from net/schema.zap.
 -- To add a message, edit the schema and regenerate - never create a
 -- RemoteEvent by hand.
+--
+-- Zap has already validated the SHAPE of anything arriving here. What it
+-- cannot know is whether this player is allowed to do it, so that check is
+-- always ours.
 -- ---------------------------------------------------------------------------
 
-Net.RequestPurchase.On(function(player: Player, value: { itemId: string, quantity: number })
-	local profile = profiles[player]
-	if profile == nil then
+Net.RequestEarlyStart.On(function(player: Player)
+	-- Any player in the match may start the wave early; the bonus is shared,
+	-- so there is nothing to gain by racing. The controller re-checks the
+	-- phase, which is the check that actually matters.
+	if profiles[player] == nil then
 		return
 	end
 
-	-- Zap already validated the shape and the 1..99 range. What it cannot
-	-- know is whether this player can afford it - that check is ours.
-	local cost = 10 * value.quantity
-	if profile.Data.Coins < cost then
-		return
-	end
-
-	profile.Data.Coins -= cost
-	table.insert(profile.Data.Inventory, value.itemId)
-
-	Net.PlayerScoreChanged.FireAll({ player = player, score = profile.Data.Coins })
+	match:requestEarlyStart()
 end)
 
-Net.ReportInput.On(function(_player: Player, _value: { moveDirection: vector })
-	-- Unreliable, high frequency. Keep this handler cheap.
-end)
-
-Net.GetLeaderboard.SetCallback(function(_player: Player, _value: { page: number })
-	local entries: { Types.LeaderboardEntry } = {}
-	return { entries = entries }
+Net.GetMatchSnapshot.SetCallback(function(player: Player, _value: {})
+	return match:snapshot(player)
 end)

@@ -205,9 +205,10 @@ of a shipped field.
 ```
 net/schema.zap        networking contract (source of truth)
 net/generated/        zap output — committed, never hand-edited
-src/server/           ServerScriptService.Server
-src/client/           StarterPlayer.StarterPlayerScripts.Client
-src/shared/           ReplicatedStorage.Shared
+src/match/server/     ServerScriptService.Server      (match place)
+src/match/client/     StarterPlayer...Client          (match place)
+src/lobby/            lobby place — added in Phase 4
+src/shared/           ReplicatedStorage.Shared        (both places)
 tests/                ServerScriptService.Tests (test place only)
 types/                vendored Roblox API defs for luau-lsp
 guest/                joining someone else's project — read guest/README.md

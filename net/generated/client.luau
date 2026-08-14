@@ -132,17 +132,44 @@ if not RunService:IsRunning() then
 	local noop = function() end
 	return table.freeze({
 		SendEvents = noop,
-		RequestPurchase = table.freeze({
-			Fire = noop
-		}),
-		ReportInput = table.freeze({
-			Fire = noop
-		}),
-		PlayerScoreChanged = table.freeze({
+		TowerFired = table.freeze({
 			On = noop
 		}),
-		GetLeaderboard = table.freeze({
+		RequestUpgradeTower = table.freeze({
+			Fire = noop
+		}),
+		RequestSetTargeting = table.freeze({
+			Fire = noop
+		}),
+		RequestSellTower = table.freeze({
+			Fire = noop
+		}),
+		RequestPlaceTower = table.freeze({
+			Fire = noop
+		}),
+		RequestEarlyStart = table.freeze({
+			Fire = noop
+		}),
+		PlaySound = table.freeze({
+			On = noop
+		}),
+		PlacementRejected = table.freeze({
+			On = noop
+		}),
+		MatchStateChanged = table.freeze({
+			On = noop
+		}),
+		MatchEnded = table.freeze({
+			On = noop
+		}),
+		GetMatchSnapshot = table.freeze({
 			Call = noop
+		}),
+		CashChanged = table.freeze({
+			On = noop
+		}),
+		BaseHealthChanged = table.freeze({
+			On = noop
 		}),
 	}) :: Events
 end
@@ -151,8 +178,12 @@ local remotes = ReplicatedStorage:WaitForChild("ZAP")
 local reliable = remotes:WaitForChild("ZAP_RELIABLE")
 assert(reliable:IsA("RemoteEvent"), "Expected ZAP_RELIABLE to be a RemoteEvent")
 
-local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0") }
+local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0"), remotes:WaitForChild("ZAP_UNRELIABLE_1") }
 assert(unreliable[1]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_0 to be an UnreliableRemoteEvent")
+assert(unreliable[2]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_1 to be an UnreliableRemoteEvent")
+export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 
 local function SendEvents()
 	if outgoing_used ~= 0 then
@@ -170,12 +201,26 @@ end
 
 RunService.Heartbeat:Connect(SendEvents)
 
-local reliable_events = table.create(2)
-local reliable_event_queue: { [number]: { any } } = table.create(2)
+local reliable_events = table.create(6)
+local reliable_event_queue: { [number]: { any } } = table.create(6)
+local unreliable_events = table.create(2)
+local unreliable_event_queue: { [number]: { any } } = table.create(2)
 local function_call_id = 0
+unreliable_events[0] = {}
+unreliable_event_queue[0] = {}
+unreliable_events[1] = {}
+unreliable_event_queue[1] = {}
+reliable_events[3] = {}
+reliable_event_queue[3] = {}
 reliable_events[0] = {}
 reliable_event_queue[0] = {}
-reliable_event_queue[1] = table.create(255)
+reliable_events[4] = {}
+reliable_event_queue[4] = {}
+reliable_events[1] = {}
+reliable_event_queue[1] = {}
+reliable_events[2] = {}
+reliable_event_queue[2] = {}
+reliable_event_queue[5] = table.create(255)
 reliable.OnClientEvent:Connect(function(buff, inst)
 	incoming_buff = buff
 	incoming_inst = inst
@@ -184,14 +229,60 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 	local len = buffer.len(buff)
 	while incoming_read < len do
 		local id = buffer.readu8(buff, read(1))
-		if id == 0 then -- PlayerScoreChanged
+		if id == 3 then -- PlacementRejected
 			local value
+			local bool_1 = buffer.readu16(incoming_buff, read(2))
 			value = {  }
-			incoming_ipos = incoming_ipos + 1
-			value["player"] = incoming_inst[incoming_ipos]
-			assert(value["player"] ~= nil, "received instance is nil!")
-			assert(value["player"]:IsA("Player"), "received instance is not of the Player class!")
-			value["score"] = buffer.readu32(incoming_buff, read(4))
+			if bit32.btest(bool_1, 0b0000000000000001) then
+				value["reason"] = "UnknownTower"
+			elseif bit32.btest(bool_1, 0b0000000000000010) then
+				value["reason"] = "NotUnlocked"
+			elseif bit32.btest(bool_1, 0b0000000000000100) then
+				value["reason"] = "CannotAfford"
+			elseif bit32.btest(bool_1, 0b0000000000001000) then
+				value["reason"] = "OutOfBounds"
+			elseif bit32.btest(bool_1, 0b0000000000010000) then
+				value["reason"] = "NotBuildable"
+			elseif bit32.btest(bool_1, 0b0000000000100000) then
+				value["reason"] = "WrongSurface"
+			elseif bit32.btest(bool_1, 0b0000000001000000) then
+				value["reason"] = "OverlapsTower"
+			elseif bit32.btest(bool_1, 0b0000000010000000) then
+				value["reason"] = "BlocksPath"
+			elseif bit32.btest(bool_1, 0b0000000100000000) then
+				value["reason"] = "TowerCapReached"
+			elseif bit32.btest(bool_1, 0b0000001000000000) then
+				value["reason"] = "WrongMatchState"
+			end
+			if reliable_events[3][1] then
+				for _, cb in reliable_events[3] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[3], value)
+				if #reliable_event_queue[3] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[3]} events in queue for PlacementRejected. Did you forget to attach a listener?`)
+				end
+			end
+		elseif id == 0 then -- MatchStateChanged
+			local value
+			local bool_2 = buffer.readu8(incoming_buff, read(1))
+			value = {  }
+			if bit32.btest(bool_2, 0b0000000000000001) then
+				value["state"] = "Loading"
+			elseif bit32.btest(bool_2, 0b0000000000000010) then
+				value["state"] = "Preparing"
+			elseif bit32.btest(bool_2, 0b0000000000000100) then
+				value["state"] = "WaveActive"
+			elseif bit32.btest(bool_2, 0b0000000000001000) then
+				value["state"] = "Intermission"
+			elseif bit32.btest(bool_2, 0b0000000000010000) then
+				value["state"] = "Victory"
+			elseif bit32.btest(bool_2, 0b0000000000100000) then
+				value["state"] = "Defeat"
+			end
+			value["waveNumber"] = buffer.readu16(incoming_buff, read(2))
+			value["phaseEndsAt"] = buffer.readf64(incoming_buff, read(8))
 			if reliable_events[0][1] then
 				for _, cb in reliable_events[0] do
 					task.spawn(cb, value)
@@ -199,34 +290,138 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 			else
 				table.insert(reliable_event_queue[0], value)
 				if #reliable_event_queue[0] > 64 then
-					warn(`[ZAP] {#reliable_event_queue[0]} events in queue for PlayerScoreChanged. Did you forget to attach a listener?`)
+					warn(`[ZAP] {#reliable_event_queue[0]} events in queue for MatchStateChanged. Did you forget to attach a listener?`)
 				end
 			end
-		elseif id == 1 then -- GetLeaderboard
-			local call_id = buffer.readu8(incoming_buff, read(1))
+		elseif id == 4 then -- MatchEnded
+			local value
+			local bool_3 = buffer.readu8(incoming_buff, read(1))
+			value = {  }
+			value["won"] = bit32.btest(bool_3, 0b0000000000000001)
+			value["wavesCleared"] = buffer.readu16(incoming_buff, read(2))
+			value["coinsAwarded"] = buffer.readu32(incoming_buff, read(4))
+			value["xpAwarded"] = buffer.readu32(incoming_buff, read(4))
+			if reliable_events[4][1] then
+				for _, cb in reliable_events[4] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[4], value)
+				if #reliable_event_queue[4] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[4]} events in queue for MatchEnded. Did you forget to attach a listener?`)
+				end
+			end
+		elseif id == 1 then -- CashChanged
 			local value
 			value = {  }
-			local len_1 = buffer.readu8(incoming_buff, read(1))
-			assert(len_1 >= 0, "value is less than 0!")
-			assert(len_1 <= 50, "value is more than 50!")
-			value["entries"] = table.create(len_1)
-			for i_1 = 1, len_1 do
-				local val_1
-				val_1 = {  }
-				local len_2 = buffer.readu16(incoming_buff, read(2))
-				val_1["name"] = buffer.readstring(incoming_buff, read(len_2), len_2)
-				assert(utf8.len(val_1["name"]) ~= nil, "value is not valid utf-8")
-				val_1["score"] = buffer.readu32(incoming_buff, read(4))
-				value["entries"][i_1] = val_1
+			value["cash"] = buffer.readu32(incoming_buff, read(4))
+			if reliable_events[1][1] then
+				for _, cb in reliable_events[1] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[1], value)
+				if #reliable_event_queue[1] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[1]} events in queue for CashChanged. Did you forget to attach a listener?`)
+				end
 			end
-			local thread = reliable_event_queue[1][call_id]
+		elseif id == 2 then -- BaseHealthChanged
+			local value
+			value = {  }
+			value["current"] = buffer.readu32(incoming_buff, read(4))
+			value["max"] = buffer.readu32(incoming_buff, read(4))
+			if reliable_events[2][1] then
+				for _, cb in reliable_events[2] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[2], value)
+				if #reliable_event_queue[2] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[2]} events in queue for BaseHealthChanged. Did you forget to attach a listener?`)
+				end
+			end
+		elseif id == 5 then -- GetMatchSnapshot
+			local call_id = buffer.readu8(incoming_buff, read(1))
+			local value
+			local bool_4 = buffer.readu8(incoming_buff, read(1))
+			value = {  }
+			if bit32.btest(bool_4, 0b0000000000000001) then
+				value["state"] = "Loading"
+			elseif bit32.btest(bool_4, 0b0000000000000010) then
+				value["state"] = "Preparing"
+			elseif bit32.btest(bool_4, 0b0000000000000100) then
+				value["state"] = "WaveActive"
+			elseif bit32.btest(bool_4, 0b0000000000001000) then
+				value["state"] = "Intermission"
+			elseif bit32.btest(bool_4, 0b0000000000010000) then
+				value["state"] = "Victory"
+			elseif bit32.btest(bool_4, 0b0000000000100000) then
+				value["state"] = "Defeat"
+			end
+			local len_1 = buffer.readu16(incoming_buff, read(2))
+			value["mapId"] = buffer.readstring(incoming_buff, read(len_1), len_1)
+			assert(utf8.len(value["mapId"]) ~= nil, "value is not valid utf-8")
+			value["waveNumber"] = buffer.readu16(incoming_buff, read(2))
+			value["baseHealth"] = buffer.readu32(incoming_buff, read(4))
+			value["baseHealthMax"] = buffer.readu32(incoming_buff, read(4))
+			value["cash"] = buffer.readu32(incoming_buff, read(4))
+			value["phaseEndsAt"] = buffer.readf64(incoming_buff, read(8))
+			local thread = reliable_event_queue[5][call_id]
 			-- When using actors it's possible for multiple Zap clients to exist, but only one called the Zap remote function.
 			if thread then
 				task.spawn(thread, value)
 			end
-			reliable_event_queue[1][call_id] = nil
+			reliable_event_queue[5][call_id] = nil
 		else
 			error("Unknown event id")
+		end
+	end
+end)
+unreliable[1].OnClientEvent:Connect(function(buff, inst) -- TowerFired
+	incoming_buff = buff
+	incoming_inst = inst
+	incoming_read = 0
+	incoming_ipos = 0
+	local value
+	value = {  }
+	value["towerId"] = buffer.readu32(incoming_buff, read(4))
+	value["targetPosition"] = vector.create(buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)))
+	if unreliable_events[0][1] then
+		for _, cb in unreliable_events[0] do
+			task.spawn(cb, value)
+		end
+	else
+		table.insert(unreliable_event_queue[0], value)
+		if #unreliable_event_queue[0] > 64 then
+			warn(`[ZAP] {#unreliable_event_queue[0]} events in queue for TowerFired. Did you forget to attach a listener?`)
+		end
+	end
+end)
+unreliable[2].OnClientEvent:Connect(function(buff, inst) -- PlaySound
+	incoming_buff = buff
+	incoming_inst = inst
+	incoming_read = 0
+	incoming_ipos = 0
+	local value
+	local bool_5 = buffer.readu8(incoming_buff, read(1))
+	value = {  }
+	local len_2 = buffer.readu8(incoming_buff, read(1))
+	assert(len_2 <= 128, "value is more than 128!")
+	value["soundKey"] = buffer.readstring(incoming_buff, read(len_2), len_2)
+	assert(utf8.len(value["soundKey"]) ~= nil, "value is not valid utf-8")
+	if bit32.btest(bool_5, 0b0000000000000001) then
+		value["position"] = vector.create(buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)))
+	else
+		value["position"] = nil
+	end
+	if unreliable_events[1][1] then
+		for _, cb in unreliable_events[1] do
+			task.spawn(cb, value)
+		end
+	else
+		table.insert(unreliable_event_queue[1], value)
+		if #unreliable_event_queue[1] > 64 then
+			warn(`[ZAP] {#unreliable_event_queue[1]} events in queue for PlaySound. Did you forget to attach a listener?`)
 		end
 	end
 end)
@@ -235,47 +430,130 @@ table.freeze(polling_queues_unreliable)
 
 local returns = {
 	SendEvents = SendEvents,
-	RequestPurchase = {
+	TowerFired = {
+		On = function(Callback: (Value: ({
+			["towerId"]: (number),
+			["targetPosition"]: (vector),
+		})) -> ())
+			table.insert(unreliable_events[0], Callback)
+			for _, value in unreliable_event_queue[0] do
+				task.spawn(Callback, value)
+			end
+			unreliable_event_queue[0] = {}
+			return function()
+				table.remove(unreliable_events[0], table.find(unreliable_events[0], Callback))
+			end
+		end,
+	},
+	RequestUpgradeTower = {
 		Fire = function(Value: ({
-			["itemId"]: (string),
-			["quantity"]: (number),
+			["towerId"]: (number),
+		}))
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 1)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+		end,
+	},
+	RequestSetTargeting = {
+		Fire = function(Value: ({
+			["towerId"]: (number),
+			["mode"]: ("First" | "Last" | "Strongest" | "Closest"),
+		}))
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
+			local bool_6 = 0
+			local bool_6_pos_1 = alloc(1)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+			if Value["mode"] == "First" then
+				bool_6 = bit32.bor(bool_6, 0b0000000000000001)
+			elseif Value["mode"] == "Last" then
+				bool_6 = bit32.bor(bool_6, 0b0000000000000010)
+			elseif Value["mode"] == "Strongest" then
+				bool_6 = bit32.bor(bool_6, 0b0000000000000100)
+			elseif Value["mode"] == "Closest" then
+				bool_6 = bit32.bor(bool_6, 0b0000000000001000)
+			else
+				error("Invalid enumerator")
+			end
+			buffer.writeu8(outgoing_buff, bool_6_pos_1, bool_6)
+		end,
+	},
+	RequestSellTower = {
+		Fire = function(Value: ({
+			["towerId"]: (number),
+		}))
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 2)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+		end,
+	},
+	RequestPlaceTower = {
+		Fire = function(Value: ({
+			["towerDefId"]: (string),
+			["position"]: (vector),
+			["rotationY"]: (number),
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
-			local len_3 = #Value["itemId"]
-			assert(utf8.len(Value["itemId"]) ~= nil, "value is not valid utf-8")
+			local len_3 = #Value["towerDefId"]
+			assert(utf8.len(Value["towerDefId"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
 			buffer.writeu16(outgoing_buff, outgoing_apos, len_3)
 			alloc(len_3)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["itemId"], len_3)
-			assert(Value["quantity"] >= 1, "value is less than 1!")
-			assert(Value["quantity"] <= 99, "value is more than 99!")
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["towerDefId"], len_3)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["rotationY"])
+		end,
+	},
+	RequestEarlyStart = {
+		Fire = function()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, Value["quantity"])
+			buffer.writeu8(outgoing_buff, outgoing_apos, 4)
 		end,
 	},
-	ReportInput = {
-		Fire = function(Value: ({
-			["moveDirection"]: (vector),
-		}))
-			local saved = save()
-			load_empty()
-			alloc(4)
-			buffer.writef32(outgoing_buff, outgoing_apos, Value["moveDirection"].x)
-			alloc(4)
-			buffer.writef32(outgoing_buff, outgoing_apos, Value["moveDirection"].y)
-			alloc(4)
-			buffer.writef32(outgoing_buff, outgoing_apos, Value["moveDirection"].z)
-			local buff = buffer.create(outgoing_used)
-			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
-			unreliable[1]:FireServer(buff, outgoing_inst)
-			load(saved)
-		end,
-	},
-	PlayerScoreChanged = {
+	PlaySound = {
 		On = function(Callback: (Value: ({
-			["player"]: (Player),
-			["score"]: (number),
+			["soundKey"]: (string),
+			["position"]: ((vector)?),
+		})) -> ())
+			table.insert(unreliable_events[1], Callback)
+			for _, value in unreliable_event_queue[1] do
+				task.spawn(Callback, value)
+			end
+			unreliable_event_queue[1] = {}
+			return function()
+				table.remove(unreliable_events[1], table.find(unreliable_events[1], Callback))
+			end
+		end,
+	},
+	PlacementRejected = {
+		On = function(Callback: (Value: ({
+			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState"),
+		})) -> ())
+			table.insert(reliable_events[3], Callback)
+			for _, value in reliable_event_queue[3] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[3] = {}
+			return function()
+				table.remove(reliable_events[3], table.find(reliable_events[3], Callback))
+			end
+		end,
+	},
+	MatchStateChanged = {
+		On = function(Callback: (Value: ({
+			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
+			["waveNumber"]: (number),
+			["phaseEndsAt"]: (number),
 		})) -> ())
 			table.insert(reliable_events[0], Callback)
 			for _, value in reliable_event_queue[0] do
@@ -287,31 +565,75 @@ local returns = {
 			end
 		end,
 	},
-	GetLeaderboard = {
+	MatchEnded = {
+		On = function(Callback: (Value: ({
+			["won"]: (boolean),
+			["wavesCleared"]: (number),
+			["coinsAwarded"]: (number),
+			["xpAwarded"]: (number),
+		})) -> ())
+			table.insert(reliable_events[4], Callback)
+			for _, value in reliable_event_queue[4] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[4] = {}
+			return function()
+				table.remove(reliable_events[4], table.find(reliable_events[4], Callback))
+			end
+		end,
+	},
+	GetMatchSnapshot = {
 		Call = function(Value: ({
-			["page"]: (number),
 		})): (({
-			["entries"]: ({ ({
-				["name"]: (string),
-				["score"]: (number),
-			}) }),
+			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
+			["mapId"]: (string),
+			["waveNumber"]: (number),
+			["baseHealth"]: (number),
+			["baseHealthMax"]: (number),
+			["cash"]: (number),
+			["phaseEndsAt"]: (number),
 		}))
 			function_call_id += 1
 			function_call_id %= 256
-			if reliable_event_queue[1][function_call_id] then
+			if reliable_event_queue[5][function_call_id] then
 				function_call_id -= 1
 				error("Zap has more than 256 calls awaiting a response, and therefore this packet has been dropped")
 			end
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, function_call_id)
-			assert(Value["page"] >= 0, "value is less than 0!")
-			assert(Value["page"] <= 99, "value is more than 99!")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, Value["page"])
-			reliable_event_queue[1][function_call_id] = coroutine.running()
+			reliable_event_queue[5][function_call_id] = coroutine.running()
 			return coroutine.yield()
+		end,
+	},
+	CashChanged = {
+		On = function(Callback: (Value: ({
+			["cash"]: (number),
+		})) -> ())
+			table.insert(reliable_events[1], Callback)
+			for _, value in reliable_event_queue[1] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[1] = {}
+			return function()
+				table.remove(reliable_events[1], table.find(reliable_events[1], Callback))
+			end
+		end,
+	},
+	BaseHealthChanged = {
+		On = function(Callback: (Value: ({
+			["current"]: (number),
+			["max"]: (number),
+		})) -> ())
+			table.insert(reliable_events[2], Callback)
+			for _, value in reliable_event_queue[2] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[2] = {}
+			return function()
+				table.remove(reliable_events[2], table.find(reliable_events[2], Callback))
+			end
 		end,
 	},
 }

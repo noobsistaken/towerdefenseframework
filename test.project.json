@@ -1,5 +1,5 @@
 {
-	"name": "template-project-tests",
+	"name": "td-test",
 	"globIgnorePaths": [
 		"**/.git/**",
 		"**/.github/**",
@@ -36,7 +36,7 @@
 				"$path": "net/generated/server.luau"
 			},
 			"Server": {
-				"$path": "src/server"
+				"$path": "src/match/server"
 			},
 			"Tests": {
 				"$path": "tests"
@@ -48,7 +48,7 @@
 			"StarterPlayerScripts": {
 				"$className": "StarterPlayerScripts",
 				"Client": {
-					"$path": "src/client"
+					"$path": "src/match/client"
 				}
 			}
 		}

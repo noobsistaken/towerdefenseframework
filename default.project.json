@@ -1,5 +1,5 @@
 {
-	"name": "template-project",
+	"name": "td-match",
 	"globIgnorePaths": [
 		"**/.git/**",
 		"**/.github/**",
@@ -37,7 +37,7 @@
 				"$path": "net/generated/server.luau"
 			},
 			"Server": {
-				"$path": "src/server"
+				"$path": "src/match/server"
 			}
 		},
 
@@ -46,7 +46,7 @@
 			"StarterPlayerScripts": {
 				"$className": "StarterPlayerScripts",
 				"Client": {
-					"$path": "src/client"
+					"$path": "src/match/client"
 				}
 			}
 		}

@@ -153,7 +153,22 @@ change to the verification layer — treat it as a real change, not maintenance.
 - Wally's re-export link files do not propagate Luau **type** exports. Write
   `type T = typeof(Pkg.new())` instead of `Pkg.T`.
 - `ProfileStore:StartSessionAsync`'s published type omits the documented
-  `Cancel` param. `src/server/init.server.luau` casts around it deliberately.
+  `Cancel` param. `src/match/server/init.server.luau` casts around it
+  deliberately.
+
+- **`Signal` is generic and the link file hides it.** `Signal.new<T...>():
+  Signal<T...>`, but Wally's re-export means `Signal.Signal<Enemy>` does not
+  resolve. The usual workaround, `type S = typeof(Signal.new())`, yields ONE
+  instantiation — so several fields typed `S` all share the same `T`. Observed
+  concretely: three signals on `EnemySimulation` collapsed together, Luau
+  pinned `T` to `number` from the first `Fire`, and rejected `Fire(enemy)` on
+  the other two. Use Signal freely for a single payload type; where a module
+  needs several differently-typed events, explicit listener lists are the
+  cheaper fix.
+
+- **Zap refuses unbounded strings inside unreliable events.** An unreliable
+  packet must stay under 998 bytes, so `string.utf8` needs an explicit bound
+  like `string.utf8(..32)`. Arrays take `[..N]`.
 
 ---
 
@@ -164,4 +179,40 @@ the value is that nobody re-argues them next session. }}
 
 | Date | Decision | Why |
 |---|---|---|
-| {{ date }} | {{ decision }} | {{ reason }} |
+| 2026-08-14 | Two places (lobby + match) over a single round-based place | Alexei's call. Cost accepted: `TeleportAsync` cannot run in Studio, so that seam ships unverified until both places are published. |
+| 2026-08-14 | Enemies: numeric simulation **plus** server hitbox parts | Alexei's call. Kept honest by making the parts a one-way projection of the sim — position is never read back off a part. |
+| 2026-08-14 | OOP: one concrete class per family + behaviour vtable in a field | Classical inheritance is not expressible in strict Luau without casts at every call site. See below. |
+| 2026-08-14 | Instance-resident state replicates via Attributes, not Zap | Free, read-only to clients, and removes enemy position/HP/damage messages from the wire entirely. |
+| 2026-08-14 | Maps are Luau config modules built at runtime | A `.rbxmx` is neither diffable nor agent-editable. |
+
+### Why there is no `BaseTower` subclass hierarchy
+
+This was tested against the compiler, not decided by taste. Findings:
+
+1. `typeof(setmetatable({} :: A & B, Class))` **degrades**: the metatable is
+   silently dropped and the result is just `A & B`, so no method resolves.
+   Never pass an intersection as the fields argument.
+2. Casting a metatable type into `Parent & { ... }` fails with *"the types
+   are unrelated"*.
+3. With **flat** field records the metatable *is* modelled correctly —
+   `__index` chains resolve and inherited methods are found.
+4. But a derived metatable type is **not** a subtype of the parent's
+   (`Expected 'V3Base', got 'V3Derived'`), and not a subtype of a plain
+   structural record either (`Expected 'V4Damageable', got 'V4Derived'`).
+5. Leaving `self` unannotated so it generalises fails too:
+   `Unknown type used in - operation`.
+
+(4) is the blocker. Luau finds the inherited method and then rejects the
+receiver, so `sniper:step()` against `BaseTower.step(self: BaseTower)` needs
+a cast — not once at construction, but at **every inherited call site**,
+which are the per-frame hot paths. That is the `:: any` this project's strict
+mode rule exists to forbid.
+
+**The pattern instead:** one concrete class per family (`BaseTower`,
+`BaseEnemy`) holding all shared state and all shared implementations, plus a
+`behavior` field carrying a table of optional override hooks. It keeps every
+semantic property of single inheritance — shared state, shared base methods,
+per-kind override, override-calls-super via `Base.methodBase(self)`, and
+polymorphic dispatch over a mixed `{ Tower }` array — with zero casts. What it
+gives up is a distinct static type per kind, which config-driven content never
+needed: you write `local t: Tower`, never `local t: Sniper`.

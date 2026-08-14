@@ -8,6 +8,11 @@
 	    migration step below.
 	  * Migrations run oldest -> newest, one version at a time, so a profile
 	    saved three versions ago walks forward through every step.
+
+	Version 1 was replaced wholesale rather than migrated, because the shape
+	it replaced was the template's placeholder and had never reached a live
+	player. That is a one-time licence and it is now spent: from here on, a
+	shape change means a version bump and a ladder rung.
 ]]
 
 local Types = require(script.Parent.Types)
@@ -16,15 +21,34 @@ local DataSchema = {}
 
 DataSchema.CURRENT_VERSION = 1
 
+--- Towers every account owns from the start. Everything else is unlocked
+--- with Coins. Ids must exist in Config/Towers.luau.
+local STARTING_TOWERS: { string } = { "Rifleman", "Ranger" }
+
 DataSchema.TEMPLATE = {
 	Version = DataSchema.CURRENT_VERSION,
 	Coins = 0,
+	XP = 0,
 	Level = 1,
-	Inventory = {},
+	UnlockedTowers = STARTING_TOWERS,
+	Stats = {
+		MatchesPlayed = 0,
+		MatchesWon = 0,
+		HighestWave = 0,
+		EnemiesKilled = 0,
+	},
+	Settings = {
+		MusicEnabled = true,
+		SfxEnabled = true,
+	},
 } :: Types.PlayerData
 
 --- One entry per version transition. Key N migrates version N -> N + 1.
 --- Add to this table, never edit a shipped entry.
+---
+--- Note for whoever adds rung 1: ProfileStore's Reconcile fills in missing
+--- TOP-LEVEL keys from the template. Do not assume it back-fills a new field
+--- inside Stats or Settings - add those explicitly in the migration step.
 local MIGRATIONS: { [number]: (Types.PlayerData) -> () } = {
 	-- [1] = function(data)
 	-- 	data.Prestige = 0
