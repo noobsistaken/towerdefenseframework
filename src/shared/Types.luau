@@ -169,6 +169,142 @@ export type MatchSnapshot = {
 	cash: number,
 	--- Unix time the current phase ends. 0 when the phase has no timer.
 	phaseEndsAt: number,
+	--- Tower ids this player owns. Advisory only - it drives which shop
+	--- buttons are enabled, and the server re-checks on every placement.
+	unlockedTowers: { string },
+}
+
+-- ===========================================================================
+-- Status effects
+--
+-- Generic by design. Bleed is the only effect Phase 2 ships, but it is built
+-- on the kinds below so poison, burn and slow are one config entry each with
+-- no new code.
+-- ===========================================================================
+
+--- What an effect actually does.
+---   DamageOverTime          periodic damage, `power` per tick
+---   SpeedMultiplier         scales movement; 0.7 is a 30% slow
+---   DamageTakenMultiplier   scales incoming damage; 1.25 is +25% vulnerability
+---   Stun                    speed forced to zero for the duration
+export type StatusEffectKind = "DamageOverTime" | "SpeedMultiplier" | "DamageTakenMultiplier" | "Stun"
+
+--- What a second application of an already-active effect does.
+---   Refresh       resets the timer, stack count stays at 1
+---   Stack         adds a stack up to maxStacks, refreshes the timer
+---   Independent   each application expires on its own schedule
+export type StatusStacking = "Refresh" | "Stack" | "Independent"
+
+export type StatusEffectDefinition = {
+	id: string,
+	displayName: string,
+	kind: StatusEffectKind,
+	--- Seconds between ticks. Only meaningful for DamageOverTime.
+	tickInterval: number,
+	stacking: StatusStacking,
+	--- Ignored unless stacking is "Stack".
+	maxStacks: number,
+	--- Per-stack multiplier for SpeedMultiplier and DamageTakenMultiplier.
+	--- Unused by DamageOverTime, whose magnitude comes from the application.
+	magnitude: number,
+	--- Placeholder tint applied to an affected enemy.
+	color: Color3,
+}
+
+--- One effect a tower level applies on hit.
+export type StatusApplication = {
+	effectId: string,
+	duration: number,
+	--- Damage per tick for DamageOverTime. Unused by the other kinds.
+	power: number,
+}
+
+--- One live instance of an effect on one enemy.
+---
+--- All times are SIMULATION time, not os.clock. The simulation advances its
+--- own clock in fixed steps, so effects expire and tick identically at any
+--- server frame rate, and a test can drive them exactly.
+export type ActiveStatusEffect = {
+	effectId: string,
+	--- Always 1 except under "Stack" stacking.
+	stacks: number,
+	expiresAt: number,
+	--- Next simulation time this instance deals its damage. Meaningless for
+	--- kinds other than DamageOverTime.
+	nextTickAt: number,
+	--- Damage per tick, carried from the application that created this.
+	power: number,
+	--- Who gets credited for the damage this deals, for the bounty split.
+	source: Player?,
+}
+
+--- Damage produced by an effect tick, waiting to be applied through the
+--- simulation so that a kill fires the normal death path.
+export type DamageTick = {
+	amount: number,
+	source: Player?,
+}
+
+-- ===========================================================================
+-- Tower configuration
+-- ===========================================================================
+
+--- Where a tower may stand.
+---   Ground     only on surfaces tagged Ground
+---   Hillside   only on surfaces tagged Elevated
+---   Hybrid     either
+export type TowerCategory = "Ground" | "Hillside" | "Hybrid"
+
+--- What a tower may shoot.
+export type TargetClass = "Ground" | "Air" | "Both"
+
+export type TargetingMode = "First" | "Last" | "Strongest" | "Closest"
+
+--- Why a placement request was refused. Mirrors the PlacementRejectReason
+--- enum in net/schema.zap - if you add one, add it in both places.
+export type PlacementRejectReason =
+	"UnknownTower"
+	| "NotUnlocked"
+	| "CannotAfford"
+	| "OutOfBounds"
+	| "NotBuildable"
+	| "WrongSurface"
+	| "OverlapsTower"
+	| "BlocksPath"
+	| "TowerCapReached"
+	| "WrongMatchState"
+
+export type TowerLevel = {
+	--- Cost to REACH this level. Index 1 is the purchase price; later indices
+	--- are upgrade costs, not cumulative totals.
+	cost: number,
+	damage: number,
+	--- Shots per second.
+	fireRate: number,
+	--- Studs.
+	range: number,
+	--- 0 means single target.
+	splashRadius: number,
+	--- Effects applied on hit.
+	applies: { StatusApplication },
+	--- Placeholder visual.
+	modelSize: Vector3,
+	color: Color3,
+}
+
+export type TowerDefinition = {
+	id: string,
+	displayName: string,
+	description: string,
+	category: TowerCategory,
+	targets: TargetClass,
+	--- Ground footprint in studs, X by Z. Drives overlap and path clearance.
+	footprint: Vector2,
+	defaultTargeting: TargetingMode,
+	--- Maximum this player may own. 0 means unlimited.
+	perPlayerCap: number,
+	--- At least three, per the brief. Index is the tower's level.
+	levels: { TowerLevel },
 }
 
 -- ===========================================================================

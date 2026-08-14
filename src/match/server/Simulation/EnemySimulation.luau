@@ -40,6 +40,7 @@ local Path = require(ReplicatedStorage.Shared.Path)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
+local StatusEffectSystem = require(script.Parent.Parent.Systems.StatusEffectSystem)
 
 local EnemySimulation = {}
 EnemySimulation.__index = EnemySimulation
@@ -61,6 +62,11 @@ export type Simulation = typeof(setmetatable(
 		byId: { [Types.EnemyId]: BaseEnemy.Enemy? },
 		nextId: number,
 		accumulator: number,
+		--- Simulation time in seconds, advanced only by `step`. Status effects
+		--- expire and tick against this rather than os.clock, so their
+		--- behaviour does not depend on server frame rate and a test can drive
+		--- them exactly.
+		time: number,
 		diedListeners: { DiedListener },
 		leakedListeners: { LeakedListener },
 		removedListeners: { RemovedListener },
@@ -88,6 +94,7 @@ function EnemySimulation.new(paths: { Path.Path }): Simulation
 		byId = {},
 		nextId = 1,
 		accumulator = 0,
+		time = 0,
 		diedListeners = {},
 		leakedListeners = {},
 		removedListeners = {},
@@ -250,10 +257,58 @@ local function collectDead(self: Simulation)
 	end
 end
 
+local function fireDied(self: Simulation, enemy: BaseEnemy.Enemy)
+	for _, listener in self.diedListeners do
+		listener(enemy)
+	end
+end
+
+--- Applies a status effect to one enemy, stamped with the simulation clock.
+--- Towers go through here rather than calling StatusEffectSystem directly, so
+--- there is exactly one definition of "now".
+function EnemySimulation.applyEffect(
+	self: Simulation,
+	id: Types.EnemyId,
+	application: Types.StatusApplication,
+	source: Player?
+)
+	local enemy = self.byId[id]
+
+	if enemy == nil then
+		return
+	end
+
+	StatusEffectSystem.apply(enemy, application, self.time, source)
+end
+
 --- Advances the simulation by exactly `deltaTime` seconds.
 --- Called directly by tests; the server goes through `update`.
 function EnemySimulation.step(self: Simulation, deltaTime: number)
+	self.time += deltaTime
+
 	for _, enemy in self.enemies do
+		if not enemy.alive then
+			continue
+		end
+
+		-- Effects resolve BEFORE movement, so an enemy killed by a bleed tick
+		-- this step does not also get a step of travel out of it. At the base
+		-- that is the difference between a leak and a kill.
+		local ticks = StatusEffectSystem.step(enemy, self.time)
+
+		if ticks ~= nil then
+			for _, tick in ticks do
+				-- Routed through takeDamage rather than writing health, so a
+				-- bleed kill fires the same death path as a bullet kill:
+				-- damage credited for the bounty split, listeners run, normal
+				-- removal.
+				if enemy:takeDamage(tick.amount, tick.source) then
+					fireDied(self, enemy)
+					break
+				end
+			end
+		end
+
 		if not enemy.alive then
 			continue
 		end
@@ -307,6 +362,7 @@ function EnemySimulation.reset(self: Simulation)
 	self.enemies = {}
 	self.byId = {}
 	self.accumulator = 0
+	self.time = 0
 
 	for _, id in ids do
 		for _, listener in self.removedListeners do

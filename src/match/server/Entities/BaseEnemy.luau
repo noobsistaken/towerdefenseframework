@@ -61,6 +61,19 @@ export type Enemy = typeof(setmetatable(
 		--- Set when the enemy reaches the end of its lane, so the simulation
 		--- can tell a leak apart from a kill during cleanup.
 		leaked: boolean,
+		--- Live status effects, keyed by effect id. A list per id because
+		--- "Independent" stacking needs several instances of one effect
+		--- expiring on their own schedules; Refresh and Stack keep exactly
+		--- one entry in each list.
+		effects: { [string]: { Types.ActiveStatusEffect } },
+		--- Cached products, recomputed by StatusEffectSystem once per step.
+		---
+		--- Cached rather than derived on read for two reasons: it keeps
+		--- BaseEnemy free of a require on the effect system, which would be
+		--- circular, and movement reads speed every step while effects change
+		--- rarely.
+		statusSpeedMultiplier: number,
+		statusDamageTakenMultiplier: number,
 	},
 	BaseEnemy
 ))
@@ -97,6 +110,9 @@ function BaseEnemy.new(params: SpawnParams): Enemy
 		alive = true,
 		damageByPlayer = {},
 		leaked = false,
+		effects = {},
+		statusSpeedMultiplier = 1,
+		statusDamageTakenMultiplier = 1,
 	}, BaseEnemy)
 
 	local hook = enemy.behavior.onSpawned
@@ -108,11 +124,11 @@ function BaseEnemy.new(params: SpawnParams): Enemy
 	return enemy
 end
 
---- Studs per second right now, after behaviour modifiers.
---- Status effects hook in here in Phase 2; the clamp is already in place so
---- a stacking slow can never reverse an enemy back up its lane.
+--- Studs per second right now, after behaviour and status modifiers.
+--- Clamped at zero so that a stun, or slows that somehow multiplied out
+--- negative, can never reverse an enemy back up its lane.
 function BaseEnemy.currentSpeed(self: Enemy): number
-	local speed = self.baseSpeed
+	local speed = self.baseSpeed * self.statusSpeedMultiplier
 
 	local modifier = self.behavior.speedMultiplier
 
@@ -139,19 +155,30 @@ function BaseEnemy.takeDamage(self: Enemy, amount: number, source: Player?): boo
 		return false
 	end
 
-	-- Credit the full requested amount rather than the amount actually
-	-- absorbed. Overkill still reflects contribution, and clamping it would
-	-- quietly under-pay whoever landed the finishing hit.
-	if source ~= nil then
-		self.damageByPlayer[source] = (self.damageByPlayer[source] or 0) + amount
+	-- Vulnerability applies here rather than at each call site, so it covers
+	-- effect ticks and splash as well as direct hits. One multiplier, one
+	-- place, no way for a damage path to quietly miss it.
+	local effective = amount * self.statusDamageTakenMultiplier
+
+	if effective <= 0 then
+		return false
 	end
 
-	self.health -= amount
+	-- Credit the amount actually dealt, and credit it in full rather than
+	-- clamping to remaining health. Overkill still reflects contribution, and
+	-- clamping would quietly under-pay whoever landed the finishing hit.
+	if source ~= nil then
+		self.damageByPlayer[source] = (self.damageByPlayer[source] or 0) + effective
+	end
+
+	self.health -= effective
 
 	local hook = self.behavior.onDamaged
 
 	if hook ~= nil then
-		hook(self, amount)
+		-- The amount actually dealt, not the amount requested: a behaviour
+		-- reacting to damage should see what landed.
+		hook(self, effective)
 	end
 
 	if self.health > 0 then

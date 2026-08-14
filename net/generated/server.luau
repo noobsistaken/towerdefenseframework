@@ -246,9 +246,9 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	player_map[player] = nil
 end)
-export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
-export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 
 local function SendEvents()
 	for player, outgoing in player_map do
@@ -374,6 +374,21 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					buffer.writeu32(outgoing_buff, outgoing_apos, ret_1["cash"])
 					alloc(8)
 					buffer.writef64(outgoing_buff, outgoing_apos, ret_1["phaseEndsAt"])
+					local len_3 = #ret_1["unlockedTowers"]
+					assert(len_3 >= 0, "value is less than 0!")
+					assert(len_3 <= 32, "value is more than 32!")
+					alloc(1)
+					buffer.writeu8(outgoing_buff, outgoing_apos, len_3)
+					for i_1 = 1, len_3 do
+						local val_1 = ret_1["unlockedTowers"][i_1]
+						local len_4 = #val_1
+						assert(len_4 <= 96, "value is more than 96!")
+						assert(utf8.len(val_1) ~= nil, "value is not valid utf-8")
+						alloc(1)
+						buffer.writeu8(outgoing_buff, outgoing_apos, len_4)
+						alloc(len_4)
+						buffer.writestring(outgoing_buff, outgoing_apos, val_1, len_4)
+					end
 					buffer.writeu8(outgoing_buff, bool_2_pos_1, bool_2)
 					player_map[player_2] = save()
 				end, player, call_id, value)
@@ -542,13 +557,13 @@ local returns = {
 			load_empty()
 			local bool_3 = 0
 			local bool_3_pos_1 = alloc(1)
-			local len_3 = #Value["soundKey"]
-			assert(len_3 <= 128, "value is more than 128!")
+			local len_5 = #Value["soundKey"]
+			assert(len_5 <= 128, "value is more than 128!")
 			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_3)
-			alloc(len_3)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_3)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_5)
+			alloc(len_5)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_5)
 			if Value["position"] ~= nil then
 				bool_3 = bit32.bor(bool_3, 0b0000000000000001)
 				alloc(4)
@@ -570,13 +585,13 @@ local returns = {
 			load_empty()
 			local bool_4 = 0
 			local bool_4_pos_1 = alloc(1)
-			local len_4 = #Value["soundKey"]
-			assert(len_4 <= 128, "value is more than 128!")
+			local len_6 = #Value["soundKey"]
+			assert(len_6 <= 128, "value is more than 128!")
 			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_4)
-			alloc(len_4)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_4)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_6)
+			alloc(len_6)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_6)
 			if Value["position"] ~= nil then
 				bool_4 = bit32.bor(bool_4, 0b0000000000000001)
 				alloc(4)
@@ -598,13 +613,13 @@ local returns = {
 			load_empty()
 			local bool_5 = 0
 			local bool_5_pos_1 = alloc(1)
-			local len_5 = #Value["soundKey"]
-			assert(len_5 <= 128, "value is more than 128!")
+			local len_7 = #Value["soundKey"]
+			assert(len_7 <= 128, "value is more than 128!")
 			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_5)
-			alloc(len_5)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_7)
+			alloc(len_7)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_7)
 			if Value["position"] ~= nil then
 				bool_5 = bit32.bor(bool_5, 0b0000000000000001)
 				alloc(4)
@@ -630,13 +645,13 @@ local returns = {
 			load_empty()
 			local bool_6 = 0
 			local bool_6_pos_1 = alloc(1)
-			local len_6 = #Value["soundKey"]
-			assert(len_6 <= 128, "value is more than 128!")
+			local len_8 = #Value["soundKey"]
+			assert(len_8 <= 128, "value is more than 128!")
 			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_6)
-			alloc(len_6)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_6)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_8)
+			alloc(len_8)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_8)
 			if Value["position"] ~= nil then
 				bool_6 = bit32.bor(bool_6, 0b0000000000000001)
 				alloc(4)
@@ -660,13 +675,13 @@ local returns = {
 			load_empty()
 			local bool_7 = 0
 			local bool_7_pos_1 = alloc(1)
-			local len_7 = #Value["soundKey"]
-			assert(len_7 <= 128, "value is more than 128!")
+			local len_9 = #Value["soundKey"]
+			assert(len_9 <= 128, "value is more than 128!")
 			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_7)
-			alloc(len_7)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_7)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_9)
+			alloc(len_9)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_9)
 			if Value["position"] ~= nil then
 				bool_7 = bit32.bor(bool_7, 0b0000000000000001)
 				alloc(4)
@@ -1235,6 +1250,7 @@ local returns = {
 			["baseHealthMax"]: (number),
 			["cash"]: (number),
 			["phaseEndsAt"]: (number),
+			["unlockedTowers"]: ({ (string) }),
 		}))): () -> ()
 			reliable_events[5] = Callback
 			return function()

@@ -21,6 +21,8 @@ local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ServerScriptService.Net)
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
+local Types = require(ReplicatedStorage.Shared.Types)
+local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local MatchController = require(script.Match.MatchController)
 
@@ -52,7 +54,24 @@ local janitors: { [Player]: JanitorInstance? } = {}
 -- server with no map and no state to report.
 -- ---------------------------------------------------------------------------
 
-local match = MatchController.new()
+--- Which towers a player owns. Passed into the controller rather than let it
+--- reach into ProfileStore itself: profiles are this file's concern, and the
+--- controller stays testable without a data layer behind it.
+---
+--- Returns an empty list for a player with no loaded profile, which is the
+--- safe answer - a request arriving before or after a session owns nothing.
+--- A copy, so a caller cannot mutate persisted data through it.
+local function unlockedTowersOf(player: Player): { string }
+	local profile = profiles[player]
+
+	if profile == nil then
+		return {}
+	end
+
+	return table.clone(profile.Data.UnlockedTowers)
+end
+
+local match = MatchController.new(unlockedTowersOf)
 match:start()
 
 -- ---------------------------------------------------------------------------
@@ -139,6 +158,51 @@ Players.PlayerRemoving:Connect(onPlayerRemoving)
 -- cannot know is whether this player is allowed to do it, so that check is
 -- always ours.
 -- ---------------------------------------------------------------------------
+
+Net.RequestPlaceTower.On(function(player: Player, value: { towerDefId: string, position: vector, rotationY: number })
+	if profiles[player] == nil then
+		return
+	end
+
+	-- The Y in `position` is ignored by the validator; the surface decides it.
+	local reason: Types.PlacementRejectReason? =
+		match:placeTower(player, value.towerDefId, Wire.toVector3(value.position), value.rotationY)
+
+	if reason ~= nil then
+		-- Told only to the requester. Broadcasting refusals would leak other
+		-- players' build attempts and their balances.
+		Net.PlacementRejected.Fire(player, { reason = reason })
+	end
+end)
+
+Net.RequestUpgradeTower.On(function(player: Player, value: { towerId: number })
+	if profiles[player] == nil then
+		return
+	end
+
+	-- Ownership, affordability and max-level are all checked inside. A
+	-- refusal is silent: the client already knows the button was disabled,
+	-- and a forged request deserves no feedback.
+	match:upgradeTower(player, value.towerId)
+end)
+
+Net.RequestSellTower.On(function(player: Player, value: { towerId: number })
+	if profiles[player] == nil then
+		return
+	end
+
+	match:sellTower(player, value.towerId)
+end)
+
+Net.RequestSetTargeting.On(
+	function(player: Player, value: { towerId: number, mode: "First" | "Last" | "Strongest" | "Closest" })
+		if profiles[player] == nil then
+			return
+		end
+
+		match:setTargeting(player, value.towerId, value.mode)
+	end
+)
 
 Net.RequestEarlyStart.On(function(player: Player)
 	-- Any player in the match may start the wave early; the bonus is shared,

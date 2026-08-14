@@ -181,9 +181,9 @@ assert(reliable:IsA("RemoteEvent"), "Expected ZAP_RELIABLE to be a RemoteEvent")
 local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0"), remotes:WaitForChild("ZAP_UNRELIABLE_1") }
 assert(unreliable[1]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_0 to be an UnreliableRemoteEvent")
 assert(unreliable[2]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_1 to be an UnreliableRemoteEvent")
-export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
-export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 
 local function SendEvents()
 	if outgoing_used ~= 0 then
@@ -366,6 +366,18 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 			value["baseHealthMax"] = buffer.readu32(incoming_buff, read(4))
 			value["cash"] = buffer.readu32(incoming_buff, read(4))
 			value["phaseEndsAt"] = buffer.readf64(incoming_buff, read(8))
+			local len_2 = buffer.readu8(incoming_buff, read(1))
+			assert(len_2 >= 0, "value is less than 0!")
+			assert(len_2 <= 32, "value is more than 32!")
+			value["unlockedTowers"] = table.create(len_2)
+			for i_1 = 1, len_2 do
+				local val_1
+				local len_3 = buffer.readu8(incoming_buff, read(1))
+				assert(len_3 <= 96, "value is more than 96!")
+				val_1 = buffer.readstring(incoming_buff, read(len_3), len_3)
+				assert(utf8.len(val_1) ~= nil, "value is not valid utf-8")
+				value["unlockedTowers"][i_1] = val_1
+			end
 			local thread = reliable_event_queue[5][call_id]
 			-- When using actors it's possible for multiple Zap clients to exist, but only one called the Zap remote function.
 			if thread then
@@ -405,9 +417,9 @@ unreliable[2].OnClientEvent:Connect(function(buff, inst) -- PlaySound
 	local value
 	local bool_5 = buffer.readu8(incoming_buff, read(1))
 	value = {  }
-	local len_2 = buffer.readu8(incoming_buff, read(1))
-	assert(len_2 <= 128, "value is more than 128!")
-	value["soundKey"] = buffer.readstring(incoming_buff, read(len_2), len_2)
+	local len_4 = buffer.readu8(incoming_buff, read(1))
+	assert(len_4 <= 128, "value is more than 128!")
+	value["soundKey"] = buffer.readstring(incoming_buff, read(len_4), len_4)
 	assert(utf8.len(value["soundKey"]) ~= nil, "value is not valid utf-8")
 	if bit32.btest(bool_5, 0b0000000000000001) then
 		value["position"] = vector.create(buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)))
@@ -498,12 +510,12 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
-			local len_3 = #Value["towerDefId"]
+			local len_5 = #Value["towerDefId"]
 			assert(utf8.len(Value["towerDefId"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_3)
-			alloc(len_3)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["towerDefId"], len_3)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_5)
+			alloc(len_5)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["towerDefId"], len_5)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)
@@ -592,6 +604,7 @@ local returns = {
 			["baseHealthMax"]: (number),
 			["cash"]: (number),
 			["phaseEndsAt"]: (number),
+			["unlockedTowers"]: ({ (string) }),
 		}))
 			function_call_id += 1
 			function_call_id %= 256

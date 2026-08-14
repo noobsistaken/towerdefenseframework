@@ -56,6 +56,24 @@ Constants.RESULTS_SECONDS = 12
 --- find them by query rather than by walking the map model.
 Constants.BUILDABLE_TAG = "TDBuildable"
 
+-- ===========================================================================
+-- Placement
+-- ===========================================================================
+
+--- Minimum studs from the lane centre line to any part of a tower.
+--- MapBuilder draws the walkway 16 wide, so 8 is flush with its edge and this
+--- leaves a stud of margin. This is the number that stops a player walling
+--- the lane shut, which is the placement bug that turns a tower defense into
+--- a maze game.
+Constants.PATH_CLEARANCE = 9
+
+--- How far above a surface a placement raycast starts, and how far it
+--- travels. Generous enough to cope with a client aiming at a pad from an
+--- odd angle, short enough that it cannot find a pad on the far side of the
+--- map.
+Constants.PLACEMENT_RAY_HEIGHT = 200
+Constants.PLACEMENT_RAY_LENGTH = 400
+
 --- Attribute names written on server-owned instances. These are the
 --- replication channel for per-entity state (ARCHITECTURE.md D5), so a typo
 --- here is a silent client-side failure - reference the constant, never the

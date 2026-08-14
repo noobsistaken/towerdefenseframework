@@ -5,13 +5,14 @@
 	Responsibilities, in order:
 	  1. Hold client state in Charm atoms.
 	  2. Bind the networking schema's client handlers (net/schema.zap).
-	  3. Mount the React tree.
+	  3. Start the placement controller.
+	  4. Mount the React tree.
 
 	Feature logic goes in modules under src/match/client/.
 
 	The client renders and takes input. It holds no authoritative state: every
-	atom below is a replica the server owns, and nothing here decides anything
-	the server has not already decided.
+	replicated atom below is a copy the server owns, and nothing here decides
+	anything the server has not already decided.
 ]]
 
 local Players = game:GetService("Players")
@@ -21,19 +22,25 @@ local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
+local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local Hud = require(script.UI.Hud)
+local PlacementController = require(script.Placement.PlacementController)
+local Tracers = require(script.Effects.Tracers)
 local atoms = require(script.State.atoms)
 
 local localPlayer = Players.LocalPlayer
 local janitor = Janitor.new()
 
+--- How long a placement refusal stays on screen.
+local REJECTION_SECONDS = 2
+
 -- ---------------------------------------------------------------------------
 -- Networking
 --
--- These handlers are the ONLY writers to the atoms. Keeping every write in
--- one place is what makes "the client holds a replica" checkable by reading
--- a single file rather than auditing the whole tree.
+-- These handlers are the ONLY writers to the replicated atoms. Keeping every
+-- write in one place is what makes "the client holds a replica" checkable by
+-- reading a single file rather than auditing the whole tree.
 -- ---------------------------------------------------------------------------
 
 janitor:Add(
@@ -56,6 +63,30 @@ janitor:Add(
 janitor:Add(
 	Net.CashChanged.On(function(value)
 		atoms.cash(value.cash)
+	end),
+	true
+)
+
+janitor:Add(
+	Net.PlacementRejected.On(function(value)
+		atoms.placementRejection(value.reason)
+
+		-- Cleared by whichever refusal is newest. Comparing before clearing
+		-- stops an older timer from wiping a fresher message.
+		local shown = value.reason
+
+		task.delay(REJECTION_SECONDS, function()
+			if atoms.placementRejection() == shown then
+				atoms.placementRejection(nil)
+			end
+		end)
+	end),
+	true
+)
+
+janitor:Add(
+	Net.TowerFired.On(function(value)
+		Tracers.draw(value.towerId, Wire.toVector3(value.targetPosition))
 	end),
 	true
 )
@@ -87,12 +118,21 @@ task.spawn(function()
 	local snapshot = Net.GetMatchSnapshot.Call({})
 
 	atoms.matchState(snapshot.state)
+	atoms.mapId(snapshot.mapId)
 	atoms.waveNumber(snapshot.waveNumber)
 	atoms.phaseEndsAt(snapshot.phaseEndsAt)
 	atoms.baseHealth(snapshot.baseHealth)
 	atoms.baseHealthMax(snapshot.baseHealthMax)
 	atoms.cash(snapshot.cash)
+	atoms.unlockedTowers(snapshot.unlockedTowers)
 end)
+
+-- ---------------------------------------------------------------------------
+-- Input
+-- ---------------------------------------------------------------------------
+
+PlacementController.start()
+janitor:Add(PlacementController.stop, true)
 
 -- ---------------------------------------------------------------------------
 -- UI

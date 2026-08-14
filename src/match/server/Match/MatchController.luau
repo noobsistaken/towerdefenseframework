@@ -3,8 +3,8 @@
 	The match lifecycle.
 
 	Owns the state machine and nothing else's rules. It wires together the
-	map, the simulation, the view, the wave director and base health, and it
-	is the only module allowed to change `state`.
+	map, the simulation, the view, the towers, the economy, the wave director
+	and base health, and it is the only module allowed to change `state`.
 
 	    Loading -> Preparing -> WaveActive -> Intermission -> Preparing ...
 	                                                       -> Victory
@@ -21,6 +21,10 @@
 	    the match ends exactly once.
 	  * Victory is checked at the END of intermission, not on wave clear, so
 	    the last wave's payout and the results screen do not race.
+
+	Every player-initiated action below re-validates on the server. Zap has
+	already proved the SHAPE of the request; ownership, affordability, caps
+	and legality are proved here.
 ]]
 
 local Players = game:GetService("Players")
@@ -31,19 +35,34 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local DevMatch = require(ReplicatedStorage.Shared.Config.DevMatch)
 local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
+local Economy = require(ReplicatedStorage.Shared.Config.Economy)
+local Footprint = require(ReplicatedStorage.Shared.Footprint)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ServerScriptService.Net)
+local Placement = require(ReplicatedStorage.Shared.Placement)
+local Scaling = require(ReplicatedStorage.Shared.Scaling)
+local Targeting = require(ReplicatedStorage.Shared.Targeting)
+local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
 local BaseHealth = require(script.Parent.Parent.Systems.BaseHealth)
+local EconomyService = require(script.Parent.Parent.Systems.EconomyService)
 local EnemySimulation = require(script.Parent.Parent.Simulation.EnemySimulation)
 local EnemyView = require(script.Parent.Parent.Simulation.EnemyView)
 local MapBuilder = require(script.Parent.MapBuilder)
+local TowerSystem = require(script.Parent.Parent.Systems.TowerSystem)
 local WaveDirector = require(script.Parent.Parent.Systems.WaveDirector)
 
 local MatchController = {}
 MatchController.__index = MatchController
+
+--- Returns the tower ids a player owns. Supplied by the entry point, which
+--- owns the profiles; the controller must not reach into ProfileStore itself.
+---
+--- A list rather than a per-tower predicate, because the snapshot has to send
+--- the whole set anyway and two sources for the same fact would drift.
+export type UnlockedResolver = (player: Player) -> { string }
 
 export type Controller = typeof(setmetatable(
 	{} :: {
@@ -55,12 +74,11 @@ export type Controller = typeof(setmetatable(
 		difficulty: Types.DifficultyConfig,
 		simulation: EnemySimulation.Simulation,
 		view: EnemyView.View,
+		towers: TowerSystem.System,
+		economy: EconomyService.Service,
 		director: WaveDirector.Director,
 		health: BaseHealth.Health,
-		--- Per-player match cash. Phase 2 moves this into EconomyService
-		--- together with the bounty split; Phase 1 only needs the starting
-		--- balance so the HUD has something true to show.
-		cash: { [Player]: number },
+		isUnlocked: UnlockedResolver,
 		heartbeat: RBXScriptConnection?,
 		--- Set once the match is over, so a late leak cannot resurrect it.
 		finished: boolean,
@@ -76,8 +94,8 @@ export type Controller = typeof(setmetatable(
 ---
 --- Phase 4 adds the real path: read Player:GetJoinData().TeleportData and
 --- validate every field against the config allowlists. That validation is
---- already the reason MapRegistry.find and Difficulty.find are non-throwing.
---- Until then, and always in Studio, the match boots from DevMatch (D1).
+--- already why MapRegistry.find and Difficulty.find are non-throwing. Until
+--- then, and always in Studio, the match boots from DevMatch (D1).
 local function resolveMatchConfig(): (Types.MapConfig, Types.DifficultyConfig)
 	local mapId = if RunService:IsStudio() then DevMatch.MAP_ID else MapRegistry.DEFAULT_ID
 	local difficultyId = if RunService:IsStudio() then DevMatch.DIFFICULTY_ID else Difficulty.DEFAULT_ID
@@ -104,12 +122,6 @@ local function broadcastHealth(self: Controller)
 	Net.BaseHealthChanged.FireAll({
 		current = math.floor(self.health.current),
 		max = math.floor(self.health.max),
-	})
-end
-
-local function sendCash(self: Controller, player: Player)
-	Net.CashChanged.Fire(player, {
-		cash = math.floor(self.cash[player] or 0),
 	})
 end
 
@@ -164,7 +176,7 @@ end
 -- Construction
 -- ---------------------------------------------------------------------------
 
-function MatchController.new(): Controller
+function MatchController.new(isUnlocked: UnlockedResolver): Controller
 	local mapConfig, difficulty = resolveMatchConfig()
 	local map = MapBuilder.build(mapConfig)
 	local simulation = EnemySimulation.new(map.paths)
@@ -177,9 +189,11 @@ function MatchController.new(): Controller
 		difficulty = difficulty,
 		simulation = simulation,
 		view = EnemyView.new(simulation, workspace),
+		towers = TowerSystem.new(simulation, workspace),
+		economy = EconomyService.new(difficulty),
 		director = WaveDirector.new(simulation, difficulty),
 		health = BaseHealth.new(difficulty.baseHealth),
-		cash = {},
+		isUnlocked = isUnlocked,
 		heartbeat = nil,
 		finished = false,
 	}, MatchController)
@@ -192,8 +206,16 @@ function MatchController.new(): Controller
 		end
 	end)
 
+	simulation:onEnemyDied(function(enemy: BaseEnemy.Enemy)
+		self.economy:payBounty(enemy)
+	end)
+
 	self.health:onChanged(function()
 		broadcastHealth(self)
+	end)
+
+	self.economy:onChanged(function(player: Player, balance: number)
+		Net.CashChanged.Fire(player, { cash = math.floor(balance) })
 	end)
 
 	return self
@@ -203,19 +225,17 @@ end
 -- Players
 -- ---------------------------------------------------------------------------
 
---- Gives a player their starting balance and brings them up to date.
 function MatchController.addPlayer(self: Controller, player: Player)
-	if self.cash[player] == nil then
-		self.cash[player] = self.difficulty.startingCash
-	end
-
-	sendCash(self, player)
+	self.economy:addPlayer(player)
 	broadcastHealth(self)
 	broadcastState(self)
 end
 
 function MatchController.removePlayer(self: Controller, player: Player)
-	self.cash[player] = nil
+	-- A disconnected player's towers stop fighting. Leaving them would let a
+	-- team bank permanent free DPS by having one member place and leave.
+	self.towers:removeAllFor(player)
+	self.economy:removePlayer(player)
 end
 
 function MatchController.snapshot(self: Controller, player: Player): Types.MatchSnapshot
@@ -225,9 +245,167 @@ function MatchController.snapshot(self: Controller, player: Player): Types.Match
 		waveNumber = self.waveNumber,
 		baseHealth = math.floor(self.health.current),
 		baseHealthMax = math.floor(self.health.max),
-		cash = math.floor(self.cash[player] or 0),
+		cash = math.floor(self.economy:balance(player)),
 		phaseEndsAt = self.phaseEndsAt,
+		unlockedTowers = self.isUnlocked(player),
 	}
+end
+
+-- ---------------------------------------------------------------------------
+-- Player actions
+--
+-- Building is allowed during both the build phase and an active wave, TDS
+-- style: reacting to what a wave actually contains is a large part of the
+-- game. It is refused once the match is over.
+-- ---------------------------------------------------------------------------
+
+function MatchController.canBuildNow(self: Controller): boolean
+	if self.finished then
+		return false
+	end
+
+	return self.state == "Preparing" or self.state == "WaveActive"
+end
+
+local function existingTowers(self: Controller): { Placement.ExistingTower }
+	local list: { Placement.ExistingTower } = {}
+
+	for _, tower in self.towers.towers do
+		table.insert(list, {
+			position = tower.position,
+			radius = Footprint.radius(tower.definition.footprint),
+		})
+	end
+
+	return list
+end
+
+--- Attempts a placement. Returns the rejection reason, or nil on success.
+function MatchController.placeTower(
+	self: Controller,
+	player: Player,
+	towerDefId: string,
+	position: Vector3,
+	rotationY: number
+): Types.PlacementRejectReason?
+	local definition = Towers.find(towerDefId)
+
+	if definition == nil then
+		return "UnknownTower"
+	end
+
+	local result = Placement.validate({
+		definition = definition,
+		position = position,
+		map = self.map.config,
+		existing = existingTowers(self),
+		unlocked = table.find(self.isUnlocked(player), towerDefId) ~= nil,
+		cash = self.economy:balance(player),
+		ownedOfType = self.towers:countFor(player, towerDefId),
+		canBuildNow = self:canBuildNow(),
+	})
+
+	if not result.ok or result.position == nil then
+		-- Two returns rather than `result.reason or "NotBuildable"`. The `or`
+		-- widens the literal union to plain `string`, which then fails to
+		-- satisfy the enum Zap generated for PlacementRejected.
+		if result.reason ~= nil then
+			return result.reason
+		end
+
+		return "NotBuildable"
+	end
+
+	local cost = definition.levels[1].cost
+
+	-- Charge last, and only once every rule has passed, so a rejected
+	-- placement can never take money.
+	if not self.economy:charge(player, cost) then
+		return "CannotAfford"
+	end
+
+	self.towers:place({
+		definition = definition,
+		owner = player,
+		position = result.position,
+		rotationY = rotationY,
+	})
+
+	return nil
+end
+
+function MatchController.upgradeTower(self: Controller, player: Player, towerId: number): boolean
+	local tower = self.towers:get(towerId)
+
+	if tower == nil or tower.owner ~= player or not self:canBuildNow() then
+		return false
+	end
+
+	local cost = tower:upgradeCost()
+
+	if cost == nil then
+		return false
+	end
+
+	if not self.economy:charge(player, cost) then
+		return false
+	end
+
+	self.towers:upgrade(tower, cost)
+
+	return true
+end
+
+function MatchController.sellTower(self: Controller, player: Player, towerId: number): boolean
+	local tower = self.towers:get(towerId)
+
+	if tower == nil or tower.owner ~= player or not self:canBuildNow() then
+		return false
+	end
+
+	-- Read the refund before removing: sellValue depends on state that
+	-- `remove` is about to drop.
+	local refund = tower:sellValue()
+	self.towers:remove(towerId)
+	self.economy:credit(player, refund)
+
+	return true
+end
+
+function MatchController.setTargeting(
+	self: Controller,
+	player: Player,
+	towerId: number,
+	mode: Types.TargetingMode
+): boolean
+	local tower = self.towers:get(towerId)
+
+	if tower == nil or tower.owner ~= player then
+		return false
+	end
+
+	if not Targeting.isValid(mode) then
+		return false
+	end
+
+	self.towers:setTargeting(tower, mode)
+
+	return true
+end
+
+--- Ends the build phase early, paying everyone for the time skipped. The
+--- server reads its own clock: a client-supplied duration would be free cash.
+function MatchController.requestEarlyStart(self: Controller): boolean
+	if self.state ~= "Preparing" or self.finished then
+		return false
+	end
+
+	local remaining = math.max(0, self.phaseEndsAt - os.time())
+	self.economy:creditAll(Economy.earlyStartBonus(remaining, self.difficulty.rewardMultiplier))
+
+	beginWave(self)
+
+	return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -249,12 +427,14 @@ local function tick(self: Controller, deltaTime: number)
 	if self.state == "WaveActive" then
 		self.director:update(deltaTime)
 		self.simulation:update(deltaTime)
+		self.towers:update(deltaTime)
 		self.view:sync()
 
 		-- Both conditions, deliberately. Either alone is a real bug: the
 		-- director being done says nothing about enemies still walking, and
 		-- an empty simulation is trivially true before the first spawn.
 		if self.director:isSpawningComplete() and self.simulation:count() == 0 then
+			self.economy:creditAll(Scaling.waveBonus(self.waveNumber, self.difficulty.rewardMultiplier))
 			setState(self, "Intermission", Constants.INTERMISSION_SECONDS)
 		end
 
@@ -273,17 +453,6 @@ local function tick(self: Controller, deltaTime: number)
 
 		return
 	end
-end
-
---- Ends the build phase early. Phase 3 adds the remaining-time cash bonus;
---- the server reads its own clock for that and never trusts a client value.
-function MatchController.requestEarlyStart(self: Controller): boolean
-	if self.state ~= "Preparing" or self.finished then
-		return false
-	end
-
-	beginWave(self)
-	return true
 end
 
 function MatchController.start(self: Controller)
@@ -307,6 +476,7 @@ function MatchController.destroy(self: Controller)
 		self.heartbeat = nil
 	end
 
+	self.towers:destroy()
 	self.view:destroy()
 	self.simulation:destroy()
 	MapBuilder.clear()

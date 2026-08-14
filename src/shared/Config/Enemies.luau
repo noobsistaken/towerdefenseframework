@@ -89,10 +89,11 @@ Enemies.DEFINITIONS = {
 		hoverHeight = 5.5,
 		-- Bosses resist crowd control rather than being immune to it, so a
 		-- slow tower is still worth building without trivialising them.
+		-- Only ids that exist in Config/StatusEffects.luau belong here; a
+		-- resistance naming an effect that does not exist is silently dead.
 		resistances = {
 			Bleed = 0.5,
 			Slow = 0.4,
-			Stun = 0,
 		},
 	},
 } :: { [string]: Types.EnemyDefinition }

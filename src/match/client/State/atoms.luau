@@ -38,4 +38,29 @@ atoms.cash = Charm.atom(0)
 --- component re-rendering with it.
 atoms.clock = Charm.atom(0)
 
+--- Which map is running. Drives the client's copy of the map config, which
+--- placement preview validates against.
+atoms.mapId = Charm.atom("")
+
+--- Tower ids this player owns. Advisory - it greys out shop buttons. The
+--- server re-checks unlock on every placement request.
+atoms.unlockedTowers = Charm.atom({} :: { string })
+
+-- ---------------------------------------------------------------------------
+-- Local UI state
+--
+-- The only atoms below that are NOT replicas. They describe what this player
+-- is currently looking at or holding, which the server has no opinion about.
+-- ---------------------------------------------------------------------------
+
+--- The tower being placed, or nil when not in placement mode.
+atoms.selectedTowerDefId = Charm.atom(nil :: string?)
+
+--- The placed tower the inspector is showing, or nil.
+atoms.selectedTowerId = Charm.atom(nil :: number?)
+
+--- Most recent placement refusal, for the feedback toast. Cleared on a
+--- timer by whoever sets it.
+atoms.placementRejection = Charm.atom(nil :: string?)
+
 return atoms

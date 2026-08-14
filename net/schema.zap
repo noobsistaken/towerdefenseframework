@@ -221,5 +221,9 @@ funct GetMatchSnapshot = {
 		baseHealthMax: u32,
 		cash: u32,
 		phaseEndsAt: f64,
+		-- Which towers this player owns, so the shop can grey out the rest.
+		-- Advisory: the server re-checks unlock on every placement request,
+		-- so a client that ignores this gains nothing.
+		unlockedTowers: string.utf8(..24)[0..32],
 	},
 }
