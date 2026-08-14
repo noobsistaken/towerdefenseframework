@@ -38,10 +38,21 @@ export type Candidate = {
 	distanceToTower: number,
 }
 
---- Every mode, in cycling order. The client's targeting button walks this.
 local MODES: { Types.TargetingMode } = { "First", "Last", "Strongest", "Closest" }
 
-Targeting.MODES = table.freeze(MODES)
+table.freeze(MODES)
+
+--- Every mode, in cycling order. The client's targeting button walks this.
+---
+--- A function rather than a `Targeting.MODES` field, and the annotated return
+--- type is the whole reason. Storing a literal union in a plain table field
+--- WIDENS its element type to `string` for anyone reading it from another
+--- module, and the widened value then cannot be passed back into `select`.
+--- `table.freeze`'s return value widens it too. An annotated return type is
+--- authoritative where neither of those is.
+function Targeting.modes(): { Types.TargetingMode }
+	return MODES
+end
 
 --- True if `challenger` should displace `leader` under `mode`.
 --- Split out so each mode is one readable line and the tie-break is written

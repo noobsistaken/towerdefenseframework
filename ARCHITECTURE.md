@@ -170,6 +170,37 @@ change to the verification layer — treat it as a real change, not maintenance.
   packet must stay under 998 bytes, so `string.utf8` needs an explicit bound
   like `string.utf8(..32)`. Arrays take `[..N]`.
 
+- **Literal unions widen to `string` in four places.** This cost more time
+  than anything else in Phase 2. `Types.MatchState` and
+  `Types.TargetingMode` are unions of string literals, and each of these
+  silently turns one into plain `string`, after which it no longer satisfies
+  the enum Zap generated:
+
+  | Widens | Fix |
+  |---|---|
+  | An unannotated `local x = f()` | annotate the **local**, not the function |
+  | `a or "Literal"` | two separate `return`s instead |
+  | **Iterating** `{ Union }` — both `for _, v in t` and `ipairs` | annotate the loop variable: `for _, v: Union in t do` |
+  | `React.useState` / any generic `f<T>(atom: () -> T)` | accept `string` at the leaf and keep the union on the wire |
+
+  The iteration entry was measured, not assumed — a probe file established
+  that `t[1]` and `for i = 1, #t do t[i] end` both **preserve** the union
+  while `for _, v in t` and `ipairs(t)` widen it, and that annotating the
+  loop variable rescues it. Indexing is safe; iterating is not.
+
+  The union is worth keeping where it does work — the schema, and atom
+  declarations. At a leaf that only compares or formats, taking `string` with
+  an explicit fallback is the honest trade; a cast purely to re-narrow is
+  what the strict-mode rule forbids.
+
+- **`React.useState(nil)` infers the state type as exactly `nil`,** and the
+  setter then rejects every real value. Hold the optional inside a table
+  (`useState({ value = nil } :: State)`).
+
+- **A React dependency array containing `nil` has length 0,** so React reads
+  it as an empty array and the effect never re-runs. Use a sentinel:
+  `{ id or 0 }`.
+
 - **Zap output is not byte-reproducible.** zap 0.6.29 emits `export type`
   aliases in a nondeterministic order — six runs against an unchanged
   `net/schema.zap` produced three distinct orderings. So *every* regeneration
