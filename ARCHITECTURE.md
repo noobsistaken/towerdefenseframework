@@ -170,6 +170,24 @@ change to the verification layer — treat it as a real change, not maintenance.
   packet must stay under 998 bytes, so `string.utf8` needs an explicit bound
   like `string.utf8(..32)`. Arrays take `[..N]`.
 
+- **Zap output is not byte-reproducible.** zap 0.6.29 emits `export type`
+  aliases in a nondeterministic order — six runs against an unchanged
+  `net/schema.zap` produced three distinct orderings. So *every* regeneration
+  can show a diff in `net/generated/` even when nothing changed.
+
+  This matters because those files are committed and are meant to be
+  reviewable. Before concluding a schema change did something, check whether
+  the diff is only reordered `export type` lines:
+
+  ```bash
+  git diff -U0 net/generated/ | grep -E '^[+-]' | grep -v '^[+-][+-]' | grep -v '^[+-]export type' 
+  ```
+
+  Empty output means the regeneration was cosmetic. Do **not** "fix" this by
+  post-processing the generated files — sorting them by hand would break the
+  rule that `net/generated/` is exactly what zap produced, and the ordering
+  has no effect on behaviour.
+
 ---
 
 ## 7. Project-specific decisions
