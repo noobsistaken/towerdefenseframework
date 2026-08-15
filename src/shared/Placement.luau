@@ -67,14 +67,36 @@ end
 --- Requiring a single containing pad - rather than accepting coverage spread
 --- across several - keeps the rule simple to state and stops a tower
 --- balancing across the gap between two adjacent pads.
+---
+--- Where several pads contain the footprint, the HIGHEST one wins, because
+--- that is the one a tower would physically rest on. This is load-bearing
+--- rather than tidy: elevated plateaus sit on top of the ground apron, so
+--- every Hillside placement is inside two surfaces at once. Returning the
+--- first match instead would resolve a plateau to the apron underneath it,
+--- which reads in game as "Ground towers can be built on the hills and
+--- Hillside towers cannot" - the exact inversion of the category rule.
+---
+--- Exact ties in height fall to config order. Two buildable surfaces at the
+--- same height overlapping in XZ is a map authoring mistake, not a case worth
+--- paying for.
 local function surfaceUnder(map: Types.MapConfig, center: Vector3, radius: number): Types.BuildableSurface?
+	local best: Types.BuildableSurface? = nil
+	local bestTop = -math.huge
+
 	for _, surface in map.buildableSurfaces do
-		if Footprint.isOnSurface(center, radius, surface.position, surface.size) then
-			return surface
+		if not Footprint.isOnSurface(center, radius, surface.position, surface.size) then
+			continue
+		end
+
+		local top = surface.position.Y + surface.size.Y / 2
+
+		if top > bestTop then
+			bestTop = top
+			best = surface
 		end
 	end
 
-	return nil
+	return best
 end
 
 --- Full validation. Checks run cheapest-and-most-explanatory first, so the

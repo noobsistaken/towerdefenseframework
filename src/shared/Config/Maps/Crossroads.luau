@@ -62,15 +62,21 @@ local map: Types.MapConfig = {
 	basePosition = Vector3.new(140, 0, 90),
 
 	buildableSurfaces = {
-		-- Ground: the pockets the S-bend creates. Deliberately not a
-		-- continuous apron, so where you build is a real choice.
-		groundPad(-105, 10, 50, 130),
-		groundPad(-20, -35, 60, 70),
-		groundPad(55, 25, 50, 90),
-		groundPad(125, 10, 30, 130),
+		-- One broad apron covering the play area, NOT a set of pockets.
+		--
+		-- The lane is carved out of it by PATH_CLEARANCE during validation
+		-- rather than by holes in the geometry. Doing it that way is what
+		-- makes placement free-form: the rule a player learns is "anywhere
+		-- except on the path", which they can see, instead of "only on the
+		-- pads", which they cannot.
+		groundPad(0, 0, 320, 280),
 
 		-- Elevated: two plateaus, each overlooking a different pair of
 		-- passes. These are the only legal Hillside placements on this map.
+		--
+		-- They sit ON TOP of the apron, so both surfaces contain any point on
+		-- a plateau. surfaceUnder resolves that by height, which is why these
+		-- being listed after the apron does not matter.
 		elevatedPad(-105, -110, 60, 50),
 		elevatedPad(55, -95, 70, 40),
 	},
