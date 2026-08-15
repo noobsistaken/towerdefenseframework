@@ -33,6 +33,22 @@ atoms.phaseEndsAt = Charm.atom(0)
 --- cycle Preparing -> WaveActive -> Intermission.
 atoms.endless = Charm.atom(false)
 
+export type MatchResult = {
+	won: boolean,
+	wavesCleared: number,
+	coinsAwarded: number,
+	xpAwarded: number,
+}
+
+--- The last MatchEnded payload, or nil while a run is still going.
+---
+--- Nil-until-set rather than a flag plus fields, so the results screen cannot
+--- render half a result. Note that this can be set TWICE in one run: once
+--- when the campaign is cleared, and again if endless mode later ends in
+--- defeat. The second overwrites the first, which is right - the screen
+--- should show how the run actually finished.
+atoms.matchResult = Charm.atom(nil :: MatchResult?)
+
 atoms.baseHealth = Charm.atom(0)
 atoms.baseHealthMax = Charm.atom(1)
 

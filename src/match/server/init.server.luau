@@ -99,7 +99,19 @@ local function awardRewards(player: Player, coins: number, xp: number)
 	data.Level = Rewards.levelFor(data.XP)
 end
 
-local match = MatchController.new(unlockedTowersOf, awardRewards)
+--- This player's audio setting. Defaults to on for a player with no live
+--- session, which is the same answer the template ships.
+local function sfxEnabledFor(player: Player): boolean
+	local profile = profiles[player]
+
+	if profile == nil then
+		return true
+	end
+
+	return profile.Data.Settings.SfxEnabled
+end
+
+local match = MatchController.new(unlockedTowersOf, awardRewards, sfxEnabledFor)
 match:start()
 
 -- ---------------------------------------------------------------------------

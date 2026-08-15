@@ -173,6 +173,8 @@ export type MatchSnapshot = {
 	--- well as on MatchStateChanged so a client joining mid-run renders the
 	--- right header without waiting for the next phase transition.
 	endless: boolean,
+	--- This player's persisted audio setting, read once at join.
+	sfxEnabled: boolean,
 	--- Tower ids this player owns. Advisory only - it drives which shop
 	--- buttons are enabled, and the server re-checks on every placement.
 	unlockedTowers: { string },

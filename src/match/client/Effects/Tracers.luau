@@ -16,15 +16,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+
+local SoundController = require(script.Parent.Parent.Audio.SoundController)
 
 local Tracers = {}
 
 local LIFETIME = 0.09
 local THICKNESS = 0.22
 
---- Where a tower's muzzle is. Read off the replicated part, so no network
---- message carries tower positions.
-local function towerPosition(towerId: number): Vector3?
+--- The replicated part for a tower, or nil if it has not arrived yet.
+local function towerPart(towerId: number): BasePart?
 	local folder = workspace:FindFirstChild(Constants.TOWER_FOLDER)
 
 	if folder == nil then
@@ -33,24 +35,43 @@ local function towerPosition(towerId: number): Vector3?
 
 	for _, child in folder:GetChildren() do
 		if child:IsA("BasePart") and child:GetAttribute("TowerId") == towerId then
-			-- Top of the part rather than its centre, so the line leaves the
-			-- barrel instead of the tower's waist.
-			return child.Position + Vector3.new(0, child.Size.Y / 2, 0)
+			return child
 		end
 	end
 
 	return nil
 end
 
+--- Where a tower's muzzle is. Read off the replicated part, so no network
+--- message carries tower positions.
+---
+--- Top of the part rather than its centre, so the line leaves the barrel
+--- instead of the tower's waist.
+local function muzzleOf(part: BasePart): Vector3
+	return part.Position + Vector3.new(0, part.Size.Y / 2, 0)
+end
+
 --- Draws one shot. Silently does nothing if the tower part has not replicated
 --- yet, which can happen for the very first shot after a placement.
 function Tracers.draw(towerId: number, target: Vector3)
-	local origin = towerPosition(towerId)
+	local part = towerPart(towerId)
 
-	if origin == nil then
+	if part == nil then
 		return
 	end
 
+	-- The fire cue is derived here rather than sent. A tower firing twice a
+	-- second across sixty towers would be a PlaySound packet per shot, for a
+	-- key the client can read off the part it already has.
+	local defId = part:GetAttribute("TowerDefId")
+
+	if type(defId) == "string" then
+		SoundController.play(Sounds.fireKey(defId), part.Position)
+	end
+
+	-- No nil check: the part existing is what was uncertain, and that was
+	-- already handled above.
+	local origin = muzzleOf(part)
 	local delta = target - origin
 	local length = delta.Magnitude
 

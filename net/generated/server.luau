@@ -273,11 +273,11 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	player_map[player] = nil
 end)
-export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
 export type LobbyState = ("Gathering" | "Voting" | "Launching")
-export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 export type PollKind = ("Map" | "Difficulty")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 
 local function SendEvents()
 	for player, outgoing in player_map do
@@ -431,6 +431,9 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					buffer.writef64(outgoing_buff, outgoing_apos, ret_1["phaseEndsAt"])
 					if ret_1["endless"] then
 						bool_4 = bit32.bor(bool_4, 0b0000000001000000)
+					end
+					if ret_1["sfxEnabled"] then
+						bool_4 = bit32.bor(bool_4, 0b0000000010000000)
 					end
 					local len_4 = #ret_1["unlockedTowers"]
 					assert(len_4 >= 0, "value is less than 0!")
@@ -1980,6 +1983,7 @@ local returns = {
 			["cash"]: (number),
 			["phaseEndsAt"]: (number),
 			["endless"]: (boolean),
+			["sfxEnabled"]: (boolean),
 			["unlockedTowers"]: ({ (string) }),
 		}))): () -> ()
 			reliable_events[7] = Callback

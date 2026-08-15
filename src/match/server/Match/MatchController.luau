@@ -45,6 +45,7 @@ local Scaling = require(ReplicatedStorage.Shared.Scaling)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local ArrivalGate = require(script.Parent.ArrivalGate)
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
@@ -75,6 +76,10 @@ export type UnlockedResolver = (player: Player) -> { string }
 --- principle - the reward path can be observed without a DataStore.
 export type RewardAwarder = (player: Player, coins: number, xp: number) -> ()
 
+--- This player's persisted audio setting. Injected for the same reason as the
+--- two above: profiles belong to the entry point.
+export type SettingsResolver = (player: Player) -> boolean
+
 export type Controller = typeof(setmetatable(
 	{} :: {
 		state: Types.MatchState,
@@ -91,6 +96,7 @@ export type Controller = typeof(setmetatable(
 		health: BaseHealth.Health,
 		isUnlocked: UnlockedResolver,
 		awardRewards: RewardAwarder,
+		sfxEnabledFor: SettingsResolver,
 		--- Highest wave already paid for. A run can pay out twice - once when
 		--- the campaign is cleared, once when endless finally ends - so a
 		--- boolean would either double-pay waves 1..finalWave or leave every
@@ -195,6 +201,7 @@ end
 local function beginWave(self: Controller)
 	self.director:beginWave(self.waveNumber)
 	setState(self, "WaveActive", 0)
+	Net.PlaySound.FireAll({ soundKey = "WaveStart", position = nil })
 end
 
 --- Pays out for every wave not already paid for, and for the win if this is
@@ -269,7 +276,11 @@ end
 -- Construction
 -- ---------------------------------------------------------------------------
 
-function MatchController.new(isUnlocked: UnlockedResolver, awardRewards: RewardAwarder): Controller
+function MatchController.new(
+	isUnlocked: UnlockedResolver,
+	awardRewards: RewardAwarder,
+	sfxEnabledFor: SettingsResolver
+): Controller
 	local mapConfig, difficulty = resolveMatchConfig()
 	local map = MapBuilder.build(mapConfig)
 	local simulation = EnemySimulation.new(map.paths)
@@ -289,6 +300,7 @@ function MatchController.new(isUnlocked: UnlockedResolver, awardRewards: RewardA
 		health = BaseHealth.new(difficulty.baseHealth),
 		isUnlocked = isUnlocked,
 		awardRewards = awardRewards,
+		sfxEnabledFor = sfxEnabledFor,
 		paidThroughWave = 0,
 		returning = false,
 		heartbeat = nil,
@@ -298,6 +310,10 @@ function MatchController.new(isUnlocked: UnlockedResolver, awardRewards: RewardA
 	simulation:onEnemyLeaked(function(_enemy: BaseEnemy.Enemy, baseDamage: number)
 		-- `damage` reports the transition, not the value, so several leaks in
 		-- one step still end the match exactly once.
+		-- Fired for every leak, not only the fatal one: the cue is how a
+		-- player notices a leak they were not watching.
+		Net.PlaySound.FireAll({ soundKey = "BaseDamaged", position = nil })
+
 		if self.health:damage(baseDamage) then
 			endMatchInDefeat(self)
 		end
@@ -345,6 +361,7 @@ function MatchController.snapshot(self: Controller, player: Player): Types.Match
 		cash = math.floor(self.economy:balance(player)),
 		phaseEndsAt = self.phaseEndsAt,
 		endless = self.campaignCleared,
+		sfxEnabled = self.sfxEnabledFor(player),
 		unlockedTowers = self.isUnlocked(player),
 	}
 end
@@ -429,6 +446,10 @@ function MatchController.placeTower(
 		rotationY = rotationY,
 	})
 
+	-- To the acting player only. Everyone hearing every placement in a
+	-- four-player match is noise, not feedback.
+	Net.PlaySound.Fire(player, { soundKey = "TowerPlaced", position = Wire.toWire(result.position) })
+
 	return nil
 end
 
@@ -450,6 +471,7 @@ function MatchController.upgradeTower(self: Controller, player: Player, towerId:
 	end
 
 	self.towers:upgrade(tower, cost)
+	Net.PlaySound.Fire(player, { soundKey = "TowerUpgraded", position = Wire.toWire(tower.position) })
 
 	return true
 end
@@ -464,8 +486,12 @@ function MatchController.sellTower(self: Controller, player: Player, towerId: nu
 	-- Read the refund before removing: sellValue depends on state that
 	-- `remove` is about to drop.
 	local refund = tower:sellValue()
+	local position = tower.position
+
 	self.towers:remove(towerId)
 	self.economy:credit(player, refund)
+
+	Net.PlaySound.Fire(player, { soundKey = "TowerSold", position = Wire.toWire(position) })
 
 	return true
 end
@@ -542,6 +568,7 @@ local function tick(self: Controller, deltaTime: number)
 		if self.director:isSpawningComplete() and self.simulation:count() == 0 then
 			self.economy:creditAll(Scaling.waveBonus(self.waveNumber, self.difficulty.rewardMultiplier))
 			setState(self, "Intermission", Constants.INTERMISSION_SECONDS)
+			Net.PlaySound.FireAll({ soundKey = "WaveCleared", position = nil })
 		end
 
 		return

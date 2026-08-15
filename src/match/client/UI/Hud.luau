@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 
+local ResultsScreen = require(script.Parent.ResultsScreen)
 local ShopBar = require(script.Parent.ShopBar)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local TowerInspector = require(script.Parent.TowerInspector)
@@ -275,6 +276,10 @@ local function Hud()
 		inspector = e(TowerInspector),
 		rejection = e(RejectionToast),
 		earlyStart = e(EarlyStartButton),
+		-- Last, so it draws over everything else. It does not block input:
+		-- after a campaign clear the run continues into endless mode and the
+		-- player still needs the shop.
+		results = e(ResultsScreen),
 	})
 end
 

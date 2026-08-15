@@ -24,8 +24,10 @@ local React = require(ReplicatedStorage.Packages.React)
 local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
+local EnemyVisuals = require(script.Effects.EnemyVisuals)
 local Hud = require(script.UI.Hud)
 local PlacementController = require(script.Placement.PlacementController)
+local SoundController = require(script.Audio.SoundController)
 local Tracers = require(script.Effects.Tracers)
 local atoms = require(script.State.atoms)
 
@@ -92,6 +94,31 @@ janitor:Add(
 	true
 )
 
+janitor:Add(
+	Net.MatchEnded.On(function(value)
+		atoms.matchResult({
+			won = value.won,
+			wavesCleared = value.wavesCleared,
+			coinsAwarded = value.coinsAwarded,
+			xpAwarded = value.xpAwarded,
+		})
+
+		SoundController.play(if value.won then "Victory" else "Defeat")
+	end),
+	true
+)
+
+janitor:Add(
+	Net.PlaySound.On(function(value)
+		-- The position is optional on the wire: a 2D cue like a wave start
+		-- has nowhere to be.
+		local position = if value.position ~= nil then Wire.toVector3(value.position) else nil
+
+		SoundController.play(value.soundKey, position)
+	end),
+	true
+)
+
 -- ---------------------------------------------------------------------------
 -- Clock
 --
@@ -127,6 +154,7 @@ task.spawn(function()
 	atoms.baseHealthMax(snapshot.baseHealthMax)
 	atoms.cash(snapshot.cash)
 	atoms.unlockedTowers(snapshot.unlockedTowers)
+	SoundController.setEnabled(snapshot.sfxEnabled)
 end)
 
 -- ---------------------------------------------------------------------------
@@ -135,6 +163,10 @@ end)
 
 PlacementController.start()
 janitor:Add(PlacementController.stop, true)
+
+-- Health bars and damage numbers. Driven entirely by the Health attribute on
+-- each enemy part, so this needs no network messages of its own (D5).
+janitor:Add(EnemyVisuals.start(), true)
 
 -- ---------------------------------------------------------------------------
 -- UI

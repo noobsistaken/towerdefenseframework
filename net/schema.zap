@@ -238,6 +238,11 @@ funct GetMatchSnapshot = {
 		-- mid-run renders the right header immediately rather than waiting
 		-- for the next phase transition to tell it.
 		endless: boolean,
+		-- This player's persisted audio setting. Carried in the snapshot
+		-- because it is read exactly once, at join, and a dedicated settings
+		-- message for a value that never changes mid-match would be a message
+		-- that only ever fires once.
+		sfxEnabled: boolean,
 		-- Which towers this player owns, so the shop can grey out the rest.
 		-- Advisory: the server re-checks unlock on every placement request,
 		-- so a client that ignores this gains nothing.
