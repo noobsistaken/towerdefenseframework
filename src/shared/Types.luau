@@ -312,6 +312,30 @@ export type TowerDefinition = {
 }
 
 -- ===========================================================================
+-- Lobby
+-- ===========================================================================
+
+--- The lobby lifecycle. Must stay in lockstep with the LobbyState enum in
+--- net/schema.zap.
+---
+---   Gathering  waiting for enough players; no countdown running
+---   Voting     countdown to launch; votes are open the whole time
+---   Launching  votes closed, teleport in flight
+export type LobbyState = "Gathering" | "Voting" | "Launching"
+
+--- What the match place expects to find in TeleportData.
+---
+--- Treated as UNTRUSTED on arrival. Roblox's own guidance is not to rely on
+--- teleport data being tamper-proof, and this design does not depend on the
+--- answer either way: ArrivalGate validates every field against the config
+--- allowlists and falls back to defaults, so a forged payload can at worst
+--- pick a map the player could have voted for anyway.
+export type MatchLaunchData = {
+	mapId: string,
+	difficultyId: string,
+}
+
+-- ===========================================================================
 -- Difficulty
 -- ===========================================================================
 

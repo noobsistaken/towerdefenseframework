@@ -24,6 +24,7 @@ local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local Footprint = require(ReplicatedStorage.Shared.Footprint)
 local Path = require(ReplicatedStorage.Shared.Path)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -176,6 +177,71 @@ end
 
 --- Builds `config` into workspace and returns the handle the match needs.
 --- Replaces any map already present.
+--- Minimum studs a spawn must sit from every lane. Comfortably wider than
+--- the walkway, so a spawning player is never standing in traffic.
+local SPAWN_CLEARANCE = 24
+
+--- Picks somewhere off the lanes to put players.
+---
+--- Without an explicit SpawnLocation, Roblox drops characters at the origin -
+--- which on a map whose lane crosses the middle means spawning inside the
+--- enemy path. Rather than hand-authoring a spawn per map and having it rot
+--- when waypoints move, this searches the map's own edges for the candidate
+--- furthest from every lane, reusing the same distance function placement
+--- validation uses.
+local function findSpawnPosition(config: Types.MapConfig): Vector3
+	local halfX = config.groundSize.X / 2 - SPAWN_CLEARANCE
+	local halfZ = config.groundSize.Z / 2 - SPAWN_CLEARANCE
+
+	local candidates: { Vector3 } = {
+		Vector3.new(-halfX, 0, -halfZ),
+		Vector3.new(halfX, 0, -halfZ),
+		Vector3.new(-halfX, 0, halfZ),
+		Vector3.new(halfX, 0, halfZ),
+		Vector3.new(0, 0, -halfZ),
+		Vector3.new(0, 0, halfZ),
+		Vector3.new(-halfX, 0, 0),
+		Vector3.new(halfX, 0, 0),
+	}
+
+	local best = candidates[1]
+	local bestDistance = -1
+
+	for _, candidate in candidates do
+		local nearest = math.huge
+
+		for _, lane in config.paths do
+			nearest = math.min(nearest, Footprint.distanceToPath(candidate, lane.waypoints))
+		end
+
+		-- Furthest-from-any-lane rather than first-acceptable, so a cramped
+		-- map still gets the best available spot instead of an arbitrary one.
+		if nearest > bestDistance then
+			bestDistance = nearest
+			best = candidate
+		end
+	end
+
+	return best
+end
+
+local function buildSpawn(config: Types.MapConfig, parent: Instance): SpawnLocation
+	local position = findSpawnPosition(config)
+
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "MatchSpawn"
+	spawn.Size = Vector3.new(14, 1, 14)
+	-- Rests on the ground apron, whose top is at y = 1.
+	spawn.CFrame = CFrame.new(position.X, 1.5, position.Z)
+	spawn.Color = Color3.fromRGB(120, 160, 200)
+	spawn.Anchored = true
+	spawn.Neutral = true
+	spawn.Duration = 0
+	spawn.Parent = parent
+
+	return spawn
+end
+
 function MapBuilder.build(config: Types.MapConfig): BuiltMap
 	MapBuilder.clear()
 
@@ -186,6 +252,7 @@ function MapBuilder.build(config: Types.MapConfig): BuiltMap
 	buildSurfaces(config, folder)
 	buildDecor(config, folder)
 	buildBaseMarker(config, folder)
+	buildSpawn(config, folder)
 
 	local walkways = Instance.new("Folder")
 	walkways.Name = "Walkways"

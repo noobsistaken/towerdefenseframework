@@ -10,6 +10,8 @@
 local Types = require(script.Parent.Parent.Types)
 
 local Crossroads = require(script.Parent.Maps.Crossroads)
+local Fork = require(script.Parent.Maps.Fork)
+local Switchback = require(script.Parent.Maps.Switchback)
 
 local MapRegistry = {}
 
@@ -17,6 +19,8 @@ MapRegistry.DEFAULT_ID = "Crossroads"
 
 MapRegistry.MAPS = {
 	Crossroads = Crossroads,
+	Switchback = Switchback,
+	Fork = Fork,
 } :: { [string]: Types.MapConfig }
 
 --- Sorted for stable iteration - vote tallies and map lists must not reorder

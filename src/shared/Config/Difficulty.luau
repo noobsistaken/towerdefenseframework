@@ -50,6 +50,17 @@ Difficulty.PRESETS = {
 	},
 } :: { [string]: Types.DifficultyConfig }
 
+--- Preset ids in ascending order of difficulty, which is also the order the
+--- lobby renders them in.
+---
+--- Written out rather than derived by sorting the table, because the useful
+--- order here is Casual -> Normal -> Nightmare and alphabetical order would
+--- put Nightmare in the middle. A pairs() order would be worse still: vote
+--- tallies must not reorder themselves between servers.
+local IDS: { string } = { "Casual", "Normal", "Nightmare" }
+
+Difficulty.IDS = table.freeze(IDS)
+
 --- Throws on an unknown id. Difficulty arrives over the wire from the lobby,
 --- so this doubles as the allowlist check described in the design doc: an
 --- exploiter cannot invent a preset with a million starting cash.

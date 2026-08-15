@@ -17,9 +17,9 @@ local React = require(ReplicatedStorage.Packages.React)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Types = require(ReplicatedStorage.Shared.Types)
 
-local Theme = require(script.Parent.Theme)
+local Theme = require(ReplicatedStorage.Shared.Theme)
 local atoms = require(script.Parent.Parent.State.atoms)
-local useAtom = require(script.Parent.useAtom)
+local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local e = React.createElement
 

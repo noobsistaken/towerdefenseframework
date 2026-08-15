@@ -40,17 +40,20 @@ local Footprint = require(ReplicatedStorage.Shared.Footprint)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ServerScriptService.Net)
 local Placement = require(ReplicatedStorage.Shared.Placement)
+local Rewards = require(ReplicatedStorage.Shared.Rewards)
 local Scaling = require(ReplicatedStorage.Shared.Scaling)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Types = require(ReplicatedStorage.Shared.Types)
 
+local ArrivalGate = require(script.Parent.ArrivalGate)
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
 local BaseHealth = require(script.Parent.Parent.Systems.BaseHealth)
 local EconomyService = require(script.Parent.Parent.Systems.EconomyService)
 local EnemySimulation = require(script.Parent.Parent.Simulation.EnemySimulation)
 local EnemyView = require(script.Parent.Parent.Simulation.EnemyView)
 local MapBuilder = require(script.Parent.MapBuilder)
+local ReturnGate = require(script.Parent.ReturnGate)
 local TowerSystem = require(script.Parent.Parent.Systems.TowerSystem)
 local WaveDirector = require(script.Parent.Parent.Systems.WaveDirector)
 
@@ -63,6 +66,14 @@ MatchController.__index = MatchController
 --- A list rather than a per-tower predicate, because the snapshot has to send
 --- the whole set anyway and two sources for the same fact would drift.
 export type UnlockedResolver = (player: Player) -> { string }
+
+--- Writes a finished match's payout into persistent player data.
+---
+--- Supplied by the entry point, which owns the ProfileStore sessions, for the
+--- same reason as UnlockedResolver: the controller must not reach into
+--- persistence itself. It is also what keeps the controller testable in
+--- principle - the reward path can be observed without a DataStore.
+export type RewardAwarder = (player: Player, coins: number, xp: number) -> ()
 
 export type Controller = typeof(setmetatable(
 	{} :: {
@@ -79,6 +90,15 @@ export type Controller = typeof(setmetatable(
 		director: WaveDirector.Director,
 		health: BaseHealth.Health,
 		isUnlocked: UnlockedResolver,
+		awardRewards: RewardAwarder,
+		--- Highest wave already paid for. A run can pay out twice - once when
+		--- the campaign is cleared, once when endless finally ends - so a
+		--- boolean would either double-pay waves 1..finalWave or leave every
+		--- endless wave unrewarded. This makes each wave payable exactly once.
+		paidThroughWave: number,
+		--- Set once the return teleport has been fired, so the results phase
+		--- ticking repeatedly cannot fire it again.
+		returning: boolean,
 		heartbeat: RBXScriptConnection?,
 		--- Set once the match is over, so a late leak cannot resurrect it.
 		--- Only Defeat sets this: clearing the campaign is a milestone, not
@@ -104,8 +124,23 @@ export type Controller = typeof(setmetatable(
 --- already why MapRegistry.find and Difficulty.find are non-throwing. Until
 --- then, and always in Studio, the match boots from DevMatch (D1).
 local function resolveMatchConfig(): (Types.MapConfig, Types.DifficultyConfig)
-	local mapId = if RunService:IsStudio() then DevMatch.MAP_ID else MapRegistry.DEFAULT_ID
-	local difficultyId = if RunService:IsStudio() then DevMatch.DIFFICULTY_ID else Difficulty.DEFAULT_ID
+	local mapId: string
+	local difficultyId: string
+
+	if RunService:IsStudio() then
+		-- Studio never arrives by teleport, so there is no join data to read.
+		-- Config/DevMatch.luau is how you pick what to playtest.
+		mapId = DevMatch.MAP_ID
+		difficultyId = DevMatch.DIFFICULTY_ID
+	else
+		-- Live: the lobby's vote, arriving as untrusted TeleportData.
+		-- ArrivalGate validates it against the same allowlists the lobby
+		-- voted over and falls back to defaults, so the ids below are always
+		-- real and the `find` calls that follow always succeed.
+		local launch = ArrivalGate.resolveFrom(Players:GetPlayers())
+		mapId = launch.mapId
+		difficultyId = launch.difficultyId
+	end
 
 	local map = MapRegistry.find(mapId) or MapRegistry.get(MapRegistry.DEFAULT_ID)
 	local difficulty = Difficulty.find(difficultyId) or Difficulty.get(Difficulty.DEFAULT_ID)
@@ -162,6 +197,29 @@ local function beginWave(self: Controller)
 	setState(self, "WaveActive", 0)
 end
 
+--- Pays out for every wave not already paid for, and for the win if this is
+--- the moment it happened. Returns what was paid, for the MatchEnded message.
+---
+--- Persistence goes through the injected awarder rather than being done here:
+--- the controller owns the match, the entry point owns the profiles.
+local function payRewards(self: Controller, throughWave: number, won: boolean): Rewards.Payout
+	local unpaid = math.max(0, throughWave - self.paidThroughWave)
+
+	if unpaid <= 0 and not won then
+		return { coins = 0, xp = 0 }
+	end
+
+	self.paidThroughWave = math.max(self.paidThroughWave, throughWave)
+
+	local payout = Rewards.forMatch(unpaid, won, self.difficulty)
+
+	for _, player in Players:GetPlayers() do
+		self.awardRewards(player, payout.coins, payout.xp)
+	end
+
+	return payout
+end
+
 --- Terminal. Only defeat ends a run: clearing the campaign is a milestone,
 --- and the match carries on into endless mode from there.
 local function endMatchInDefeat(self: Controller)
@@ -171,15 +229,18 @@ local function endMatchInDefeat(self: Controller)
 
 	self.finished = true
 	self.simulation:reset()
+
+	-- The wave they died on does not count as cleared.
+	local cleared = math.max(0, self.waveNumber - 1)
+	local payout = payRewards(self, cleared, false)
+
 	setState(self, "Defeat", Constants.RESULTS_SECONDS)
 
-	-- Phase 5 pays real rewards through RewardService and persists them.
 	Net.MatchEnded.FireAll({
 		won = false,
-		-- The wave they died on does not count as cleared.
-		wavesCleared = math.max(0, self.waveNumber - 1),
-		coinsAwarded = 0,
-		xpAwarded = 0,
+		wavesCleared = cleared,
+		coinsAwarded = payout.coins,
+		xpAwarded = payout.xp,
 	})
 end
 
@@ -192,11 +253,13 @@ end
 local function beginVictoryInterlude(self: Controller)
 	self.campaignCleared = true
 
+	local payout = payRewards(self, self.waveNumber, true)
+
 	Net.MatchEnded.FireAll({
 		won = true,
 		wavesCleared = self.waveNumber,
-		coinsAwarded = 0,
-		xpAwarded = 0,
+		coinsAwarded = payout.coins,
+		xpAwarded = payout.xp,
 	})
 
 	setState(self, "Victory", Constants.RESULTS_SECONDS)
@@ -206,7 +269,7 @@ end
 -- Construction
 -- ---------------------------------------------------------------------------
 
-function MatchController.new(isUnlocked: UnlockedResolver): Controller
+function MatchController.new(isUnlocked: UnlockedResolver, awardRewards: RewardAwarder): Controller
 	local mapConfig, difficulty = resolveMatchConfig()
 	local map = MapBuilder.build(mapConfig)
 	local simulation = EnemySimulation.new(map.paths)
@@ -225,6 +288,9 @@ function MatchController.new(isUnlocked: UnlockedResolver): Controller
 		director = WaveDirector.new(simulation, difficulty),
 		health = BaseHealth.new(difficulty.baseHealth),
 		isUnlocked = isUnlocked,
+		awardRewards = awardRewards,
+		paidThroughWave = 0,
+		returning = false,
 		heartbeat = nil,
 		finished = false,
 	}, MatchController)
@@ -446,6 +512,14 @@ end
 
 local function tick(self: Controller, deltaTime: number)
 	if self.finished then
+		-- The results screen has had its time. Send everyone back to the
+		-- lobby, once: `returning` guards it because this branch runs on
+		-- every heartbeat for as long as the server survives.
+		if not self.returning and self.phaseEndsAt > 0 and os.time() >= self.phaseEndsAt then
+			self.returning = true
+			task.spawn(ReturnGate.send)
+		end
+
 		return
 	end
 

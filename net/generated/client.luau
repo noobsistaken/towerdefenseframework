@@ -132,8 +132,14 @@ if not RunService:IsRunning() then
 	local noop = function() end
 	return table.freeze({
 		SendEvents = noop,
+		VoteTallyChanged = table.freeze({
+			On = noop
+		}),
 		TowerFired = table.freeze({
 			On = noop
+		}),
+		SetReady = table.freeze({
+			Fire = noop
 		}),
 		RequestUpgradeTower = table.freeze({
 			Fire = noop
@@ -156,14 +162,23 @@ if not RunService:IsRunning() then
 		PlacementRejected = table.freeze({
 			On = noop
 		}),
+		MatchmakingFailed = table.freeze({
+			On = noop
+		}),
 		MatchStateChanged = table.freeze({
 			On = noop
 		}),
 		MatchEnded = table.freeze({
 			On = noop
 		}),
+		LobbyStateChanged = table.freeze({
+			On = noop
+		}),
 		GetMatchSnapshot = table.freeze({
 			Call = noop
+		}),
+		CastVote = table.freeze({
+			Fire = noop
 		}),
 		CashChanged = table.freeze({
 			On = noop
@@ -181,9 +196,11 @@ assert(reliable:IsA("RemoteEvent"), "Expected ZAP_RELIABLE to be a RemoteEvent")
 local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0"), remotes:WaitForChild("ZAP_UNRELIABLE_1") }
 assert(unreliable[1]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_0 to be an UnreliableRemoteEvent")
 assert(unreliable[2]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_1 to be an UnreliableRemoteEvent")
-export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
+export type LobbyState = ("Gathering" | "Voting" | "Launching")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
+export type PollKind = ("Map" | "Difficulty")
 
 local function SendEvents()
 	if outgoing_used ~= 0 then
@@ -201,26 +218,32 @@ end
 
 RunService.Heartbeat:Connect(SendEvents)
 
-local reliable_events = table.create(6)
-local reliable_event_queue: { [number]: { any } } = table.create(6)
+local reliable_events = table.create(9)
+local reliable_event_queue: { [number]: { any } } = table.create(9)
 local unreliable_events = table.create(2)
 local unreliable_event_queue: { [number]: { any } } = table.create(2)
 local function_call_id = 0
+reliable_events[6] = {}
+reliable_event_queue[6] = {}
 unreliable_events[0] = {}
 unreliable_event_queue[0] = {}
 unreliable_events[1] = {}
 unreliable_event_queue[1] = {}
 reliable_events[3] = {}
 reliable_event_queue[3] = {}
+reliable_events[7] = {}
+reliable_event_queue[7] = {}
 reliable_events[0] = {}
 reliable_event_queue[0] = {}
 reliable_events[4] = {}
 reliable_event_queue[4] = {}
+reliable_events[5] = {}
+reliable_event_queue[5] = {}
 reliable_events[1] = {}
 reliable_event_queue[1] = {}
 reliable_events[2] = {}
 reliable_event_queue[2] = {}
-reliable_event_queue[5] = table.create(255)
+reliable_event_queue[8] = table.create(255)
 reliable.OnClientEvent:Connect(function(buff, inst)
 	incoming_buff = buff
 	incoming_inst = inst
@@ -229,7 +252,56 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 	local len = buffer.len(buff)
 	while incoming_read < len do
 		local id = buffer.readu8(buff, read(1))
-		if id == 3 then -- PlacementRejected
+		if id == 6 then -- VoteTallyChanged
+			local value
+			value = {  }
+			local len_1 = buffer.readu8(incoming_buff, read(1))
+			assert(len_1 >= 0, "value is less than 0!")
+			assert(len_1 <= 16, "value is more than 16!")
+			value["mapTallies"] = table.create(len_1)
+			for i_1 = 1, len_1 do
+				local val_1
+				val_1 = {  }
+				local len_2 = buffer.readu8(incoming_buff, read(1))
+				assert(len_2 <= 96, "value is more than 96!")
+				val_1["option"] = buffer.readstring(incoming_buff, read(len_2), len_2)
+				assert(utf8.len(val_1["option"]) ~= nil, "value is not valid utf-8")
+				val_1["votes"] = buffer.readu8(incoming_buff, read(1))
+				value["mapTallies"][i_1] = val_1
+			end
+			local len_3 = buffer.readu8(incoming_buff, read(1))
+			assert(len_3 >= 0, "value is less than 0!")
+			assert(len_3 <= 16, "value is more than 16!")
+			value["difficultyTallies"] = table.create(len_3)
+			for i_2 = 1, len_3 do
+				local val_2
+				val_2 = {  }
+				local len_4 = buffer.readu8(incoming_buff, read(1))
+				assert(len_4 <= 96, "value is more than 96!")
+				val_2["option"] = buffer.readstring(incoming_buff, read(len_4), len_4)
+				assert(utf8.len(val_2["option"]) ~= nil, "value is not valid utf-8")
+				val_2["votes"] = buffer.readu8(incoming_buff, read(1))
+				value["difficultyTallies"][i_2] = val_2
+			end
+			local len_5 = buffer.readu8(incoming_buff, read(1))
+			assert(len_5 <= 96, "value is more than 96!")
+			value["winningMapId"] = buffer.readstring(incoming_buff, read(len_5), len_5)
+			assert(utf8.len(value["winningMapId"]) ~= nil, "value is not valid utf-8")
+			local len_6 = buffer.readu8(incoming_buff, read(1))
+			assert(len_6 <= 96, "value is more than 96!")
+			value["winningDifficultyId"] = buffer.readstring(incoming_buff, read(len_6), len_6)
+			assert(utf8.len(value["winningDifficultyId"]) ~= nil, "value is not valid utf-8")
+			if reliable_events[6][1] then
+				for _, cb in reliable_events[6] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[6], value)
+				if #reliable_event_queue[6] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[6]} events in queue for VoteTallyChanged. Did you forget to attach a listener?`)
+				end
+			end
+		elseif id == 3 then -- PlacementRejected
 			local value
 			local bool_1 = buffer.readu16(incoming_buff, read(2))
 			value = {  }
@@ -262,6 +334,23 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 				table.insert(reliable_event_queue[3], value)
 				if #reliable_event_queue[3] > 64 then
 					warn(`[ZAP] {#reliable_event_queue[3]} events in queue for PlacementRejected. Did you forget to attach a listener?`)
+				end
+			end
+		elseif id == 7 then -- MatchmakingFailed
+			local value
+			value = {  }
+			local len_7 = buffer.readu16(incoming_buff, read(2))
+			assert(len_7 <= 480, "value is more than 480!")
+			value["reason"] = buffer.readstring(incoming_buff, read(len_7), len_7)
+			assert(utf8.len(value["reason"]) ~= nil, "value is not valid utf-8")
+			if reliable_events[7][1] then
+				for _, cb in reliable_events[7] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[7], value)
+				if #reliable_event_queue[7] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[7]} events in queue for MatchmakingFailed. Did you forget to attach a listener?`)
 				end
 			end
 		elseif id == 0 then -- MatchStateChanged
@@ -312,6 +401,30 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 					warn(`[ZAP] {#reliable_event_queue[4]} events in queue for MatchEnded. Did you forget to attach a listener?`)
 				end
 			end
+		elseif id == 5 then -- LobbyStateChanged
+			local value
+			local bool_4 = buffer.readu8(incoming_buff, read(1))
+			value = {  }
+			if bit32.btest(bool_4, 0b0000000000000001) then
+				value["state"] = "Gathering"
+			elseif bit32.btest(bool_4, 0b0000000000000010) then
+				value["state"] = "Voting"
+			elseif bit32.btest(bool_4, 0b0000000000000100) then
+				value["state"] = "Launching"
+			end
+			value["secondsRemaining"] = buffer.readu16(incoming_buff, read(2))
+			value["playerCount"] = buffer.readu8(incoming_buff, read(1))
+			value["readyCount"] = buffer.readu8(incoming_buff, read(1))
+			if reliable_events[5][1] then
+				for _, cb in reliable_events[5] do
+					task.spawn(cb, value)
+				end
+			else
+				table.insert(reliable_event_queue[5], value)
+				if #reliable_event_queue[5] > 64 then
+					warn(`[ZAP] {#reliable_event_queue[5]} events in queue for LobbyStateChanged. Did you forget to attach a listener?`)
+				end
+			end
 		elseif id == 1 then -- CashChanged
 			local value
 			value = {  }
@@ -341,51 +454,51 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 					warn(`[ZAP] {#reliable_event_queue[2]} events in queue for BaseHealthChanged. Did you forget to attach a listener?`)
 				end
 			end
-		elseif id == 5 then -- GetMatchSnapshot
+		elseif id == 8 then -- GetMatchSnapshot
 			local call_id = buffer.readu8(incoming_buff, read(1))
 			local value
-			local bool_4 = buffer.readu8(incoming_buff, read(1))
+			local bool_5 = buffer.readu8(incoming_buff, read(1))
 			value = {  }
-			if bit32.btest(bool_4, 0b0000000000000001) then
+			if bit32.btest(bool_5, 0b0000000000000001) then
 				value["state"] = "Loading"
-			elseif bit32.btest(bool_4, 0b0000000000000010) then
+			elseif bit32.btest(bool_5, 0b0000000000000010) then
 				value["state"] = "Preparing"
-			elseif bit32.btest(bool_4, 0b0000000000000100) then
+			elseif bit32.btest(bool_5, 0b0000000000000100) then
 				value["state"] = "WaveActive"
-			elseif bit32.btest(bool_4, 0b0000000000001000) then
+			elseif bit32.btest(bool_5, 0b0000000000001000) then
 				value["state"] = "Intermission"
-			elseif bit32.btest(bool_4, 0b0000000000010000) then
+			elseif bit32.btest(bool_5, 0b0000000000010000) then
 				value["state"] = "Victory"
-			elseif bit32.btest(bool_4, 0b0000000000100000) then
+			elseif bit32.btest(bool_5, 0b0000000000100000) then
 				value["state"] = "Defeat"
 			end
-			local len_1 = buffer.readu16(incoming_buff, read(2))
-			value["mapId"] = buffer.readstring(incoming_buff, read(len_1), len_1)
+			local len_8 = buffer.readu16(incoming_buff, read(2))
+			value["mapId"] = buffer.readstring(incoming_buff, read(len_8), len_8)
 			assert(utf8.len(value["mapId"]) ~= nil, "value is not valid utf-8")
 			value["waveNumber"] = buffer.readu16(incoming_buff, read(2))
 			value["baseHealth"] = buffer.readu32(incoming_buff, read(4))
 			value["baseHealthMax"] = buffer.readu32(incoming_buff, read(4))
 			value["cash"] = buffer.readu32(incoming_buff, read(4))
 			value["phaseEndsAt"] = buffer.readf64(incoming_buff, read(8))
-			value["endless"] = bit32.btest(bool_4, 0b0000000001000000)
-			local len_2 = buffer.readu8(incoming_buff, read(1))
-			assert(len_2 >= 0, "value is less than 0!")
-			assert(len_2 <= 32, "value is more than 32!")
-			value["unlockedTowers"] = table.create(len_2)
-			for i_1 = 1, len_2 do
-				local val_1
-				local len_3 = buffer.readu8(incoming_buff, read(1))
-				assert(len_3 <= 96, "value is more than 96!")
-				val_1 = buffer.readstring(incoming_buff, read(len_3), len_3)
-				assert(utf8.len(val_1) ~= nil, "value is not valid utf-8")
-				value["unlockedTowers"][i_1] = val_1
+			value["endless"] = bit32.btest(bool_5, 0b0000000001000000)
+			local len_9 = buffer.readu8(incoming_buff, read(1))
+			assert(len_9 >= 0, "value is less than 0!")
+			assert(len_9 <= 32, "value is more than 32!")
+			value["unlockedTowers"] = table.create(len_9)
+			for i_3 = 1, len_9 do
+				local val_3
+				local len_10 = buffer.readu8(incoming_buff, read(1))
+				assert(len_10 <= 96, "value is more than 96!")
+				val_3 = buffer.readstring(incoming_buff, read(len_10), len_10)
+				assert(utf8.len(val_3) ~= nil, "value is not valid utf-8")
+				value["unlockedTowers"][i_3] = val_3
 			end
-			local thread = reliable_event_queue[5][call_id]
+			local thread = reliable_event_queue[8][call_id]
 			-- When using actors it's possible for multiple Zap clients to exist, but only one called the Zap remote function.
 			if thread then
 				task.spawn(thread, value)
 			end
-			reliable_event_queue[5][call_id] = nil
+			reliable_event_queue[8][call_id] = nil
 		else
 			error("Unknown event id")
 		end
@@ -417,13 +530,13 @@ unreliable[2].OnClientEvent:Connect(function(buff, inst) -- PlaySound
 	incoming_read = 0
 	incoming_ipos = 0
 	local value
-	local bool_5 = buffer.readu8(incoming_buff, read(1))
+	local bool_6 = buffer.readu8(incoming_buff, read(1))
 	value = {  }
-	local len_4 = buffer.readu8(incoming_buff, read(1))
-	assert(len_4 <= 128, "value is more than 128!")
-	value["soundKey"] = buffer.readstring(incoming_buff, read(len_4), len_4)
+	local len_11 = buffer.readu8(incoming_buff, read(1))
+	assert(len_11 <= 128, "value is more than 128!")
+	value["soundKey"] = buffer.readstring(incoming_buff, read(len_11), len_11)
 	assert(utf8.len(value["soundKey"]) ~= nil, "value is not valid utf-8")
-	if bit32.btest(bool_5, 0b0000000000000001) then
+	if bit32.btest(bool_6, 0b0000000000000001) then
 		value["position"] = vector.create(buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)))
 	else
 		value["position"] = nil
@@ -444,6 +557,29 @@ table.freeze(polling_queues_unreliable)
 
 local returns = {
 	SendEvents = SendEvents,
+	VoteTallyChanged = {
+		On = function(Callback: (Value: ({
+			["mapTallies"]: ({ ({
+				["option"]: (string),
+				["votes"]: (number),
+			}) }),
+			["difficultyTallies"]: ({ ({
+				["option"]: (string),
+				["votes"]: (number),
+			}) }),
+			["winningMapId"]: (string),
+			["winningDifficultyId"]: (string),
+		})) -> ())
+			table.insert(reliable_events[6], Callback)
+			for _, value in reliable_event_queue[6] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[6] = {}
+			return function()
+				table.remove(reliable_events[6], table.find(reliable_events[6], Callback))
+			end
+		end,
+	},
 	TowerFired = {
 		On = function(Callback: (Value: ({
 			["towerId"]: (number),
@@ -457,6 +593,20 @@ local returns = {
 			return function()
 				table.remove(unreliable_events[0], table.find(unreliable_events[0], Callback))
 			end
+		end,
+	},
+	SetReady = {
+		Fire = function(Value: ({
+			["ready"]: (boolean),
+		}))
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			local bool_7 = 0
+			local bool_7_pos_1 = alloc(1)
+			if Value["ready"] then
+				bool_7 = bit32.bor(bool_7, 0b0000000000000001)
+			end
+			buffer.writeu8(outgoing_buff, bool_7_pos_1, bool_7)
 		end,
 	},
 	RequestUpgradeTower = {
@@ -476,22 +626,22 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
-			local bool_6 = 0
-			local bool_6_pos_1 = alloc(1)
+			local bool_8 = 0
+			local bool_8_pos_1 = alloc(1)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
 			if Value["mode"] == "First" then
-				bool_6 = bit32.bor(bool_6, 0b0000000000000001)
+				bool_8 = bit32.bor(bool_8, 0b0000000000000001)
 			elseif Value["mode"] == "Last" then
-				bool_6 = bit32.bor(bool_6, 0b0000000000000010)
+				bool_8 = bit32.bor(bool_8, 0b0000000000000010)
 			elseif Value["mode"] == "Strongest" then
-				bool_6 = bit32.bor(bool_6, 0b0000000000000100)
+				bool_8 = bit32.bor(bool_8, 0b0000000000000100)
 			elseif Value["mode"] == "Closest" then
-				bool_6 = bit32.bor(bool_6, 0b0000000000001000)
+				bool_8 = bit32.bor(bool_8, 0b0000000000001000)
 			else
 				error("Invalid enumerator")
 			end
-			buffer.writeu8(outgoing_buff, bool_6_pos_1, bool_6)
+			buffer.writeu8(outgoing_buff, bool_8_pos_1, bool_8)
 		end,
 	},
 	RequestSellTower = {
@@ -512,12 +662,12 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
-			local len_5 = #Value["towerDefId"]
+			local len_12 = #Value["towerDefId"]
 			assert(utf8.len(Value["towerDefId"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_5)
-			alloc(len_5)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["towerDefId"], len_5)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_12)
+			alloc(len_12)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["towerDefId"], len_12)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)
@@ -563,6 +713,20 @@ local returns = {
 			end
 		end,
 	},
+	MatchmakingFailed = {
+		On = function(Callback: (Value: ({
+			["reason"]: (string),
+		})) -> ())
+			table.insert(reliable_events[7], Callback)
+			for _, value in reliable_event_queue[7] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[7] = {}
+			return function()
+				table.remove(reliable_events[7], table.find(reliable_events[7], Callback))
+			end
+		end,
+	},
 	MatchStateChanged = {
 		On = function(Callback: (Value: ({
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
@@ -597,6 +761,23 @@ local returns = {
 			end
 		end,
 	},
+	LobbyStateChanged = {
+		On = function(Callback: (Value: ({
+			["state"]: ("Gathering" | "Voting" | "Launching"),
+			["secondsRemaining"]: (number),
+			["playerCount"]: (number),
+			["readyCount"]: (number),
+		})) -> ())
+			table.insert(reliable_events[5], Callback)
+			for _, value in reliable_event_queue[5] do
+				task.spawn(Callback, value)
+			end
+			reliable_event_queue[5] = {}
+			return function()
+				table.remove(reliable_events[5], table.find(reliable_events[5], Callback))
+			end
+		end,
+	},
 	GetMatchSnapshot = {
 		Call = function(Value: ({
 		})): (({
@@ -612,16 +793,42 @@ local returns = {
 		}))
 			function_call_id += 1
 			function_call_id %= 256
-			if reliable_event_queue[5][function_call_id] then
+			if reliable_event_queue[8][function_call_id] then
 				function_call_id -= 1
 				error("Zap has more than 256 calls awaiting a response, and therefore this packet has been dropped")
 			end
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, function_call_id)
-			reliable_event_queue[5][function_call_id] = coroutine.running()
+			reliable_event_queue[8][function_call_id] = coroutine.running()
 			return coroutine.yield()
+		end,
+	},
+	CastVote = {
+		Fire = function(Value: ({
+			["poll"]: ("Map" | "Difficulty"),
+			["option"]: (string),
+		}))
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			local bool_9 = 0
+			local bool_9_pos_1 = alloc(1)
+			if Value["poll"] == "Map" then
+				bool_9 = bit32.bor(bool_9, 0b0000000000000001)
+			elseif Value["poll"] == "Difficulty" then
+				local _
+			else
+				error("Invalid enumerator")
+			end
+			local len_13 = #Value["option"]
+			assert(len_13 <= 96, "value is more than 96!")
+			assert(utf8.len(Value["option"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_13)
+			alloc(len_13)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["option"], len_13)
+			buffer.writeu8(outgoing_buff, bool_9_pos_1, bool_9)
 		end,
 	},
 	CashChanged = {

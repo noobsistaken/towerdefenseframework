@@ -20,10 +20,10 @@ local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 
 local ShopBar = require(script.Parent.ShopBar)
-local Theme = require(script.Parent.Theme)
+local Theme = require(ReplicatedStorage.Shared.Theme)
 local TowerInspector = require(script.Parent.TowerInspector)
 local atoms = require(script.Parent.Parent.State.atoms)
-local useAtom = require(script.Parent.useAtom)
+local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local e = React.createElement
 

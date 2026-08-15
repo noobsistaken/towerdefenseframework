@@ -1,9 +1,13 @@
 {
-	"name": "td-test",
+	"name": "td-lobby",
 	"globIgnorePaths": [
 		"**/.git/**",
 		"**/.github/**",
 		"**/node_modules/**",
+		"**/Packages/**/*.spec.luau",
+		"**/Packages/**/*.spec.lua",
+		"**/ServerPackages/**/*.spec.luau",
+		"**/DevPackages/**/*.spec.luau",
 		"**/Packages/**/default.project.json",
 		"**/ServerPackages/**/default.project.json",
 		"**/DevPackages/**/default.project.json"
@@ -15,9 +19,6 @@
 			"$className": "ReplicatedStorage",
 			"Packages": {
 				"$path": "Packages"
-			},
-			"DevPackages": {
-				"$path": "DevPackages"
 			},
 			"Shared": {
 				"$path": "src/shared"
@@ -35,14 +36,8 @@
 			"Net": {
 				"$path": "net/generated/server.luau"
 			},
-			"Server": {
-				"$path": "src/match/server"
-			},
 			"Lobby": {
 				"$path": "src/lobby/server"
-			},
-			"Tests": {
-				"$path": "tests"
 			}
 		},
 
@@ -50,9 +45,6 @@
 			"$className": "StarterPlayer",
 			"StarterPlayerScripts": {
 				"$className": "StarterPlayerScripts",
-				"Client": {
-					"$path": "src/match/client"
-				},
 				"LobbyClient": {
 					"$path": "src/lobby/client"
 				}

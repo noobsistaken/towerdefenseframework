@@ -91,8 +91,9 @@ zap --no-warnings net/schema.zap
 Build:
 
 ```bash
-rojo build default.project.json --output build/game.rbxl   # shipping place
-rojo build test.project.json    --output build/test.rbxl   # test place
+rojo build default.project.json --output build/game.rbxl    # match place
+rojo build lobby.project.json   --output build/lobby.rbxl   # lobby place
+rojo build test.project.json    --output build/test.rbxl    # test place
 ```
 
 Tests:
@@ -207,9 +208,22 @@ net/schema.zap        networking contract (source of truth)
 net/generated/        zap output — committed, never hand-edited
 src/match/server/     ServerScriptService.Server      (match place)
 src/match/client/     StarterPlayer...Client          (match place)
-src/lobby/            lobby place — added in Phase 4
+src/lobby/server/     ServerScriptService.Lobby       (lobby place)
+src/lobby/client/     StarterPlayer...LobbyClient     (lobby place)
 src/shared/           ReplicatedStorage.Shared        (both places)
 tests/                ServerScriptService.Tests (test place only)
 types/                vendored Roblox API defs for luau-lsp
 guest/                joining someone else's project — read guest/README.md
 ```
+
+Three project files, three places. `test.project.json` mounts **both** the
+match and lobby trees, because luau-lsp builds its sourcemap from it and every
+require has to resolve from one map. `Config/Places.luau`'s `STUDIO_ROLE`
+decides which entry point actually boots there — without it, opening the test
+place would run a match and a lobby in the same world.
+
+**`TeleportService` does not work in Studio.** The lobby → match → lobby loop
+is therefore invisible to every gate in this file. Its written procedure is
+[docs/MANUAL-VERIFICATION.md](docs/MANUAL-VERIFICATION.md); run it after
+touching `src/lobby/`, the teleport gates, or `Config/Places.luau`. Never
+report that loop as working on the strength of a green gate.

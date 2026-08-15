@@ -48,6 +48,14 @@ opt call_default = "ManyAsync"
 -- Must stay in lockstep with Types.MatchState in src/shared/Types.luau.
 type MatchState = enum { Loading, Preparing, WaveActive, Intermission, Victory, Defeat }
 
+-- Must stay in lockstep with Types.LobbyState.
+type LobbyState = enum { Gathering, Voting, Launching }
+
+-- Which of the lobby's two votes a message refers to. One event covers both,
+-- because the tally logic is identical and a second near-identical event is
+-- how the two drift apart.
+type PollKind = enum { Map, Difficulty }
+
 type TargetingMode = enum { First, Last, Strongest, Closest }
 
 -- Why a placement request can be refused. The client shows a message; the
@@ -234,5 +242,87 @@ funct GetMatchSnapshot = {
 		-- Advisory: the server re-checks unlock on every placement request,
 		-- so a client that ignores this gains nothing.
 		unlockedTowers: string.utf8(..24)[0..32],
+	},
+}
+
+-- ---------------------------------------------------------------------------
+-- Lobby
+--
+-- Only ever fired in the lobby place. The two places share one schema file
+-- deliberately: one generated module pair, one trust boundary to review, and
+-- no chance of the two drifting into incompatible wire formats.
+-- ---------------------------------------------------------------------------
+
+-- One event for both votes. The tally logic is identical, and a second
+-- near-identical event is exactly how two code paths drift apart.
+--
+-- `option` is validated against the server's own allowlist - MapRegistry.find
+-- or Difficulty.find - before it is recorded. Zap proves it is a short string;
+-- it cannot prove it names a real map.
+event CastVote = {
+	from: Client,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		poll: PollKind,
+		option: string.utf8(..24),
+	},
+}
+
+event SetReady = {
+	from: Client,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		ready: boolean,
+	},
+}
+
+event LobbyStateChanged = {
+	from: Server,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		state: LobbyState,
+		-- Whole seconds left in the current phase. 0 when untimed.
+		secondsRemaining: u16,
+		playerCount: u8,
+		readyCount: u8,
+	},
+}
+
+-- Sent whole rather than as deltas. A lobby holds at most a handful of
+-- options and this fires only when someone votes, so the simplest thing that
+-- cannot desync is the right one.
+event VoteTallyChanged = {
+	from: Server,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		mapTallies: struct {
+			option: string.utf8(..24),
+			votes: u8,
+		}[0..16],
+		difficultyTallies: struct {
+			option: string.utf8(..24),
+			votes: u8,
+		}[0..16],
+		-- Precomputed by the server so every client shows the same winner.
+		-- Recomputing it per client would mean reimplementing the tie-break.
+		winningMapId: string.utf8(..24),
+		winningDifficultyId: string.utf8(..24),
+	},
+}
+
+-- The teleport failed, or was never attempted because Config/Places.luau
+-- still has placeholder ids. Carries a human-readable reason because there is
+-- nothing an exploiter can do with it and a silent failure here is
+-- indistinguishable from the game being broken.
+event MatchmakingFailed = {
+	from: Server,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		reason: string.utf8(..120),
 	},
 }

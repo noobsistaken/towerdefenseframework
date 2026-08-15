@@ -21,6 +21,7 @@ local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ServerScriptService.Net)
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
+local Rewards = require(ReplicatedStorage.Shared.Rewards)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
@@ -71,7 +72,34 @@ local function unlockedTowersOf(player: Player): { string }
 	return table.clone(profile.Data.UnlockedTowers)
 end
 
-local match = MatchController.new(unlockedTowersOf)
+--- Writes a finished match's payout into persistent data.
+---
+--- The only place in the codebase that mutates Coins, XP, Level or the
+--- lifetime Stats, which is what makes "where did this number come from"
+--- answerable by reading one function.
+---
+--- Silently does nothing for a player with no live session. That is correct
+--- rather than lazy: a player who left during the results screen has already
+--- had their profile released, and writing to a released profile is how you
+--- corrupt the next session.
+local function awardRewards(player: Player, coins: number, xp: number)
+	local profile = profiles[player]
+
+	if profile == nil then
+		return
+	end
+
+	local data = profile.Data
+
+	data.Coins += coins
+	data.XP += xp
+
+	-- Derived from XP rather than incremented, so the two can never disagree
+	-- and a curve change re-levels everyone correctly on their next match.
+	data.Level = Rewards.levelFor(data.XP)
+end
+
+local match = MatchController.new(unlockedTowersOf, awardRewards)
 match:start()
 
 -- ---------------------------------------------------------------------------

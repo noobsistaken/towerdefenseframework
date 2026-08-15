@@ -20,25 +20,10 @@
 
 local Types = require(script.Parent.Parent.Parent.Types)
 
---- Slab thickness shared by every buildable pad, so the y arithmetic above
---- holds uniformly.
-local PAD_THICKNESS = 4
+local Pads = require(script.Parent.Pads)
 
-local function groundPad(x: number, z: number, sizeX: number, sizeZ: number): Types.BuildableSurface
-	return {
-		position = Vector3.new(x, 1 - PAD_THICKNESS / 2, z),
-		size = Vector3.new(sizeX, PAD_THICKNESS, sizeZ),
-		surfaceType = "Ground" :: Types.SurfaceType,
-	}
-end
-
-local function elevatedPad(x: number, z: number, sizeX: number, sizeZ: number): Types.BuildableSurface
-	return {
-		position = Vector3.new(x, 12 - PAD_THICKNESS / 2, z),
-		size = Vector3.new(sizeX, PAD_THICKNESS, sizeZ),
-		surfaceType = "Elevated" :: Types.SurfaceType,
-	}
-end
+local groundPad = Pads.ground
+local elevatedPad = Pads.elevated
 
 local map: Types.MapConfig = {
 	id = "Crossroads",
