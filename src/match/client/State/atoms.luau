@@ -28,6 +28,11 @@ atoms.waveNumber = Charm.atom(0)
 --- which the HUD renders as a dash rather than as "0s".
 atoms.phaseEndsAt = Charm.atom(0)
 
+--- True once the campaign's final wave has been cleared. A modifier on the
+--- phase rather than a MatchState of its own, because endless waves still
+--- cycle Preparing -> WaveActive -> Intermission.
+atoms.endless = Charm.atom(false)
+
 atoms.baseHealth = Charm.atom(0)
 atoms.baseHealthMax = Charm.atom(1)
 

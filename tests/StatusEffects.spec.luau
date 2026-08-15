@@ -53,6 +53,8 @@ local function makeEnemy(resistances: { [string]: number }?): BaseEnemy.Enemy
 		definition = definition,
 		behavior = nil,
 		pathIndex = 1,
+		-- Long enough that nothing under test walks off the end of it.
+		pathLength = 1000,
 		health = 1000,
 		speed = 10,
 		bounty = 1,

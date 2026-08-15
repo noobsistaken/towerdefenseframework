@@ -246,9 +246,9 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	player_map[player] = nil
 end)
-export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
-export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
+export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
 
 local function SendEvents()
 	for player, outgoing in player_map do
@@ -374,6 +374,9 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					buffer.writeu32(outgoing_buff, outgoing_apos, ret_1["cash"])
 					alloc(8)
 					buffer.writef64(outgoing_buff, outgoing_apos, ret_1["phaseEndsAt"])
+					if ret_1["endless"] then
+						bool_2 = bit32.bor(bool_2, 0b0000000001000000)
+					end
 					local len_3 = #ret_1["unlockedTowers"]
 					assert(len_3 >= 0, "value is less than 0!")
 					assert(len_3 <= 32, "value is more than 32!")
@@ -906,6 +909,7 @@ local returns = {
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 		}))
 			load_player(Player)
 			alloc(1)
@@ -931,6 +935,9 @@ local returns = {
 			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
 			alloc(8)
 			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_13 = bit32.bor(bool_13, 0b0000000001000000)
+			end
 			buffer.writeu8(outgoing_buff, bool_13_pos_1, bool_13)
 			player_map[Player] = save()
 		end,
@@ -938,6 +945,7 @@ local returns = {
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 		}))
 			load_empty()
 			alloc(1)
@@ -963,6 +971,9 @@ local returns = {
 			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
 			alloc(8)
 			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_14 = bit32.bor(bool_14, 0b0000000001000000)
+			end
 			buffer.writeu8(outgoing_buff, bool_14_pos_1, bool_14)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in Players:GetPlayers() do
@@ -977,6 +988,7 @@ local returns = {
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 		}))
 			load_empty()
 			alloc(1)
@@ -1002,6 +1014,9 @@ local returns = {
 			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
 			alloc(8)
 			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_15 = bit32.bor(bool_15, 0b0000000001000000)
+			end
 			buffer.writeu8(outgoing_buff, bool_15_pos_1, bool_15)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in Players:GetPlayers() do
@@ -1018,6 +1033,7 @@ local returns = {
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 		}))
 			load_empty()
 			alloc(1)
@@ -1043,6 +1059,9 @@ local returns = {
 			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
 			alloc(8)
 			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_16 = bit32.bor(bool_16, 0b0000000001000000)
+			end
 			buffer.writeu8(outgoing_buff, bool_16_pos_1, bool_16)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in List do
@@ -1057,6 +1076,7 @@ local returns = {
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 		}))
 			load_empty()
 			alloc(1)
@@ -1082,6 +1102,9 @@ local returns = {
 			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
 			alloc(8)
 			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_17 = bit32.bor(bool_17, 0b0000000001000000)
+			end
 			buffer.writeu8(outgoing_buff, bool_17_pos_1, bool_17)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
@@ -1250,6 +1273,7 @@ local returns = {
 			["baseHealthMax"]: (number),
 			["cash"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 			["unlockedTowers"]: ({ (string) }),
 		}))): () -> ()
 			reliable_events[5] = Callback

@@ -49,6 +49,12 @@ export type Enemy = typeof(setmetatable(
 		pathIndex: Types.PathIndex,
 		--- Studs walked. The single number this whole design rests on.
 		progress: number,
+		--- Total length of this enemy's lane, stamped at spawn.
+		---
+		--- Carried on the enemy purely so behaviours can normalise against
+		--- it: `progress / pathLength` is map-independent, whereas a raw
+		--- stud count makes a Runner behave differently on every map.
+		pathLength: number,
 		health: number,
 		maxHealth: number,
 		--- Studs per second before behaviour and status modifiers.
@@ -91,6 +97,7 @@ export type SpawnParams = {
 	definition: Types.EnemyDefinition,
 	behavior: EnemyBehavior?,
 	pathIndex: Types.PathIndex,
+	pathLength: number,
 	health: number,
 	speed: number,
 	bounty: number,
@@ -102,6 +109,7 @@ function BaseEnemy.new(params: SpawnParams): Enemy
 		definition = params.definition,
 		behavior = params.behavior or DEFAULT_BEHAVIOR,
 		pathIndex = params.pathIndex,
+		pathLength = params.pathLength,
 		progress = 0,
 		health = params.health,
 		maxHealth = params.health,

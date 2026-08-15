@@ -48,6 +48,7 @@ janitor:Add(
 		atoms.matchState(value.state)
 		atoms.waveNumber(value.waveNumber)
 		atoms.phaseEndsAt(value.phaseEndsAt)
+		atoms.endless(value.endless)
 	end),
 	true
 )
@@ -121,6 +122,7 @@ task.spawn(function()
 	atoms.mapId(snapshot.mapId)
 	atoms.waveNumber(snapshot.waveNumber)
 	atoms.phaseEndsAt(snapshot.phaseEndsAt)
+	atoms.endless(snapshot.endless)
 	atoms.baseHealth(snapshot.baseHealth)
 	atoms.baseHealthMax(snapshot.baseHealthMax)
 	atoms.cash(snapshot.cash)

@@ -57,6 +57,30 @@ Enemies.DEFINITIONS = {
 		},
 	},
 
+	Drifter = {
+		id = "Drifter",
+		displayName = "Drifter",
+		-- The only Air enemy, and the entire reason the Hillside category
+		-- exists. Ground-only towers cannot touch it, so a player who built
+		-- nothing but Riflemen has to react.
+		category = "Air" :: Types.EnemyCategory,
+		baseHealth = 70,
+		baseSpeed = 16,
+		-- Priced above its health suggests, because the towers that can
+		-- answer it are more expensive than the ones that cannot.
+		baseBounty = 14,
+		leakDamage = 2,
+		isBoss = false,
+		-- Late enough that Marksman and Flak are affordable, early enough to
+		-- punish having ignored them.
+		introducesAtWave = 8,
+		hitboxSize = Vector3.new(2.6, 2.6, 2.6),
+		color = Color3.fromRGB(126, 196, 214),
+		-- Well clear of the ground so it reads as flying at a glance.
+		hoverHeight = 14,
+		resistances = {},
+	},
+
 	Tank = {
 		id = "Tank",
 		displayName = "Tank",
@@ -110,6 +134,13 @@ end
 table.sort(sortedIds)
 
 Enemies.IDS = table.freeze(sortedIds)
+
+--- Non-throwing lookup, mirroring Towers.find. Used where an id comes from
+--- authored config that may name an enemy that has since been removed: that
+--- is a content mistake worth skipping over, not a reason to abort a wave.
+function Enemies.find(id: string): Types.EnemyDefinition?
+	return Enemies.DEFINITIONS[id]
+end
 
 --- Throws on an unknown id rather than returning nil. Every caller has a
 --- definition it believes exists; a nil here would surface much later as an

@@ -194,6 +194,7 @@ function EnemySimulation.spawn(self: Simulation, request: SpawnRequest): BaseEne
 		definition = request.definition,
 		behavior = request.behavior,
 		pathIndex = pathIndex,
+		pathLength = self.paths[pathIndex].totalLength,
 		health = request.health,
 		speed = request.speed,
 		bounty = request.bounty,

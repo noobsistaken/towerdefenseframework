@@ -81,7 +81,14 @@ export type Controller = typeof(setmetatable(
 		isUnlocked: UnlockedResolver,
 		heartbeat: RBXScriptConnection?,
 		--- Set once the match is over, so a late leak cannot resurrect it.
+		--- Only Defeat sets this: clearing the campaign is a milestone, not
+		--- an ending.
 		finished: boolean,
+		--- Set once the campaign's final wave has been cleared. Everything
+		--- after it is endless mode, which is a MODIFIER on the normal phase
+		--- cycle rather than a phase of its own - endless waves still run
+		--- Preparing -> WaveActive -> Intermission.
+		campaignCleared: boolean,
 	},
 	MatchController
 ))
@@ -115,6 +122,7 @@ local function broadcastState(self: Controller)
 		state = self.state,
 		waveNumber = self.waveNumber,
 		phaseEndsAt = self.phaseEndsAt,
+		endless = self.campaignCleared,
 	})
 end
 
@@ -154,22 +162,44 @@ local function beginWave(self: Controller)
 	setState(self, "WaveActive", 0)
 end
 
-local function endMatch(self: Controller, won: boolean)
+--- Terminal. Only defeat ends a run: clearing the campaign is a milestone,
+--- and the match carries on into endless mode from there.
+local function endMatchInDefeat(self: Controller)
 	if self.finished then
 		return
 	end
 
 	self.finished = true
 	self.simulation:reset()
-	setState(self, if won then "Victory" else "Defeat", Constants.RESULTS_SECONDS)
+	setState(self, "Defeat", Constants.RESULTS_SECONDS)
 
 	-- Phase 5 pays real rewards through RewardService and persists them.
 	Net.MatchEnded.FireAll({
-		won = won,
-		wavesCleared = if won then self.waveNumber else math.max(0, self.waveNumber - 1),
+		won = false,
+		-- The wave they died on does not count as cleared.
+		wavesCleared = math.max(0, self.waveNumber - 1),
 		coinsAwarded = 0,
 		xpAwarded = 0,
 	})
+end
+
+--- The campaign's final wave has been cleared. Plays a short Victory phase
+--- and then rolls into endless mode.
+---
+--- Deliberately does NOT set `finished`, reset the simulation, or stop the
+--- heartbeat. Victory is a transient interlude here, which is also what keeps
+--- the state meaningful rather than a value nothing ever sets.
+local function beginVictoryInterlude(self: Controller)
+	self.campaignCleared = true
+
+	Net.MatchEnded.FireAll({
+		won = true,
+		wavesCleared = self.waveNumber,
+		coinsAwarded = 0,
+		xpAwarded = 0,
+	})
+
+	setState(self, "Victory", Constants.RESULTS_SECONDS)
 end
 
 -- ---------------------------------------------------------------------------
@@ -184,6 +214,7 @@ function MatchController.new(isUnlocked: UnlockedResolver): Controller
 	local self: Controller = setmetatable({
 		state = "Loading" :: Types.MatchState,
 		waveNumber = 0,
+		campaignCleared = false,
 		phaseEndsAt = 0,
 		map = map,
 		difficulty = difficulty,
@@ -202,7 +233,7 @@ function MatchController.new(isUnlocked: UnlockedResolver): Controller
 		-- `damage` reports the transition, not the value, so several leaks in
 		-- one step still end the match exactly once.
 		if self.health:damage(baseDamage) then
-			endMatch(self, false)
+			endMatchInDefeat(self)
 		end
 	end)
 
@@ -247,6 +278,7 @@ function MatchController.snapshot(self: Controller, player: Player): Types.Match
 		baseHealthMax = math.floor(self.health.max),
 		cash = math.floor(self.economy:balance(player)),
 		phaseEndsAt = self.phaseEndsAt,
+		endless = self.campaignCleared,
 		unlockedTowers = self.isUnlocked(player),
 	}
 end
@@ -443,12 +475,27 @@ local function tick(self: Controller, deltaTime: number)
 
 	if self.state == "Intermission" then
 		if os.time() >= self.phaseEndsAt then
-			if self.waveNumber >= self.difficulty.finalWave then
-				endMatch(self, true)
+			-- The campaign is cleared exactly once. After that this branch
+			-- stops firing and the run cycles through endless waves, whose
+			-- extra scaling WaveGenerator applies from difficulty.finalWave.
+			if not self.campaignCleared and self.waveNumber >= self.difficulty.finalWave then
+				beginVictoryInterlude(self)
 			else
 				self.waveNumber += 1
 				beginPreparing(self)
 			end
+		end
+
+		return
+	end
+
+	-- A transient celebration between the campaign and endless mode, not an
+	-- ending. Defeat is the only terminal state, and it returns above via
+	-- `finished`.
+	if self.state == "Victory" then
+		if os.time() >= self.phaseEndsAt then
+			self.waveNumber += 1
+			beginPreparing(self)
 		end
 
 		return

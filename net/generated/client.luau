@@ -181,9 +181,9 @@ assert(reliable:IsA("RemoteEvent"), "Expected ZAP_RELIABLE to be a RemoteEvent")
 local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0"), remotes:WaitForChild("ZAP_UNRELIABLE_1") }
 assert(unreliable[1]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_0 to be an UnreliableRemoteEvent")
 assert(unreliable[2]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_1 to be an UnreliableRemoteEvent")
-export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
-export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
+export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
 
 local function SendEvents()
 	if outgoing_used ~= 0 then
@@ -283,6 +283,7 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 			end
 			value["waveNumber"] = buffer.readu16(incoming_buff, read(2))
 			value["phaseEndsAt"] = buffer.readf64(incoming_buff, read(8))
+			value["endless"] = bit32.btest(bool_2, 0b0000000001000000)
 			if reliable_events[0][1] then
 				for _, cb in reliable_events[0] do
 					task.spawn(cb, value)
@@ -366,6 +367,7 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 			value["baseHealthMax"] = buffer.readu32(incoming_buff, read(4))
 			value["cash"] = buffer.readu32(incoming_buff, read(4))
 			value["phaseEndsAt"] = buffer.readf64(incoming_buff, read(8))
+			value["endless"] = bit32.btest(bool_4, 0b0000000001000000)
 			local len_2 = buffer.readu8(incoming_buff, read(1))
 			assert(len_2 >= 0, "value is less than 0!")
 			assert(len_2 <= 32, "value is more than 32!")
@@ -566,6 +568,7 @@ local returns = {
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 		})) -> ())
 			table.insert(reliable_events[0], Callback)
 			for _, value in reliable_event_queue[0] do
@@ -604,6 +607,7 @@ local returns = {
 			["baseHealthMax"]: (number),
 			["cash"]: (number),
 			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
 			["unlockedTowers"]: ({ (string) }),
 		}))
 			function_call_id += 1

@@ -136,6 +136,11 @@ event MatchStateChanged = {
 		waveNumber: u16,
 		-- os.time() at which the current phase ends. 0 when untimed.
 		phaseEndsAt: f64,
+		-- True once the campaign's final wave has been cleared and the run is
+		-- on borrowed time. A modifier on the phase, not a phase of its own:
+		-- endless waves still cycle Preparing -> WaveActive -> Intermission,
+		-- so making it a MatchState would have duplicated all three.
+		endless: boolean,
 	},
 }
 
@@ -221,6 +226,10 @@ funct GetMatchSnapshot = {
 		baseHealthMax: u32,
 		cash: u32,
 		phaseEndsAt: f64,
+		-- Carried here as well as on MatchStateChanged, so a client joining
+		-- mid-run renders the right header immediately rather than waiting
+		-- for the next phase transition to tell it.
+		endless: boolean,
 		-- Which towers this player owns, so the shop can grey out the rest.
 		-- Advisory: the server re-checks unlock on every placement request,
 		-- so a client that ignores this gains nothing.

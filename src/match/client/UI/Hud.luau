@@ -142,9 +142,15 @@ local function WavePanel()
 	local wave = useAtom(atoms.waveNumber)
 	local endsAt = useAtom(atoms.phaseEndsAt)
 	local now = useAtom(atoms.clock)
+	local endless = useAtom(atoms.endless)
 
 	local remaining = math.max(0, endsAt - now)
 	local timerText = if endsAt > 0 then `{remaining}s` else "-"
+
+	-- Endless overrides the phase word rather than adding a fourth line: once
+	-- the campaign is cleared, that the run is on borrowed time matters more
+	-- than which phase of the cycle it happens to be in.
+	local phaseText = if endless and state ~= "Defeat" then "ENDLESS" else phaseLabel(state)
 
 	return panel({
 		AnchorPoint = Vector2.new(0.5, 0),
@@ -154,7 +160,7 @@ local function WavePanel()
 		phase = label({
 			Position = UDim2.fromOffset(0, 8),
 			Size = UDim2.new(1, 0, 0, 16),
-			Text = phaseLabel(state),
+			Text = phaseText,
 			TextColor3 = Theme.ACCENT,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Center,

@@ -169,6 +169,10 @@ export type MatchSnapshot = {
 	cash: number,
 	--- Unix time the current phase ends. 0 when the phase has no timer.
 	phaseEndsAt: number,
+	--- True once the campaign's final wave has been cleared. Carried here as
+	--- well as on MatchStateChanged so a client joining mid-run renders the
+	--- right header without waiting for the next phase transition.
+	endless: boolean,
 	--- Tower ids this player owns. Advisory only - it drives which shop
 	--- buttons are enabled, and the server re-checks on every placement.
 	unlockedTowers: { string },

@@ -47,6 +47,15 @@ Scaling.BOSS_WAVE_INTERVAL = 10
 --- moving more parts than it can replicate comfortably.
 Scaling.MAX_ENEMIES_PER_WAVE = 220
 
+--- Separate, much tighter ceiling on bosses.
+---
+--- Boss counts run through the same geometric growth as everything else, and
+--- 5.5% a wave compounds hard: an uncapped Titan count reaches the per-wave
+--- ceiling deep into endless mode, which would both wreck performance and
+--- starve the regular enemy budget to nothing. A boss wave is supposed to be
+--- a boss and its escort, at any wave number.
+Scaling.MAX_BOSSES_PER_WAVE = 6
+
 --- Multiplier applied to a wave-1 value at `wave`. Exposed because several
 --- callers want the raw factor rather than a scaled quantity.
 function Scaling.healthFactor(wave: number): number
@@ -82,6 +91,35 @@ end
 
 function Scaling.isBossWave(wave: number): boolean
 	return wave > 0 and wave % Scaling.BOSS_WAVE_INTERVAL == 0
+end
+
+-- ===========================================================================
+-- Endless mode
+-- ===========================================================================
+
+--- Additional per-wave health growth once the campaign is over, compounding
+--- ON TOP of HEALTH_GROWTH. 11% + 6% means endless waves get roughly 17%
+--- harder each time.
+---
+--- Steeper than the campaign on purpose. Endless is not meant to be survived
+--- indefinitely; it is meant to find the point where a given defence breaks,
+--- and a curve that only matched the campaign would take hundreds of waves to
+--- do that.
+Scaling.ENDLESS_EXTRA_GROWTH = 0.06
+
+--- Extra multiplier for waves past `finalWave`. Exactly 1 up to and including
+--- the final wave, so campaign balance is untouched by this existing.
+function Scaling.endlessFactor(wave: number, finalWave: number): number
+	if wave <= finalWave then
+		return 1
+	end
+
+	return (1 + Scaling.ENDLESS_EXTRA_GROWTH) ^ (wave - finalWave)
+end
+
+--- True once the campaign has been cleared and the run is on borrowed time.
+function Scaling.isEndlessWave(wave: number, finalWave: number): boolean
+	return wave > finalWave
 end
 
 return Scaling
