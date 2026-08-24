@@ -70,6 +70,104 @@ It needs two published places and real ids in `src/shared/Config/Places.luau`
 
 ---
 
+## What each phase built
+
+Seven commits, in order. Each one ends with a passing gate — the two `fix:`
+and `test:` commits between phases are where playtesting or review found
+something.
+
+### Phase 1 — core match loop · `e7b234f` · 32 files, +4,925
+
+The class pattern, `Types`, `DataSchema`, a rewritten net schema, `Path`,
+Crossroads + `MapBuilder`, `MatchController`, `EnemySimulation` + `EnemyView`,
+`BaseHealth`.
+
+Playable: enemies spawn, walk the lane, leak, base HP drops, the match ends.
+No towers, so it always ended in defeat around wave 8–10 — correct for the
+phase, not a bug.
+
+**The decision that shaped everything after it:** classical inheritance was
+tested against the compiler and abandoned. Strict Luau will not accept a
+derived metatable type where the parent is expected, nor against a plain
+structural record, so `sniper:step()` would need a cast at *every* inherited
+call — the per-frame hot paths. The pattern instead is one concrete class per
+family plus a `behavior` vtable field. Findings in ARCHITECTURE.md.
+
+### Phase 2 — towers · `fd337f5` · 32 files, +3,847 · specs in `66f13b7`
+
+`BaseTower` and the six-tower roster, four targeting modes, server-side
+placement validation, the client ghost and range preview, upgrade and sell,
+per-player economy, and the generic status-effect system with Bleed.
+
+Playable: you can defend.
+
+Targeting is a single-pass argmin/argmax rather than a sort, which is why
+`EnemySimulation` keeps no ordering — nothing needs one.
+
+### Phase 3 — enemies and waves · `8bae2ac` · 21 files, +1,083
+
+Drifter (the air unit, and the reason the Hillside category exists), behaviour
+modules for Runner and Titan, `WaveGenerator` extracted as a pure module,
+hand-authored waves 1–12, boss waves, endless mode, difficulty presets.
+
+Playable: a full 40-wave run, then endless.
+
+**Caught before shipping:** boss counts ran through the same geometric growth
+as everything else, so by wave 300 the rules path asked for 220 Titans and
+left the regular enemy budget at zero.
+
+### Between 3 and 4 — placement fix · `43b418f` · 4 files, +312
+
+Found by playtesting, not by the gate. Two causes:
+
+1. Crossroads shipped four small ground pockets, which behave like slots
+   rather than the free placement that was agreed. Measured on a 2-stud grid:
+   15.2% of the map was buildable and 80.1% refused with `NotBuildable` — an
+   invisible rule. Now one broad apron: 65.4% buildable, refusals dominated by
+   lane clearance, which you can see.
+2. A latent bug — `surfaceUnder` returned the *first* containing surface.
+   Harmless only while no ground pad overlapped an elevated one. The moment
+   the apron spans the map, every plateau sits inside two surfaces and
+   first-match resolves a plateau to the apron underneath it. It now picks the
+   highest.
+
+### Phase 4 — lobby and maps · `c1c8735` · 38 files, +4,092
+
+The lobby place, map and difficulty voting through a generic `Poll`, ready-up,
+`TeleportGate` with its Studio fallback, `ArrivalGate` validating untrusted
+teleport data, `ReturnGate`, Switchback and Fork, and reward persistence.
+
+Playable: lobby → match → lobby, **except the teleport itself**, which no gate
+can reach.
+
+Also fixed a gap found while investigating the placement bug: the match place
+had no `SpawnLocation`, so characters spawned at the origin — on or beside a
+lane on Fork and Switchback.
+
+### Phase 5 — polish · `f8a026d` · 15 files, +1,007
+
+Health bars, coalescing damage numbers, the sound API (21 keys, all empty), the
+results screen, and `docs/ASSET-MANIFEST.md`.
+
+Health bars and damage numbers are driven entirely by the `Health` attribute
+the server already writes, so they cost nothing on the wire — which is why the
+schema still carries no enemy-health or damage-number event.
+
+### Where the build diverged from the plan
+
+- **Phase 3** was planned as "4 enemy classes + air variant". It shipped five
+  enemies and only *two* behaviour modules, because Zombie, Tank and Drifter
+  differ from the baseline only in their numbers. That ratio is the
+  config-over-code rule holding rather than being asserted.
+- **Phase 5** listed "tower caps" and "join-in-progress", both of which had
+  already landed earlier — caps in Phase 2's placement validation,
+  join-in-progress as `GetMatchSnapshot` in Phase 1.
+- **A "UI pass" was listed and not really done.** The interface is functional
+  and themed from one file, but it is placeholder, and the manifest treats it
+  as a slot rather than as finished work.
+
+---
+
 ## Setup on a new machine
 
 ```bash
