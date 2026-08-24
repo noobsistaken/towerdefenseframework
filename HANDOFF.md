@@ -83,9 +83,14 @@ mkdir -p build
 ### The trap that will cost you an hour
 
 Rokit installs its shims to `~/.rokit/bin`. **If that is not on `PATH`, every
-gate in this repo silently passes having checked nothing.** On a machine that
-previously used Aftman, a stale `~/.aftman/bin` sits ahead of it with shims
-that error out.
+gate in this repo silently passes having checked nothing** — each one invokes
+its tools behind `command -v` and treats a missing tool as a deliberate no-op,
+so nothing fails, it just stops checking.
+
+This is not hypothetical: on the machine this was built on, six of the seven
+tools resolved to nothing until that directory was prepended. If you also have
+Aftman installed, its `~/.aftman/bin` may shadow rokit for tools it manages —
+this repo still carries an `aftman.toml` listing rojo, kept from the template.
 
 Verify before trusting anything:
 
