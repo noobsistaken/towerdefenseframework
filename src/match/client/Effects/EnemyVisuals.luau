@@ -23,6 +23,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
+local StatusEffects = require(ReplicatedStorage.Shared.Config.StatusEffects)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 
 local SoundController = require(script.Parent.Parent.Audio.SoundController)
@@ -57,6 +59,7 @@ type Entry = {
 	pendingDamage: number,
 	sinceFlush: number,
 	connection: RBXScriptConnection,
+	statusConnection: RBXScriptConnection,
 }
 
 --- Reads a numeric attribute, or nil if absent or the wrong type.
@@ -69,6 +72,60 @@ local function numberAttribute(instance: Instance, name: string): number?
 	end
 
 	return value
+end
+
+--- Reads a string attribute, or nil if absent or the wrong type.
+local function stringAttribute(instance: Instance, name: string): string?
+	local value = instance:GetAttribute(name)
+
+	if type(value) ~= "string" then
+		return nil
+	end
+
+	return value
+end
+
+--- The colour an enemy should render as, given the effect ids the server
+--- published on ATTR_STATUS_EFFECTS.
+---
+--- First id wins. The server writes them sorted, so this is deterministic -
+--- but between two live effects it is ARBITRARY. Blending a red bleed with a
+--- blue slow gives a purple that reads as neither, and nothing in the config
+--- ranks one above the other. A `priority` field on StatusEffectDefinition is
+--- the natural upgrade if which one shows ever matters.
+local function tintFor(encoded: string): Color3?
+	for id in string.gmatch(encoded, "[^,]+") do
+		local definition = StatusEffects.find(id)
+
+		if definition ~= nil then
+			return definition.color
+		end
+	end
+
+	return nil
+end
+
+--- Repaints one enemy to its effect tint, or back to its definition colour
+--- when nothing is live.
+---
+--- The part's Name is its definition id (EnemyView sets both), so the base
+--- colour is recoverable without spending a second attribute on it. Writing
+--- Color on the client is local-only; the server sets it once at spawn and
+--- never again, so this does not fight replication.
+local function refreshTint(part: BasePart)
+	local encoded = stringAttribute(part, Constants.ATTR_STATUS_EFFECTS)
+	local tint = if encoded ~= nil then tintFor(encoded) else nil
+
+	if tint ~= nil then
+		part.Color = tint
+		return
+	end
+
+	local definition = Enemies.find(part.Name)
+
+	if definition ~= nil then
+		part.Color = definition.color
+	end
 end
 
 local function buildBar(part: BasePart): (BillboardGui, Frame)
@@ -175,6 +232,7 @@ function EnemyVisuals.start(): () -> ()
 
 		entries[part] = nil
 		entry.connection:Disconnect()
+		entry.statusConnection:Disconnect()
 
 		-- Health at or below zero when the part goes away means a kill.
 		-- Inferred rather than sent: a death event per enemy would be
@@ -214,6 +272,7 @@ function EnemyVisuals.start(): () -> ()
 			pendingDamage = 0,
 			sinceFlush = 0,
 			connection = nil :: any,
+			statusConnection = nil :: any,
 		}
 
 		entry.connection = child:GetAttributeChangedSignal(Constants.ATTR_HEALTH):Connect(function()
@@ -231,6 +290,12 @@ function EnemyVisuals.start(): () -> ()
 			end
 
 			fill.Size = UDim2.fromScale(math.clamp(current / entry.maxHealth, 0, 1), 1)
+		end)
+
+		refreshTint(child)
+
+		entry.statusConnection = child:GetAttributeChangedSignal(Constants.ATTR_STATUS_EFFECTS):Connect(function()
+			refreshTint(child)
 		end)
 
 		entries[child] = entry

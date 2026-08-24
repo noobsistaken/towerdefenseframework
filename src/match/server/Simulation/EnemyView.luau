@@ -39,6 +39,8 @@ export type View = typeof(setmetatable(
 		--- Last health value written per enemy. Attribute writes replicate,
 		--- so writing an unchanged value every frame would be pure waste.
 		lastHealth: { [Types.EnemyId]: number? },
+		--- Last effect-id string written per enemy, for the same reason.
+		lastEffects: { [Types.EnemyId]: string? },
 		unsubscribeRemoved: EnemySimulation.Unsubscribe?,
 	},
 	EnemyView
@@ -62,6 +64,7 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 		pool = PartPool.new(container),
 		parts = {},
 		lastHealth = {},
+		lastEffects = {},
 		unsubscribeRemoved = nil,
 	}, EnemyView)
 
@@ -70,6 +73,35 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 	end)
 
 	return view
+end
+
+--- Stable description of which effects are live on an enemy, for the
+--- attribute below.
+---
+--- Sorted deliberately, and not for tidiness: `enemy.effects` is a hash map
+--- and Luau does not promise a stable iteration order, so an unsorted join
+--- could produce a different string frame to frame for an UNCHANGED set of
+--- effects - and the change check below would then replicate on every one of
+--- them. Sorting makes the value a pure function of the set.
+---
+--- The empty-list guard matters because an id whose instances have all
+--- expired may still be present as a key.
+local function describeEffects(enemy: BaseEnemy.Enemy): string
+	local ids: { string } = {}
+
+	for effectId, instances in enemy.effects do
+		if #instances > 0 then
+			table.insert(ids, effectId)
+		end
+	end
+
+	if #ids == 0 then
+		return ""
+	end
+
+	table.sort(ids)
+
+	return table.concat(ids, ",")
 end
 
 --- Returns this enemy's part, creating and configuring it on first sight.
@@ -92,9 +124,11 @@ local function acquireFor(self: View, enemy: BaseEnemy.Enemy): Part
 	fresh:SetAttribute(Constants.ATTR_ENEMY_ID, enemy.id)
 	fresh:SetAttribute(Constants.ATTR_MAX_HEALTH, enemy.maxHealth)
 	fresh:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
+	fresh:SetAttribute(Constants.ATTR_STATUS_EFFECTS, "")
 
 	self.parts[enemy.id] = fresh
 	self.lastHealth[enemy.id] = enemy.health
+	self.lastEffects[enemy.id] = ""
 
 	return fresh
 end
@@ -108,6 +142,7 @@ function EnemyView.releaseEnemy(self: View, id: Types.EnemyId)
 
 	self.parts[id] = nil
 	self.lastHealth[id] = nil
+	self.lastEffects[id] = nil
 	self.pool:release(part)
 end
 
@@ -125,6 +160,13 @@ function EnemyView.sync(self: View)
 		if self.lastHealth[enemy.id] ~= enemy.health then
 			self.lastHealth[enemy.id] = enemy.health
 			part:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
+		end
+
+		local effects = describeEffects(enemy)
+
+		if self.lastEffects[enemy.id] ~= effects then
+			self.lastEffects[enemy.id] = effects
+			part:SetAttribute(Constants.ATTR_STATUS_EFFECTS, effects)
 		end
 
 		local position = simulation:positionOf(enemy)
