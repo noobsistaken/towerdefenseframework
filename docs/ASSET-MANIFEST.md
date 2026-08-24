@@ -146,9 +146,12 @@ plays. No code change.
 sixty can be on the field, so a fire cue with a long tail or no pitch variance
 turns into noise. `pitchVariance` exists for exactly this.
 
-**Two keys are defined but not yet fired:** `BossDeath` and `Splash` — the
-client plays `EnemyDeath` for every kill and does not distinguish splash hits.
-Wiring them is a client-side change, not an asset one.
+**One key is defined but not yet fired:** `BossDeath` — the client plays
+`EnemyDeath` for every kill and does not distinguish a boss. Wiring it is a
+client-side change, not an asset one.
+
+`Splash` is fired by `Tracers.luau`, derived from the firing tower's level
+rather than sent, so it costs no network message.
 
 **No music slot exists.** `PlayerData.Settings.MusicEnabled` is persisted and
 unused. Music is a deliberate gap, not an oversight — it needs a track list and
@@ -187,12 +190,20 @@ player-facing copy in the codebase, and where localisation would start.
 | Shot tracer | thin cylinder, 0.09s fade | [`Tracers.luau`](../src/match/client/Effects/Tracers.luau) — beam, projectile, or muzzle flash |
 | Damage number | white text rising 6 studs over 0.8s | [`EnemyVisuals.luau`](../src/match/client/Effects/EnemyVisuals.luau) |
 | Health bar | 4 × 0.5 stud billboard, culled past 260 studs | same file |
-| Splash | **none** | no visual at all for Mortar or Flak area damage |
-| Status effect | **none** | Bleed and Slow are invisible on the enemy |
+| Splash | neon sphere expanding to the real `splashRadius`, 0.18s fade | [`Tracers.luau`](../src/match/client/Effects/Tracers.luau) — particles or a shockwave |
+| Status effect | enemy tinted to the effect's `color` | [`EnemyVisuals.luau`](../src/match/client/Effects/EnemyVisuals.luau) — particles, or an icon on the bar |
 
-The last two are gaps, not placeholders. `StatusEffectDefinition` already
-carries a `color` field that nothing renders — tinting an affected enemy is the
-cheapest possible fix and the config is already there.
+Both were gaps rather than placeholders until recently. Both are now filled at
+the cheapest level that reads correctly in play, and neither needed a network
+message:
+
+- The splash sphere is sized off `splashRadius`, read from the firing tower's
+  `TowerDefId` and `Level` attributes, so the player sees the area that was
+  actually damaged. A sphere and not a ground ring because the server's test
+  is a true 3D distance.
+- The status tint reads a `StatusEffects` attribute carrying the live effect
+  ids, and resolves the colour from shared config — so a new effect tints with
+  no code change on either realm.
 
 ---
 

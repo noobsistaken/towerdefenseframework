@@ -220,10 +220,8 @@ subclass hierarchy".
 
 **Known gaps that are genuinely empty, not placeholder:**
 
-- Splash has no visual at all — Mortar and Flak area damage is invisible
-- Bleed and Slow have no visual, though `StatusEffectDefinition` already
-  carries an unused `color` field that would be the cheapest possible fix
-- `BossDeath` and `Splash` sound keys are defined but never fired
+- `BossDeath` is defined but never fired — the client plays `EnemyDeath` for
+  every kill and does not distinguish a boss
 - No music. `PlayerData.Settings.MusicEnabled` is persisted and unused —
   deliberately, because music needs a track list and a crossfade policy, which
   is a design decision rather than a slot
