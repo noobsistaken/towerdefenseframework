@@ -152,9 +152,30 @@ plays. No code change.
 sixty can be on the field, so a fire cue with a long tail or no pitch variance
 turns into noise. `pitchVariance` exists for exactly this.
 
-**One key is defined but not yet fired:** `BossDeath` — the client plays
-`EnemyDeath` for every kill and does not distinguish a boss. Wiring it is a
-client-side change, not an asset one.
+**Four keys still have no call site:** `PlacementRejected`, `ButtonClick`,
+`VoteCast` and `MatchLaunching`. Filling their asset ids changes nothing until
+something fires them. (An earlier revision of this file claimed only one key
+was unfired. It was wrong — these four were already dead then.)
+
+`VoteCast` and `MatchLaunching` are the awkward pair: they are lobby cues, but
+`SoundController` lives under `src/match/client/` and nothing anywhere in
+`src/lobby/` mentions sound. They are **unfireable**, not merely unfired —
+wiring them means giving the lobby an audio path first.
+
+`BossDeath` is fired by `EnemyVisuals.luau` in place of `EnemyDeath` when the
+dying enemy's definition has `isBoss = true`, and falls back to `EnemyDeath`
+while it has no audio behind it — so recording `EnemyDeath` alone cannot make
+the Titan the one enemy that dies silently. Derived from the part's name
+rather than sent, so like `Splash` it costs no network message.
+
+**Neither death cue fires for a kill by a damage-over-time tick.** Both are
+inferred client-side from the enemy's last replicated health, and
+`EnemySimulation.step` calls `collectDead` at the end of the same step a bleed
+tick kills in — the part is released, its attributes wiped, before any
+`view:sync()` writes `Health = 0`. A bullet kill escapes this only because
+`towers:update` runs between `simulation:update` and `view:sync()`. Read out of
+the call order in `EnemySimulation.luau` and `MatchController.luau`, not
+observed in Studio. Pre-existing; the fix is server-side ordering.
 
 `Splash` is fired by `Tracers.luau`, derived from the firing tower's level
 rather than sent, so it costs no network message.

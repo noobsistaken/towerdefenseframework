@@ -24,6 +24,7 @@ local TweenService = game:GetService("TweenService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local StatusEffects = require(ReplicatedStorage.Shared.Config.StatusEffects)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 
@@ -67,6 +68,10 @@ type Entry = {
 	fill: Frame,
 	maxHealth: number,
 	lastHealth: number,
+	--- Cached at attach, like maxHealth above, because PartPool wipes every
+	--- attribute and re-stamps Name when it recycles a part - so nothing read
+	--- off the part at detach is guaranteed to still describe this occupant.
+	isBoss: boolean,
 	pendingDamage: number,
 	sinceFlush: number,
 	connection: RBXScriptConnection,
@@ -187,6 +192,23 @@ local function refreshEnrage(part: BasePart, entry: Entry)
 	entry.highlight = highlight
 end
 
+--- Which death cue an enemy gets.
+---
+--- The fallback is the point. BossDeath replacing EnemyDeath outright would
+--- mean that the day someone records EnemyDeath and not BossDeath, the Titan
+--- becomes the one enemy in the game that dies in silence - a regression from
+--- today, and one no gate here could catch because every assetId is empty and
+--- both keys are equally inaudible.
+---
+--- Sounds.isFilled exists for exactly this and had no callers until now.
+local function deathCueFor(isBoss: boolean): string
+	if isBoss and Sounds.isFilled("BossDeath") then
+		return "BossDeath"
+	end
+
+	return "EnemyDeath"
+end
+
 local function buildBar(part: BasePart): (BillboardGui, Frame)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "HealthBar"
@@ -305,8 +327,14 @@ function EnemyVisuals.start(): () -> ()
 		-- Inferred rather than sent: a death event per enemy would be
 		-- hundreds of unreliable packets a wave for something the client can
 		-- already see.
+		--
+		-- This misses one whole class of kill, and always has: a bleed tick
+		-- that finishes an enemy is collected inside the same simulation step,
+		-- before any sync writes Health = 0, so the last value this client saw
+		-- is still positive and no cue plays. Pre-existing and not fixed here -
+		-- the fix is server-side ordering, not a sound lookup.
 		if entry.lastHealth <= 0 then
-			SoundController.play("EnemyDeath", part.Position)
+			SoundController.play(deathCueFor(entry.isBoss), part.Position)
 		end
 
 		if entry.gui.Parent ~= nil then
@@ -330,12 +358,17 @@ function EnemyVisuals.start(): () -> ()
 
 		local gui, fill = buildBar(child)
 
+		-- The part's Name is its definition id, the same lookup the tint uses.
+		-- An unknown id is not a boss rather than an error.
+		local definition = Enemies.find(child.Name)
+
 		local entry: Entry = {
 			part = child,
 			gui = gui,
 			fill = fill,
 			maxHealth = maxHealth,
 			lastHealth = health,
+			isBoss = definition ~= nil and definition.isBoss,
 			pendingDamage = 0,
 			sinceFlush = 0,
 			connection = nil :: any,

@@ -220,11 +220,23 @@ subclass hierarchy".
 
 **Known gaps that are genuinely empty, not placeholder:**
 
-- `BossDeath` is defined but never fired — the client plays `EnemyDeath` for
-  every kill and does not distinguish a boss
+- Four sound keys have no call site anywhere: `PlacementRejected`,
+  `ButtonClick`, `VoteCast` and `MatchLaunching`. The last two are lobby cues
+  and `src/lobby/` has no audio path at all, so they are unfireable rather
+  than merely unfired
 - No music. `PlayerData.Settings.MusicEnabled` is persisted and unused —
   deliberately, because music needs a track list and a crossfade policy, which
   is a design decision rather than a slot
+
+**Known defects — bugs, not empty slots:**
+
+- No death cue fires for a kill by a damage-over-time tick. `EnemyDeath` and
+  `BossDeath` are both inferred client-side from last replicated health, and
+  `EnemySimulation.step` runs `collectDead` at the end of the same step a
+  bleed tick kills in, so `Health = 0` never reaches a `view:sync()`. A
+  bullet kill is unaffected because `towers:update` runs between
+  `simulation:update` and `view:sync()`. Read out of the call order, not
+  observed in Studio — confirm in Studio before changing server ordering
 
 **Adding content is config-only:**
 
