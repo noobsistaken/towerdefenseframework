@@ -47,6 +47,17 @@ local FLUSH_INTERVAL = 0.15
 --- screen is unreadable anyway.
 local MAX_NUMBERS = 40
 
+--- Enrage tell. Warm and hot rather than the status palette's flat red: a
+--- bleeding Titan and an enraged one must not look like the same thing.
+local ENRAGE_FILL = Color3.fromRGB(255, 92, 48)
+local ENRAGE_OUTLINE = Color3.fromRGB(255, 196, 128)
+
+--- Pulse bounds and period. Steady would read as "selected"; the point is
+--- that this one is dangerous.
+local ENRAGE_FILL_MIN = 0.35
+local ENRAGE_FILL_MAX = 0.72
+local ENRAGE_PULSE_SECONDS = 0.55
+
 local NUMBER_RISE = 6
 local NUMBER_SECONDS = 0.8
 
@@ -60,6 +71,10 @@ type Entry = {
 	sinceFlush: number,
 	connection: RBXScriptConnection,
 	statusConnection: RBXScriptConnection,
+	enrageConnection: RBXScriptConnection,
+	--- Present only while the enemy is enraged. Nothing else adorns these
+	--- parts, so its presence IS the on/off state.
+	highlight: Highlight?,
 }
 
 --- Reads a numeric attribute, or nil if absent or the wrong type.
@@ -126,6 +141,50 @@ local function refreshTint(part: BasePart)
 	if definition ~= nil then
 		part.Color = definition.color
 	end
+end
+
+--- Turns the enrage tell on or off for one enemy, idempotently.
+---
+--- A Highlight rather than a colour change, deliberately: Color is already
+--- spoken for by the status tint above, and a Titan that is both bleeding and
+--- enraged has to show both at once. Highlight also tracks its adornee with no
+--- per-frame work, which matters because enemies move via one bulk call and
+--- nothing here gets a step callback.
+---
+--- Occluded rather than AlwaysOnTop so the glow does not shine through a
+--- plateau the Titan is walking behind.
+local function refreshEnrage(part: BasePart, entry: Entry)
+	if part:GetAttribute(Constants.ATTR_ENRAGED) ~= true then
+		if entry.highlight ~= nil then
+			entry.highlight:Destroy()
+			entry.highlight = nil
+		end
+
+		return
+	end
+
+	if entry.highlight ~= nil then
+		return
+	end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "TDEnrage"
+	highlight.Adornee = part
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.FillColor = ENRAGE_FILL
+	highlight.FillTransparency = ENRAGE_FILL_MAX
+	highlight.OutlineColor = ENRAGE_OUTLINE
+	highlight.OutlineTransparency = 0
+	highlight.LineThickness = 2
+	highlight.Parent = part
+
+	-- Repeats until the Highlight is destroyed, which detach guarantees on the
+	-- way out and the pool guarantees if the part is dropped instead.
+	local info = TweenInfo.new(ENRAGE_PULSE_SECONDS, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+
+	TweenService:Create(highlight, info, { FillTransparency = ENRAGE_FILL_MIN }):Play()
+
+	entry.highlight = highlight
 end
 
 local function buildBar(part: BasePart): (BillboardGui, Frame)
@@ -233,6 +292,14 @@ function EnemyVisuals.start(): () -> ()
 		entries[part] = nil
 		entry.connection:Disconnect()
 		entry.statusConnection:Disconnect()
+		entry.enrageConnection:Disconnect()
+
+		-- Enemy parts are recycled rather than destroyed, so an adornment left
+		-- behind here would reappear on whatever spawns into this part next.
+		if entry.highlight ~= nil then
+			entry.highlight:Destroy()
+			entry.highlight = nil
+		end
 
 		-- Health at or below zero when the part goes away means a kill.
 		-- Inferred rather than sent: a death event per enemy would be
@@ -273,6 +340,8 @@ function EnemyVisuals.start(): () -> ()
 			sinceFlush = 0,
 			connection = nil :: any,
 			statusConnection = nil :: any,
+			enrageConnection = nil :: any,
+			highlight = nil,
 		}
 
 		entry.connection = child:GetAttributeChangedSignal(Constants.ATTR_HEALTH):Connect(function()
@@ -293,9 +362,14 @@ function EnemyVisuals.start(): () -> ()
 		end)
 
 		refreshTint(child)
+		refreshEnrage(child, entry)
 
 		entry.statusConnection = child:GetAttributeChangedSignal(Constants.ATTR_STATUS_EFFECTS):Connect(function()
 			refreshTint(child)
+		end)
+
+		entry.enrageConnection = child:GetAttributeChangedSignal(Constants.ATTR_ENRAGED):Connect(function()
+			refreshEnrage(child, entry)
 		end)
 
 		entries[child] = entry

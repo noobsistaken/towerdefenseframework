@@ -20,16 +20,21 @@ local ENRAGE_BELOW = 0.35
 --- Speed multiplier once enraged.
 local ENRAGE_SPEED = 1.5
 
+--- The one place the threshold is tested. The speed bonus and the visual
+--- tell must agree exactly: a boss that looks calm while moving at 1.5x -
+--- or glows while moving at baseline - is worse than having no tell.
+local function isEnraged(enemy: BaseEnemy.Enemy): boolean
+	return enemy:healthFraction() <= ENRAGE_BELOW
+end
+
 local Titan: BaseEnemy.EnemyBehavior = {
 	id = "Titan",
 
 	speedMultiplier = function(enemy: BaseEnemy.Enemy): number
-		if enemy:healthFraction() > ENRAGE_BELOW then
-			return 1
-		end
-
-		return ENRAGE_SPEED
+		return if isEnraged(enemy) then ENRAGE_SPEED else 1
 	end,
+
+	enraged = isEnraged,
 }
 
 return Titan

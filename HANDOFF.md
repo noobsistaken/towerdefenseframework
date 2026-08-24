@@ -225,7 +225,6 @@ subclass hierarchy".
 - No music. `PlayerData.Settings.MusicEnabled` is persisted and unused —
   deliberately, because music needs a track list and a crossfade policy, which
   is a design decision rather than a slot
-- Titan's enrage below 35% health has no visual tell
 
 **Adding content is config-only:**
 

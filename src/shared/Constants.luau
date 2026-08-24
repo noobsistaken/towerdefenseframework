@@ -104,6 +104,7 @@ Constants.ATTR_HEALTH = "Health"
 Constants.ATTR_MAX_HEALTH = "MaxHealth"
 Constants.ATTR_ENEMY_ID = "EnemyId"
 Constants.ATTR_STATUS_EFFECTS = "StatusEffects"
+Constants.ATTR_ENRAGED = "Enraged"
 Constants.ATTR_SURFACE_TYPE = "SurfaceType"
 
 --- Folder names inside workspace. MapBuilder owns these and clears them

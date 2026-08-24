@@ -41,6 +41,8 @@ export type View = typeof(setmetatable(
 		lastHealth: { [Types.EnemyId]: number? },
 		--- Last effect-id string written per enemy, for the same reason.
 		lastEffects: { [Types.EnemyId]: string? },
+		--- Last enrage flag written per enemy. Same reason again.
+		lastEnraged: { [Types.EnemyId]: boolean? },
 		unsubscribeRemoved: EnemySimulation.Unsubscribe?,
 	},
 	EnemyView
@@ -65,6 +67,7 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 		parts = {},
 		lastHealth = {},
 		lastEffects = {},
+		lastEnraged = {},
 		unsubscribeRemoved = nil,
 	}, EnemyView)
 
@@ -125,10 +128,12 @@ local function acquireFor(self: View, enemy: BaseEnemy.Enemy): Part
 	fresh:SetAttribute(Constants.ATTR_MAX_HEALTH, enemy.maxHealth)
 	fresh:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
 	fresh:SetAttribute(Constants.ATTR_STATUS_EFFECTS, "")
+	fresh:SetAttribute(Constants.ATTR_ENRAGED, false)
 
 	self.parts[enemy.id] = fresh
 	self.lastHealth[enemy.id] = enemy.health
 	self.lastEffects[enemy.id] = ""
+	self.lastEnraged[enemy.id] = false
 
 	return fresh
 end
@@ -143,6 +148,7 @@ function EnemyView.releaseEnemy(self: View, id: Types.EnemyId)
 	self.parts[id] = nil
 	self.lastHealth[id] = nil
 	self.lastEffects[id] = nil
+	self.lastEnraged[id] = nil
 	self.pool:release(part)
 end
 
@@ -167,6 +173,18 @@ function EnemyView.sync(self: View)
 		if self.lastEffects[enemy.id] ~= effects then
 			self.lastEffects[enemy.id] = effects
 			part:SetAttribute(Constants.ATTR_STATUS_EFFECTS, effects)
+		end
+
+		local enraged = false
+		local isEnraged = enemy.behavior.enraged
+
+		if isEnraged ~= nil then
+			enraged = isEnraged(enemy)
+		end
+
+		if self.lastEnraged[enemy.id] ~= enraged then
+			self.lastEnraged[enemy.id] = enraged
+			part:SetAttribute(Constants.ATTR_ENRAGED, enraged)
 		end
 
 		local position = simulation:positionOf(enemy)

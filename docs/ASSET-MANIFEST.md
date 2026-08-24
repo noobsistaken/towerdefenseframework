@@ -68,15 +68,21 @@ centre above the path line — it is what makes Drifter read as flying.
 | **Runner** | Ground | 1.6 × 3.4 × 1.6 | 1.7 | accelerates toward the base — wants a run cycle |
 | **Tank** | Ground | 3.4 × 4.6 × 3.4 | 2.3 | slow, heavy |
 | **Drifter** | **Air** | 2.6 × 2.6 × 2.6 | **14** | must read as airborne from directly above |
-| **Titan** | Ground (boss) | 7 × 11 × 7 | 5.5 | enrages below 35% health — wants a visible tell |
+| **Titan** | Ground (boss) | 7 × 11 × 7 | 5.5 | enrages below 35% health — pulsing Highlight marks it |
 
 **Hard constraint:** enemies are moved with `WorldRoot:BulkMoveTo` in one call
 per frame. A replacement must be a **single anchored part or a model with one
 anchored PrimaryPart**. A rigged, animated model with loose parts will not move
 — it must be welded to the primary part.
 
-**Titan's enrage** currently has no visual at all. It is the boss's whole
-mechanic and deserves one.
+**Titan's enrage** is marked by a pulsing `Highlight` on the enemy part, driven
+by an `Enraged` attribute the server publishes from the behaviour's own
+predicate — so the speed bonus and the glow cannot disagree. A `Highlight`
+rather than a colour change because `Color` belongs to the status tint, and a
+Titan that is both bleeding and enraged has to show both.
+
+Any behaviour returning `true` from the optional `enraged` hook on
+`BaseEnemy.EnemyBehavior` gets the same tell with no extra code.
 
 ---
 
@@ -223,9 +229,10 @@ Five functions create every Part in the game. Nothing else needs to change.
 
 1. Enemy models need **one anchored PrimaryPart**, everything else welded —
    `BulkMoveTo` moves one part per enemy.
-2. Enemy parts must keep the `Health`, `MaxHealth` and `EnemyId` **attributes**.
-   Health bars and damage numbers read them, and no network message carries
-   that data (ARCHITECTURE.md D5).
+2. Enemy parts must keep the `Health`, `MaxHealth`, `EnemyId`,
+   `StatusEffects` and `Enraged` **attributes**. Health bars, damage numbers,
+   the status tint and the enrage tell all read them, and no network message
+   carries any of it (ARCHITECTURE.md D5).
 3. Tower parts must keep `TowerId`, `TowerDefId`, `Level`, `OwnerUserId`,
    `TargetingMode`, `Range`, `SellValue`. The inspector and the fire-sound
    lookup read them off the part.
