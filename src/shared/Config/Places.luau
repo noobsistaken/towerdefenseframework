@@ -27,8 +27,8 @@ export type PlaceRole = "Match" | "Lobby"
 
 --- Set these to the real place ids after publishing. `game.PlaceId` on the
 --- published place is the value each one wants.
-Places.LOBBY_PLACE_ID = 0
-Places.MATCH_PLACE_ID = 0
+Places.LOBBY_PLACE_ID = 108948328624758
+Places.MATCH_PLACE_ID = 80721394481917
 
 --- Which entry point boots in Studio and in the test place. Flip to "Lobby"
 --- to work on the lobby without publishing anything.

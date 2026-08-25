@@ -103,7 +103,12 @@ Enemies.DEFINITIONS = {
 	Titan = {
 		id = "Titan",
 		displayName = "Titan",
-		rig = "noobsv8",
+		-- FastZombie rather than noobsv8: the boss shares the zombie rig at
+		-- 11 studs tall. noobsv8 lives only in the original place file and
+		-- cannot follow the match into its own place until rig templates are
+		-- exported into the repo - the standing assets/ follow-up. Scaled to
+		-- nearly triple the trash zombie's height it still reads as a boss.
+		rig = "FastZombie",
 		category = "Ground" :: Types.EnemyCategory,
 		baseHealth = 6000,
 		baseSpeed = 9,
