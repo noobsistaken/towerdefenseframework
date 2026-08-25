@@ -154,3 +154,58 @@ Then look at the seven unverified visuals: status tint, splash sphere, enrage
 pulse, walkway, the stats row, the delta panel, and the hover reveal. The hover
 reveal is the one most likely to be wrong — check it does not flicker
 (docs/MANUAL-VERIFICATION.md, "UI motion", step 3).
+
+---
+
+## 2026-08-26 - the two-place split (done while Alexei napped)
+
+The game is now two places in universe 10760986722:
+
+| Place | Id | Content |
+|---|---|---|
+| **Lobby** (start place) | 108948328624758 | lobby.project.json, Rojo port 34872 |
+| **Match** | 80721394481917 | default.project.json, Rojo port 34873 |
+
+What was done and verified:
+
+- Place ids wired into `Config/Places.luau` (commit 6f7e9f5);
+  `arePlacesConfigured()` is true for the first time.
+- **Match place**: scrubbed the stray lobby entry scripts a wrong-port sync
+  left behind (published, they would have booted a lobby inside the match),
+  deleted the template Baseplate/SpawnLocation, rebuilt all nine rig
+  templates from the Creator Store ids + AKM arming + muzzle tags (57 items
+  stripped, zero scripts remain). Verified live: map builds, 6/6 zombies
+  rigged and walking, tower dry-run passes with both animation tracks,
+  console clean, ProfileStore reaches the API.
+- **Lobby place**: scrubbed the match entry, test runner, DevPackages, match
+  client, dev-era workspace (TDMap, the noobsv8/R6 source models - noobsv8
+  survives as the RigTemplates copy - and the template floor). Verified
+  live for the first time all session: world builds, countdown runs, both
+  vote panels work. Drove a real vote client-side; TeleportGate logged
+  `place 80721394481917 mapId="Fork" difficultyId="Nightmare"` - the voted
+  values, at the real match id.
+- Titan rig retargeted noobsv8 -> FastZombie (noobsv8 cannot follow the
+  match into its own place until templates are exported to assets/).
+- The suite was NOT rerun this round: the only code change since the last
+  green run (196 tests at cdc5067) is the two config commits, and no spec
+  references Places ids or the rig field - checked by grep, stated here
+  rather than silently assumed. The test place is build/test.rbxl as ever.
+
+### Wake-up checklist
+
+1. **Publish both windows** - File -> Publish to Roblox in the Lobby window
+   and the Game window. StudioPublishService is not reachable from the MCP,
+   so these two clicks are yours. Unpublished, the cloud places are stale.
+2. **Ride the loop once** on roblox.com: join the experience (lands in the
+   lobby), vote, ready up, confirm the teleport carries you to the match and
+   the match reads your vote. This is the two-function-call stretch no gate
+   or Studio test can reach (TeleportAsync throws in Studio by design).
+3. `docs/MANUAL-VERIFICATION.md` has the full procedure including the
+   return-to-lobby leg and rewards persistence.
+
+### Standing follow-ups (unchanged)
+
+- Export rig templates to committed assets/ (fresh clones and new places
+  get boxes until then; it also blocks noobsv8 as the Titan).
+- Push: many commits ahead of origin.
+- MAX_RIGGED = 64 deserves a profiling pass at late waves.
