@@ -79,6 +79,77 @@ local function clearRig(host: BasePart)
 	end
 end
 
+--- The animation joints' root, searched RECURSIVELY: store rigs nest their
+--- parts inside inner models, and several tower templates carry a
+--- PrimaryPart that is a VEST, not the body - anchoring the vest would leave
+--- the actual joint tree dangling.
+local function animationRoot(model: Model): BasePart?
+	local named = model:FindFirstChild("HumanoidRootPart", true) or model:FindFirstChild("Torso", true)
+
+	if named ~= nil and named:IsA("BasePart") then
+		return named
+	end
+
+	if model.PrimaryPart ~= nil then
+		return model.PrimaryPart
+	end
+
+	return model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function ensureAnimator(rig: Model): Animator
+	local foundController = rig:FindFirstChildWhichIsA("AnimationController")
+	local controller: AnimationController
+
+	if foundController ~= nil then
+		controller = foundController
+	else
+		controller = Instance.new("AnimationController")
+		controller.Parent = rig
+	end
+
+	local foundAnimator = controller:FindFirstChildWhichIsA("Animator")
+	local animator: Animator
+
+	if foundAnimator ~= nil then
+		animator = foundAnimator
+	else
+		animator = Instance.new("Animator")
+		animator.Parent = controller
+	end
+
+	return animator
+end
+
+--- Attribute a template sets to name its idle cycle. Only the templates that
+--- measured as ANIMATABLE carry it - two tower rigs have no joints at all,
+--- and playing a track into a rig with nothing to drive is pure waste.
+--- The measured value for the store's Motor6D soldier rigs is the R6 idle
+--- (rbxassetid://180435792); the R15 idles and both tool-hold animations
+--- moved nothing on any of them.
+local IDLE_ANIM_ATTR = "IdleAnimation"
+
+local function playIdle(rig: Model)
+	local animationId = rig:GetAttribute(IDLE_ANIM_ATTR)
+
+	if type(animationId) ~= "string" or animationId == "" then
+		return
+	end
+
+	local animator = ensureAnimator(rig)
+
+	if #animator:GetPlayingAnimationTracks() > 0 then
+		return
+	end
+
+	local animation = Instance.new("Animation")
+	animation.AnimationId = animationId
+
+	local track = animator:LoadAnimation(animation)
+	track.Looped = true
+	track:Play()
+end
+
 --- Scales `model` so its total height matches `height`, and sits it with its
 --- feet on the bottom face of `host`, facing `rotationY` degrees.
 ---
@@ -94,7 +165,7 @@ local function fit(model: Model, host: BasePart, rotationY: number)
 	-- HumanoidRootPart faces the character's front - and forward is what has
 	-- to point down rotationY here, and down the lane for an enemy. Pivoting
 	-- by the box axes is how a store rig ends up marching sideways.
-	local forward = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+	local forward = animationRoot(model)
 
 	model.PrimaryPart = nil
 
@@ -135,19 +206,32 @@ function Rigs.attachStatic(host: BasePart, templateName: string, rotationY: numb
 	local rig = template:Clone()
 	rig.Name = Rigs.CHILD_NAME
 
-	-- Belt and braces. The templates in ServerStorage were stripped when they
-	-- were installed, but a rig is the one thing in this project that arrives
-	-- from the Creator Store, and a script that reached the running game would
-	-- be running with full server trust.
+	-- Belt and braces. The templates were stripped at install, but a rig is
+	-- the one thing in this project that arrives from the Creator Store, and
+	-- a script that reached the running game would run with full server
+	-- trust. BallSockets go too: they are ragdoll physics, and the limbs are
+	-- about to be freed for the idle animation.
 	for _, descendant in rig:GetDescendants() do
-		if descendant:IsA("BaseScript") or descendant:IsA("ModuleScript") or descendant:IsA("Humanoid") then
+		if
+			descendant:IsA("BaseScript")
+			or descendant:IsA("ModuleScript")
+			or descendant:IsA("Humanoid")
+			or descendant:IsA("BallSocketConstraint")
+			or descendant:IsA("NoCollisionConstraint")
+		then
 			descendant:Destroy()
 		end
 	end
 
+	-- Root anchored, limbs free on their joints - the same shape as a moving
+	-- rig, minus the movement. A fully anchored statue cannot animate: the
+	-- Animator drives joints, and joints only move unanchored parts.
+	local root = animationRoot(rig)
+
 	for _, descendant in rig:GetDescendants() do
 		if descendant:IsA("BasePart") then
-			descendant.Anchored = true
+			descendant.Anchored = descendant == root
+			descendant.Massless = true
 			descendant.CanCollide = false
 			descendant.CanTouch = false
 			-- NOT queryable. The host part is what placement and selection
@@ -161,6 +245,7 @@ function Rigs.attachStatic(host: BasePart, templateName: string, rotationY: numb
 
 	rig.Parent = host
 	fit(rig, host, rotationY)
+	playIdle(rig)
 
 	return true
 end
@@ -197,28 +282,7 @@ local WALK_ANIM_ATTR = "WalkAnimation"
 local WALK_REFERENCE_SPEED = 16
 
 local function playWalk(rig: Model, walkSpeed: number)
-	-- Fresh non-optional locals rather than reassigning the FindFirstChild
-	-- result: strict mode does not refine a variable through an assignment
-	-- inside a branch, so the reassigning form stays optional and fails.
-	local foundController = rig:FindFirstChildWhichIsA("AnimationController")
-	local controller: AnimationController
-
-	if foundController ~= nil then
-		controller = foundController
-	else
-		controller = Instance.new("AnimationController")
-		controller.Parent = rig
-	end
-
-	local foundAnimator = controller:FindFirstChildWhichIsA("Animator")
-	local animator: Animator
-
-	if foundAnimator ~= nil then
-		animator = foundAnimator
-	else
-		animator = Instance.new("Animator")
-		animator.Parent = controller
-	end
+	local animator = ensureAnimator(rig)
 
 	-- A pooled rig comes back with its track still in the playing state, so
 	-- only start one when nothing is playing - a second Play would stack.
@@ -237,17 +301,7 @@ local function playWalk(rig: Model, walkSpeed: number)
 end
 
 local function rootOf(rig: Model): BasePart?
-	local humanoidRoot = rig:FindFirstChild("HumanoidRootPart")
-
-	if humanoidRoot ~= nil and humanoidRoot:IsA("BasePart") then
-		return humanoidRoot
-	end
-
-	if rig.PrimaryPart ~= nil then
-		return rig.PrimaryPart
-	end
-
-	return rig:FindFirstChildWhichIsA("BasePart")
+	return animationRoot(rig)
 end
 
 --- Dresses `host` in `templateName` for a host that MOVES, plays its walk

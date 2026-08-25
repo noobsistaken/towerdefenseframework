@@ -64,9 +64,26 @@ end
 --- Where a tower's muzzle is. Read off the replicated part, so no network
 --- message carries tower positions.
 ---
---- Top of the part rather than its centre, so the line leaves the barrel
---- instead of the tower's waist.
+--- A rigged tower fires from its WEAPON: the templates tag one gun part with
+--- a TDMuzzle attribute exactly so this lookup exists. Without a tagged part
+--- the rig's upper body serves, and a tower with no rig at all falls back to
+--- the old answer - the top of the placeholder part. The old answer is WRONG
+--- for a rigged tower, because the host is invisible and twice the rig's
+--- height, so shots appeared to come from empty air far above the soldier.
 local function muzzleOf(part: BasePart): Vector3
+	local rig = part:FindFirstChild("Rig")
+
+	if rig ~= nil and rig:IsA("Model") then
+		for _, descendant in rig:GetDescendants() do
+			if descendant:IsA("BasePart") and descendant:GetAttribute("TDMuzzle") == true then
+				return descendant.Position
+			end
+		end
+
+		local boxCFrame, boxSize = rig:GetBoundingBox()
+		return boxCFrame.Position + Vector3.new(0, boxSize.Y * 0.25, 0)
+	end
+
 	return part.Position + Vector3.new(0, part.Size.Y / 2, 0)
 end
 
