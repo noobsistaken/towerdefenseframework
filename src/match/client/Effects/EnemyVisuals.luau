@@ -28,6 +28,7 @@ local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local StatusEffects = require(ReplicatedStorage.Shared.Config.StatusEffects)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 
+local Bursts = require(script.Parent.Bursts)
 local SoundController = require(script.Parent.Parent.Audio.SoundController)
 
 local EnemyVisuals = {}
@@ -422,6 +423,9 @@ function EnemyVisuals.start(): () -> ()
 		-- the fix is server-side ordering, not a sound lookup.
 		if entry.lastHealth <= 0 then
 			SoundController.play(deathCueFor(entry.isBoss), part.Position)
+			-- A visible death to go with the audible one. Red for everything,
+			-- bigger for a boss - same client-side inference, no message.
+			Bursts.emit(part.Position, Color3.fromRGB(220, 76, 76), if entry.isBoss then 48 else 14)
 		end
 
 		if entry.gui.Parent ~= nil then

@@ -45,6 +45,7 @@ local camera = workspace.CurrentCamera
 
 local janitor = Janitor.new()
 local ghost: Part? = nil
+local ghostRig: Model? = nil
 local rangeDisc: Part? = nil
 --- Last validated position, so the click handler does not have to redo the
 --- raycast and can never place somewhere the preview did not show.
@@ -131,6 +132,11 @@ local function destroyGhost()
 		ghost = nil
 	end
 
+	if ghostRig ~= nil then
+		ghostRig:Destroy()
+		ghostRig = nil
+	end
+
 	if rangeDisc ~= nil then
 		rangeDisc:Destroy()
 		rangeDisc = nil
@@ -172,6 +178,52 @@ local function createGhost(definition: Types.TowerDefinition)
 	disc.Color = VALID_COLOR
 	disc.Parent = workspace
 
+	-- The ghost previews the CHARACTER that will be built, not a box, when
+	-- the tower has a rig and this client can see the template. Fitted with
+	-- the same shared scale the server uses, so the preview cannot lie about
+	-- the size of what lands.
+	local templates = ReplicatedStorage:FindFirstChild("RigTemplates")
+	local template = if templates ~= nil and definition.rig ~= nil
+		then templates:FindFirstChild(definition.rig)
+		else nil
+
+	if template ~= nil and template:IsA("Model") then
+		local rig = template:Clone()
+		rig.Name = "TDGhostRig"
+
+		for _, descendant in rig:GetDescendants() do
+			if descendant:IsA("BaseScript") or descendant:IsA("ModuleScript") or descendant:IsA("Humanoid") then
+				descendant:Destroy()
+			end
+		end
+
+		for _, descendant in rig:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+				descendant.CanQuery = false
+				descendant.CanTouch = false
+				descendant.CastShadow = false
+				descendant.Transparency = math.clamp(descendant.Transparency + 0.45, 0.45, 1)
+			end
+		end
+
+		rig.PrimaryPart = nil
+
+		local boxCFrame, boxSize = rig:GetBoundingBox()
+		rig.WorldPivot = boxCFrame
+
+		if boxSize.Y > 0.01 then
+			rig:ScaleTo(level.modelSize.Y * Constants.RIG_SCALE / boxSize.Y)
+		end
+
+		rig.Parent = workspace
+		ghostRig = rig
+
+		-- The rig IS the preview now; the box would just wrap it in fog.
+		part.Transparency = 1
+	end
+
 	ghost = part
 	rangeDisc = disc
 end
@@ -203,6 +255,11 @@ local function updateGhost()
 	if hit == nil then
 		part.Transparency = 1
 		disc.Transparency = 1
+
+		if ghostRig ~= nil then
+			ghostRig:PivotTo(CFrame.new(0, -1000, 0))
+		end
+
 		lastValid = nil
 		return
 	end
@@ -224,9 +281,28 @@ local function updateGhost()
 	local resting = result.position or Vector3.new(hit.X, hit.Y, hit.Z)
 	local level = definition.levels[1]
 
-	part.Transparency = 0.4
+	part.Transparency = if ghostRig ~= nil then 1 else 0.4
 	part.Color = if result.ok then VALID_COLOR else INVALID_COLOR
 	part.CFrame = CFrame.new(resting + Vector3.new(0, level.modelSize.Y / 2, 0))
+
+	local rig = ghostRig
+
+	if rig ~= nil then
+		-- Feet on the ground the cursor is pointing at, tinted by validity.
+		-- The tint washes over mesh textures rather than replacing them,
+		-- which still reads: the whole silhouette goes green or red.
+		rig:PivotTo(CFrame.new(resting))
+
+		local rigCFrame, rigSize = rig:GetBoundingBox()
+		local lift = resting.Y - (rigCFrame.Position.Y - rigSize.Y / 2)
+		rig:PivotTo(rig:GetPivot() + Vector3.new(0, lift, 0))
+
+		for _, descendant in rig:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.Color = part.Color
+			end
+		end
+	end
 
 	disc.Transparency = 0.85
 	disc.Color = part.Color

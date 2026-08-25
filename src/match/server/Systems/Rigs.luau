@@ -28,7 +28,9 @@
 	host - and that is a different function, not this one.
 ]]
 
-local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Constants = require(ReplicatedStorage.Shared.Constants)
 
 local Rigs = {}
 
@@ -37,8 +39,12 @@ local TEMPLATE_FOLDER = "RigTemplates"
 --- Name given to the rig once attached, so it can be found and replaced.
 Rigs.CHILD_NAME = "Rig"
 
+--- Templates live in ReplicatedStorage, NOT ServerStorage, because the
+--- placement ghost is client-built and a client cannot see ServerStorage.
+--- The cost is that clients can read the rig meshes - which they render
+--- anyway the moment one spawns, so nothing is exposed that play does not.
 local function templateFolder(): Instance?
-	return ServerStorage:FindFirstChild(TEMPLATE_FOLDER)
+	return ReplicatedStorage:FindFirstChild(TEMPLATE_FOLDER)
 end
 
 --- The template for `name`, or nil if this place has no rigs installed.
@@ -82,16 +88,32 @@ end
 --- box back after the move and correcting is the only way this lands right for
 --- a rig whose proportions we do not control.
 local function fit(model: Model, host: BasePart, rotationY: number)
-	local extents = model:GetExtentsSize()
+	-- Pivot about the bounding-box CENTRE with the ROOT part's ORIENTATION.
+	-- The box's own axes are whatever orientation the template happened to be
+	-- saved at; the root's axes are the rig's idea of forward - a
+	-- HumanoidRootPart faces the character's front - and forward is what has
+	-- to point down rotationY here, and down the lane for an enemy. Pivoting
+	-- by the box axes is how a store rig ends up marching sideways.
+	local forward = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
 
-	if extents.Y > 0.01 then
-		model:ScaleTo(host.Size.Y / extents.Y)
+	model.PrimaryPart = nil
+
+	local boxCFrame, boxSize = model:GetBoundingBox()
+
+	if forward ~= nil and forward:IsA("BasePart") then
+		model.WorldPivot = CFrame.fromMatrix(boxCFrame.Position, forward.CFrame.XVector, forward.CFrame.YVector)
+	else
+		model.WorldPivot = boxCFrame
+	end
+
+	if boxSize.Y > 0.01 then
+		model:ScaleTo(host.Size.Y * Constants.RIG_SCALE / boxSize.Y)
 	end
 
 	model:PivotTo(CFrame.new(host.Position) * CFrame.Angles(0, math.rad(rotationY), 0))
 
-	local boxCFrame, boxSize = model:GetBoundingBox()
-	local currentBottom = boxCFrame.Position.Y - boxSize.Y / 2
+	local afterCFrame, afterSize = model:GetBoundingBox()
+	local currentBottom = afterCFrame.Position.Y - afterSize.Y / 2
 	local wantedBottom = host.Position.Y - host.Size.Y / 2
 
 	model:PivotTo(model:GetPivot() + Vector3.new(0, wantedBottom - currentBottom, 0))
@@ -341,14 +363,23 @@ function Rigs.attachMoving(host: BasePart, templateName: string, walkSpeed: numb
 
 	rig.PrimaryPart = nil
 
+	-- Same facing rule as fit(): pivot at the box centre with the ROOT's
+	-- orientation, so the rig's own forward - not the box's storage
+	-- orientation - is what aligns to the host's walk direction.
 	local boxCFrame, boxSize = rig:GetBoundingBox()
-	rig.WorldPivot = boxCFrame
+	rig.WorldPivot = CFrame.fromMatrix(boxCFrame.Position, root.CFrame.XVector, root.CFrame.YVector)
 
 	if boxSize.Y > 0.01 then
-		rig:ScaleTo(host.Size.Y / boxSize.Y)
+		rig:ScaleTo(host.Size.Y * Constants.RIG_SCALE / boxSize.Y)
 	end
 
 	rig:PivotTo(host.CFrame)
+
+	-- Feet on the bottom of the hitbox rather than floating at its centre:
+	-- at half scale a centred rig hangs mid-air.
+	local afterCFrame, afterSize = rig:GetBoundingBox()
+	local bottomDelta = (host.Position.Y - host.Size.Y / 2) - (afterCFrame.Position.Y - afterSize.Y / 2)
+	rig:PivotTo(rig:GetPivot() + Vector3.new(0, bottomDelta, 0))
 
 	local offset = host.CFrame:Inverse() * root.CFrame
 
