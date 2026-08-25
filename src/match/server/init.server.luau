@@ -166,6 +166,42 @@ local function onPlayerAdded(player: Player)
 	match:addPlayer(player)
 end
 
+--- How long the snapshot will wait for a profile before answering anyway.
+---
+--- Generous, because the alternative is worse than a slow load: it is a shop
+--- that says LOCKED for the rest of the match.
+local PROFILE_WAIT_SECONDS = 10
+
+--- Blocks until this player's data session exists, or the deadline passes.
+---
+--- GetMatchSnapshot is the ONLY message that ever carries unlockedTowers, and
+--- the client asks for it the instant it loads - routinely before
+--- StartSessionAsync above has resolved. Answering early handed back an empty
+--- unlock list that nothing afterwards corrected, so every tower in the shop
+--- read LOCKED for the whole session, on a brand new account that should own
+--- Rifleman and Ranger.
+---
+--- Waiting here rather than inside unlockedTowersOf on purpose. That resolver
+--- is also called by the placement path, where a yield would sit between a
+--- permission check and the action it authorises - the player could leave, or
+--- the match could end, in the gap. The snapshot is a `funct` with
+--- `call: Async`, so this is the one caller that may safely block.
+---
+--- Bounded rather than infinite: a profile that never loads means the player
+--- is already being kicked, and a funct that never returns would hang the
+--- client's whole startup instead of letting it render a shop it can retry.
+local function waitForProfile(player: Player)
+	local deadline = os.clock() + PROFILE_WAIT_SECONDS
+
+	while profiles[player] == nil and os.clock() < deadline do
+		if player.Parent ~= Players then
+			return
+		end
+
+		task.wait(0.1)
+	end
+end
+
 local function onPlayerRemoving(player: Player)
 	match:removePlayer(player)
 
@@ -256,5 +292,9 @@ Net.RequestEarlyStart.On(function(player: Player)
 end)
 
 Net.GetMatchSnapshot.SetCallback(function(player: Player, _value: {})
+	-- Before, not after: the snapshot reads unlockedTowers off the profile,
+	-- and this is the only chance to get that answer right.
+	waitForProfile(player)
+
 	return match:snapshot(player)
 end)
