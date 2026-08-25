@@ -19,11 +19,12 @@ local Types = require(script.Parent.Types)
 
 local DataSchema = {}
 
-DataSchema.CURRENT_VERSION = 1
+DataSchema.CURRENT_VERSION = 2
 
---- Towers every account owns from the start. Everything else is unlocked
---- with Coins. Ids must exist in Config/Towers.luau.
-local STARTING_TOWERS: { string } = { "Rifleman", "Ranger" }
+--- Towers every account owns from the start. Currently ALL of them, by
+--- request - the Coins sink this leaves behind is a design decision waiting
+--- for a real unlock ladder. Ids must exist in Config/Towers.luau.
+local STARTING_TOWERS: { string } = { "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator" }
 
 DataSchema.TEMPLATE = {
 	Version = DataSchema.CURRENT_VERSION,
@@ -50,10 +51,18 @@ DataSchema.TEMPLATE = {
 --- TOP-LEVEL keys from the template. Do not assume it back-fills a new field
 --- inside Stats or Settings - add those explicitly in the migration step.
 local MIGRATIONS: { [number]: (Types.PlayerData) -> () } = {
-	-- [1] = function(data)
-	-- 	data.Prestige = 0
-	-- 	data.Version = 2
-	-- end,
+	-- v1 -> v2: every tower became a starting tower. Union rather than
+	-- replace, so an account that somehow owns something beyond the roster
+	-- keeps it, and running twice cannot duplicate an entry.
+	[1] = function(data)
+		for _, id in STARTING_TOWERS do
+			if table.find(data.UnlockedTowers, id) == nil then
+				table.insert(data.UnlockedTowers, id)
+			end
+		end
+
+		data.Version = 2
+	end,
 }
 
 --- Walks `data` forward to CURRENT_VERSION in place.

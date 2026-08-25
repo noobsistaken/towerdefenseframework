@@ -29,11 +29,40 @@ describe("DataSchema", function()
 
 	it("refuses to guess when a migration step is missing", function()
 		local data = table.clone(DataSchema.TEMPLATE)
-		data.Version = DataSchema.CURRENT_VERSION - 1
+		-- Version 0 has never existed and can never gain a ladder rung, so
+		-- this stays a missing-step probe no matter how long the real ladder
+		-- grows. The original form used CURRENT_VERSION - 1, which stopped
+		-- being a missing step the day rung 1 was added.
+		data.Version = 0
 
 		expect(function()
 			DataSchema.migrate(data)
 		end).toThrow()
+	end)
+
+	it("migrates v1 data to own every starting tower", function()
+		local data = table.clone(DataSchema.TEMPLATE)
+		data.Version = 1
+		-- What a real v1 profile holds: the original two starters, plus one
+		-- extra to prove the union keeps unknown entries and cannot
+		-- duplicate an existing one.
+		data.UnlockedTowers = { "Rifleman", "Ranger", "Mortar" }
+
+		expect(DataSchema.migrate(data)).toBe(1)
+		expect(data.Version).toBe(2)
+
+		for _, id in { "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator" } do
+			expect(table.find(data.UnlockedTowers, id) ~= nil).toBe(true)
+		end
+
+		-- Union, not append: Mortar was already owned and must appear once.
+		local mortars = 0
+		for _, id in data.UnlockedTowers do
+			if id == "Mortar" then
+				mortars += 1
+			end
+		end
+		expect(mortars).toBe(1)
 	end)
 
 	it("never leaves data below the current version", function()
