@@ -38,8 +38,20 @@ CI proves lint + format + types + build and *nothing about behaviour*.
 rojo build test.project.json --output build/test.rbxl
 ```
 
-Open `build/test.rbxl` in Studio, press **Play**, read the Output window. You
-are looking for `[tests] All suites passed.`
+Run it from a **plugin context** - the Studio MCP server, or the command bar.
+Pressing Play does NOT work; see AGENTS.md -> Tests for why.
+
+```lua
+local Jest = require(game.ReplicatedStorage.DevPackages.Jest)
+local root = game.ServerScriptService.Tests
+local status, result = Jest.runCLI(root, { ci = false }, { root }):awaitStatus()
+print(status, result.results.numPassedTests, "passed", result.results.numFailedTests, "failed")
+```
+
+**Status: run for the first time on 2026-08-25. 12 suites, 182 tests, 253
+assertions - all passing.** Two things had to be fixed to get there, and both
+are in the repo now: `tests/jest.config.luau` did not exist (Jest refuses to
+start without it), and the documented Play-based procedure cannot work at all.
 
 The three worth reading closely if something is red:
 
