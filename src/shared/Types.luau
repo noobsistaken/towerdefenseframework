@@ -311,6 +311,11 @@ export type TowerDefinition = {
 	perPlayerCap: number,
 	--- At least three, per the brief. Index is the tower's level.
 	levels: { TowerLevel },
+	--- Name of a rig in ServerStorage.RigTemplates to wear instead of the
+	--- placeholder box. Optional, and optional on purpose: templates live in
+	--- the place file rather than the repo, so a fresh clone has none and
+	--- every tower falls back to its coloured part.
+	rig: string?,
 }
 
 -- ===========================================================================

@@ -30,6 +30,8 @@ local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
+local Rigs = require(script.Parent.Rigs)
+
 local BaseTower = require(script.Parent.Parent.Entities.BaseTower)
 local EnemySimulation = require(script.Parent.Parent.Simulation.EnemySimulation)
 local TowerBehaviors = require(script.Parent.Parent.Entities.TowerBehaviors)
@@ -111,6 +113,16 @@ local function buildPart(self: System, tower: BaseTower.Tower): Part
 	writeAttributes(part, tower)
 	part.Parent = self.container
 
+	-- Parented first: attachStatic measures the host's world position to sit
+	-- the rig's feet on it, and an unparented part has none.
+	--
+	-- The part stays exactly what it was - same size, same attributes, same
+	-- CanQuery - and only stops being drawn. Everything that finds a tower
+	-- finds this, not the rig.
+	if tower.definition.rig ~= nil and Rigs.attachStatic(part, tower.definition.rig, tower.rotationY) then
+		part.Transparency = 1
+	end
+
 	return part
 end
 
@@ -127,6 +139,11 @@ local function refreshPart(self: System, tower: BaseTower.Tower)
 	part.Color = level.color
 	part.CFrame = CFrame.new(tower.position + Vector3.new(0, level.modelSize.Y / 2, 0))
 		* CFrame.Angles(0, math.rad(tower.rotationY), 0)
+
+	-- The rig grows with the level because the host part does. That preserves
+	-- the ONLY cue a player has that an upgrade landed - ASSET-MANIFEST calls
+	-- this out: a model that keeps a constant size makes upgrades invisible.
+	Rigs.refit(part, tower.rotationY)
 
 	writeAttributes(part, tower)
 end
