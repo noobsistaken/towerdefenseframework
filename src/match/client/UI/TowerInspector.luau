@@ -105,6 +105,10 @@ type InfoState = {
 
 local NO_OP: () -> () = function() end
 
+--- How far the panel rises into place when a tower is selected. Small on
+--- purpose: this is a confirmation the click landed, not an entrance.
+local PANEL_RISE = 14
+
 --- Tracks one tower's attributes, re-reading whenever any of them changes and
 --- clearing the selection if the tower is sold out from under the panel.
 local function useTowerInfo(towerId: number?): TowerInfo?
@@ -364,6 +368,48 @@ end
 --- writes it once at mount and never again. That gives the correct hidden
 --- initial state without an imperative first paint, and leaves the property
 --- free to animate. See the rule in Motion.luau.
+--- Fades and lifts the whole inspector into place when a tower is selected.
+---
+--- Keyed on the tower, so clicking a DIFFERENT tower replays it - which is the
+--- point. Without that, selecting another tower silently swaps the contents of
+--- a panel already on screen and the click has no visible result at all.
+---
+--- GroupTransparency and Position are both declared as CONSTANTS on the shell,
+--- so React writes each once at mount and never again, leaving them free to
+--- animate. See the rule in Motion.luau.
+local function useSelectionEntrance(towerId: number?): { current: CanvasGroup? }
+	local shellRef = React.useRef(nil :: CanvasGroup?)
+	local tween = React.useRef(nil :: Motion.Handle)
+
+	React.useLayoutEffect(function(): () -> ()
+		local shell = shellRef.current
+
+		if shell == nil then
+			return NO_OP
+		end
+
+		Motion.stop(tween.current)
+
+		-- Snap to the start of the animation, then play it. Snapping first
+		-- matters on a re-selection, where the shell is still sitting at its
+		-- resting values from the previous tower.
+		shell.GroupTransparency = 1
+		shell.Position = UDim2.new(1, -16, 1, -16 + PANEL_RISE)
+
+		tween.current = Motion.retarget(nil, shell, Theme.MOTION_REVEAL, {
+			GroupTransparency = 0,
+			Position = UDim2.new(1, -16, 1, -16),
+		})
+
+		return function()
+			Motion.stop(tween.current)
+			tween.current = nil
+		end
+	end, { towerId or 0 })
+
+	return shellRef
+end
+
 local function useHoverReveal(
 	towerId: number?,
 	hasPreview: boolean
@@ -454,6 +500,7 @@ local function TowerInspector()
 		and Towers.levelAt(definition, info.level + 1) ~= nil
 
 	local previewRef, glowRef, setHovered = useHoverReveal(if info ~= nil then info.towerId else nil, hasPreview)
+	local shellRef = useSelectionEntrance(if info ~= nil then info.towerId else nil)
 
 	if info == nil or definition == nil or level == nil then
 		return nil
@@ -665,13 +712,15 @@ local function TowerInspector()
 	-- Transparent shell so the two panels stack with a real gap rather than
 	-- reading as one box with a line through it. AutomaticSize means neither
 	-- carries a hand-counted pixel height that goes stale when a row is added.
-	return e("Frame", {
+	return e("CanvasGroup", {
+		ref = shellRef,
 		AnchorPoint = Vector2.new(1, 1),
 		Position = UDim2.new(1, -16, 1, -16),
 		Size = UDim2.fromOffset(240, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		GroupTransparency = 1,
 	}, {
 		layout = e("UIListLayout", {
 			FillDirection = Enum.FillDirection.Vertical,
