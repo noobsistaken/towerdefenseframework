@@ -121,18 +121,38 @@ local function ensureAnimator(rig: Model): Animator
 	return animator
 end
 
---- Attribute a template sets to name its idle cycle. Only the templates that
---- measured as ANIMATABLE carry it - two tower rigs have no joints at all,
---- and playing a track into a rig with nothing to drive is pure waste.
---- The measured value for the store's Motor6D soldier rigs is the R6 idle
---- (rbxassetid://180435792); the R15 idles and both tool-hold animations
---- moved nothing on any of them.
-local IDLE_ANIM_ATTR = "IdleAnimation"
+--- Idle cycles by TEMPLATE, in code rather than as Studio attributes, so the
+--- roster is diffable and reviewed like everything else. Only the templates
+--- that measured as ANIMATABLE appear - the id is the R6 idle, the one that
+--- moved these Motor6D rigs when probed (limb swing 0.50-0.72); both R15
+--- idles and both tool-hold animations moved nothing on any of them.
+local R6_IDLE = "rbxassetid://180435792"
 
-local function playIdle(rig: Model)
-	local animationId = rig:GetAttribute(IDLE_ANIM_ATTR)
+local IDLE_ANIMATIONS: { [string]: string } = {
+	SwatSoldier = R6_IDLE,
+	VDVSoldier = R6_IDLE,
+	WinterSoldier = R6_IDLE,
+	ToySoldier = R6_IDLE,
+}
 
-	if type(animationId) ~= "string" or animationId == "" then
+--- Whether anything in this rig can be DRIVEN by an Animator. A rig with no
+--- animation joints must never have its limbs unanchored: unanchored parts
+--- held by nothing simply fall out of the world - measured, the Rifleman
+--- rig lost 9 of its 10 parts in about a second.
+local function hasAnimationJoints(rig: Model): boolean
+	for _, descendant in rig:GetDescendants() do
+		if descendant:IsA("Motor6D") or descendant:IsA("AnimationConstraint") then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function playIdle(rig: Model, templateName: string)
+	local animationId = IDLE_ANIMATIONS[templateName]
+
+	if animationId == nil then
 		return
 	end
 
@@ -223,14 +243,16 @@ function Rigs.attachStatic(host: BasePart, templateName: string, rotationY: numb
 		end
 	end
 
-	-- Root anchored, limbs free on their joints - the same shape as a moving
-	-- rig, minus the movement. A fully anchored statue cannot animate: the
-	-- Animator drives joints, and joints only move unanchored parts.
+	-- Root anchored and limbs free ONLY when joints exist to hold them - the
+	-- shape a moving rig uses, minus the movement. A fully anchored statue
+	-- cannot animate, but an unanchored part with no joint falls out of the
+	-- world, so a jointless rig stays a fully anchored statue.
 	local root = animationRoot(rig)
+	local animated = hasAnimationJoints(rig)
 
 	for _, descendant in rig:GetDescendants() do
 		if descendant:IsA("BasePart") then
-			descendant.Anchored = descendant == root
+			descendant.Anchored = if animated then descendant == root else true
 			descendant.Massless = true
 			descendant.CanCollide = false
 			descendant.CanTouch = false
@@ -245,7 +267,7 @@ function Rigs.attachStatic(host: BasePart, templateName: string, rotationY: numb
 
 	rig.Parent = host
 	fit(rig, host, rotationY)
-	playIdle(rig)
+	playIdle(rig, templateName)
 
 	return true
 end
@@ -389,6 +411,7 @@ function Rigs.attachMoving(host: BasePart, templateName: string, walkSpeed: numb
 	-- NOTHING - towers keep firing at empty air and the player learns the
 	-- game is broken instead of the template.
 	local visible = false
+	local animated = hasAnimationJoints(rig)
 
 	for _, descendant in rig:GetDescendants() do
 		if descendant:IsA("BasePart") then
@@ -396,9 +419,10 @@ function Rigs.attachMoving(host: BasePart, templateName: string, walkSpeed: numb
 				visible = true
 			end
 
-			-- Root anchored, limbs free: the limbs hang off the root through
-			-- the animation joints, which is what lets the walk cycle move
-			-- them while the root is driven along the path.
+			-- Root anchored, limbs free on their joints so the walk cycle
+			-- can move them while the root is driven along the path. A rig
+			-- with NO joints gets welded to the root below instead - freed
+			-- parts held by nothing fall out of the world.
 			descendant.Anchored = descendant == root
 			descendant.Massless = true
 			descendant.CanCollide = false
@@ -435,10 +459,25 @@ function Rigs.attachMoving(host: BasePart, templateName: string, walkSpeed: numb
 	local bottomDelta = (host.Position.Y - host.Size.Y / 2) - (afterCFrame.Position.Y - afterSize.Y / 2)
 	rig:PivotTo(rig:GetPivot() + Vector3.new(0, bottomDelta, 0))
 
+	if not animated then
+		for _, descendant in rig:GetDescendants() do
+			if descendant:IsA("BasePart") and descendant ~= root then
+				local weld = Instance.new("Weld")
+				weld.Part0 = root
+				weld.Part1 = descendant
+				weld.C0 = root.CFrame:Inverse() * descendant.CFrame
+				weld.Parent = root
+			end
+		end
+	end
+
 	local offset = host.CFrame:Inverse() * root.CFrame
 
 	rig.Parent = host
-	playWalk(rig, walkSpeed)
+
+	if animated then
+		playWalk(rig, walkSpeed)
+	end
 
 	return { root = root, offset = offset }
 end
