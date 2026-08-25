@@ -135,6 +135,23 @@ local IDLE_ANIMATIONS: { [string]: string } = {
 	ToySoldier = R6_IDLE,
 }
 
+--- Layered over the idle at Action priority: the R6 tool-hold pose, which
+--- raises the right arm - and the weapon welded to it - to a firing hold.
+---
+--- This one was nearly missed. The first animation probe measured limb
+--- MOVEMENT over time and read 0.0 for every hold candidate, because a hold
+--- is a static POSE: it moves the arm once and keeps it there. Re-measured
+--- as pose-versus-baseline it scores 3.5, and layered over the idle the arm
+--- stays put (drift 0.005) while the body keeps swaying (0.65).
+local R6_TOOL_HOLD = "rbxassetid://182393478"
+
+local HOLD_ANIMATIONS: { [string]: string } = {
+	SwatSoldier = R6_TOOL_HOLD,
+	VDVSoldier = R6_TOOL_HOLD,
+	WinterSoldier = R6_TOOL_HOLD,
+	ToySoldier = R6_TOOL_HOLD,
+}
+
 --- Whether anything in this rig can be DRIVEN by an Animator. A rig with no
 --- animation joints must never have its limbs unanchored: unanchored parts
 --- held by nothing simply fall out of the world - measured, the Rifleman
@@ -166,8 +183,21 @@ local function playIdle(rig: Model, templateName: string)
 	animation.AnimationId = animationId
 
 	local track = animator:LoadAnimation(animation)
+	track.Priority = Enum.AnimationPriority.Idle
 	track.Looped = true
 	track:Play()
+
+	local holdId = HOLD_ANIMATIONS[templateName]
+
+	if holdId ~= nil then
+		local holdAnimation = Instance.new("Animation")
+		holdAnimation.AnimationId = holdId
+
+		local hold = animator:LoadAnimation(holdAnimation)
+		hold.Priority = Enum.AnimationPriority.Action
+		hold.Looped = true
+		hold:Play()
+	end
 end
 
 --- Scales `model` so its total height matches `height`, and sits it with its
