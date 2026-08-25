@@ -233,6 +233,29 @@ function MapExtract.fromFolder(root: Instance, id: string, displayName: string):
 		table.insert(problems, "no Base part - basePosition comes from it")
 	end
 
+	-- The ground's POSITION is derived, never read: MapBuilder places the slab
+	-- so its top sits at y = 0, which is the plane every other y in a config is
+	-- measured against. Dragging the ground therefore does nothing except
+	-- detach the play area from the lane - so say so, rather than snapping it
+	-- back in silence and letting an author think the move took.
+	if ground ~= nil and ground:IsA("BasePart") then
+		local expected = -ground.Size.Y / 2
+
+		if math.abs(ground.Position.Y - expected) > 0.01 then
+			table.insert(
+				problems,
+				`{ground:GetFullName()}: y is {ground.Position.Y}, but the ground's top defines y = 0, so it must sit at {expected}. Move it back, or move everything else instead.`
+			)
+		end
+
+		if math.abs(ground.Position.X) > 0.01 or math.abs(ground.Position.Z) > 0.01 then
+			table.insert(
+				problems,
+				`{ground:GetFullName()}: is off-centre at ({ground.Position.X}, {ground.Position.Z}); the ground plane is always centred on the origin`
+			)
+		end
+	end
+
 	local paths = readPaths(root, problems)
 	local surfaces = readSurfaces(root, problems)
 	local decor = readDecor(root)

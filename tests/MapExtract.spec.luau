@@ -177,6 +177,18 @@ describe("MapExtract.fromFolder", function()
 		expect(#result.problems > 0).toBe(true)
 	end)
 
+	it("reports a ground that was dragged off the y = 0 plane", function()
+		local root = goodTree()
+		childPart(root, "Ground").CFrame = CFrame.new(0, 6, 0)
+
+		local result = MapExtract.fromFolder(root, "Test", "Test Map")
+
+		-- The ground's position is derived, not extracted, so a drag here
+		-- silently does nothing. Saying so beats snapping it back in silence.
+		expect(#result.problems).toBe(1)
+		expect(string.find(result.problems[1], "Ground") ~= nil).toBe(true)
+	end)
+
 	it("reports a missing Lanes folder", function()
 		local root = goodTree()
 		child(root, "Lanes"):Destroy()
