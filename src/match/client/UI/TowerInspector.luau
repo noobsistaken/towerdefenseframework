@@ -177,24 +177,154 @@ local function ActionButton(props: ActionProps)
 	})
 end
 
+--- Draws a flat disc showing the selected tower's range.
+---
+--- Lives here rather than in a module of its own because the lifetime it
+--- follows is exactly this panel's: the disc is visible when the panel is.
+--- Sized and tipped the way the placement preview does it - cylinders extrude
+--- along local X, so a disc has to be rolled onto its side to lie flat.
+---
+--- Sits just above whatever the tower is standing on, derived from the part
+--- rather than assumed, so a Hillside tower on a 12-stud plateau gets its ring
+--- on the plateau instead of buried under it.
+local function useRangeDisc(towerId: number?, range: number?)
+	React.useEffect(function(): () -> ()
+		if towerId == nil or range == nil or range <= 0 then
+			return NO_OP
+		end
+
+		local part = findTowerPart(towerId)
+
+		if part == nil then
+			return NO_OP
+		end
+
+		local disc = Instance.new("Part")
+		disc.Name = "TDSelectionRange"
+		disc.Shape = Enum.PartType.Cylinder
+		disc.Size = Vector3.new(0.2, range * 2, range * 2)
+		disc.Anchored = true
+		disc.CanCollide = false
+		disc.CanQuery = false
+		disc.CanTouch = false
+		disc.CastShadow = false
+		disc.Transparency = 0.88
+		disc.Material = Enum.Material.Neon
+		disc.Color = Theme.ACCENT
+
+		local base = part.Position.Y - part.Size.Y / 2 + 0.3
+		disc.CFrame = CFrame.new(part.Position.X, base, part.Position.Z) * CFrame.Angles(0, 0, math.rad(90))
+		disc.Parent = workspace
+
+		return function()
+			disc:Destroy()
+		end
+	end, { towerId or 0, range or 0 })
+end
+
+type StatProps = {
+	label: string,
+	value: string,
+	layoutOrder: number,
+}
+
+--- One stat cell. Three sit in a row: what the tower hits for, how far it
+--- reaches, how often it fires.
+local function Stat(props: StatProps)
+	return e("Frame", {
+		Size = UDim2.new(1 / 3, -4, 0, 34),
+		BackgroundColor3 = Theme.RAISED,
+		BorderSizePixel = 0,
+		LayoutOrder = props.layoutOrder,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+
+		label = e("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 12),
+			Position = UDim2.fromOffset(0, 4),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT_BODY,
+			Text = props.label,
+			TextColor3 = Theme.MUTED,
+			TextSize = 10,
+		}),
+
+		value = e("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 16),
+			Position = UDim2.fromOffset(0, 15),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT,
+			Text = props.value,
+			TextColor3 = Theme.TEXT,
+			TextSize = 13,
+		}),
+	})
+end
+
+type DeltaProps = {
+	label: string,
+	from: string,
+	to: string,
+	layoutOrder: number,
+}
+
+--- One "this stat becomes that" row in the upgrade panel.
+local function DeltaRow(props: DeltaProps)
+	return e("Frame", {
+		Size = UDim2.new(1, 0, 0, 18),
+		BackgroundTransparency = 1,
+		LayoutOrder = props.layoutOrder,
+	}, {
+		label = e("TextLabel", {
+			Size = UDim2.fromScale(0.42, 1),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT_BODY,
+			Text = props.label,
+			TextColor3 = Theme.MUTED,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+
+		value = e("TextLabel", {
+			Position = UDim2.fromScale(0.42, 0),
+			Size = UDim2.fromScale(0.58, 1),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT,
+			Text = `{props.from}  →  {props.to}`,
+			TextColor3 = Theme.POSITIVE,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Right,
+		}),
+	})
+end
+
+--- Shots per second to two places. Rounding to whole numbers would collapse
+--- 1.10 and 1.35 into the same figure and make an upgrade look like it did
+--- nothing.
+local function rateText(fireRate: number): string
+	return string.format("%.2f/s", fireRate)
+end
+
 local function TowerInspector()
 	local selectedId = useAtom(atoms.selectedTowerId)
 	local cash = useAtom(atoms.cash)
 	local info = useTowerInfo(selectedId)
 
-	if info == nil then
-		return nil
-	end
+	-- Resolved BEFORE the early return below. useRangeDisc is a hook, and a
+	-- hook that only runs on some renders desynchronises React's hook order.
+	local definition = if info ~= nil then Towers.find(info.defId) else nil
+	local level = if definition ~= nil and info ~= nil then Towers.levelAt(definition, info.level) else nil
 
-	local definition = Towers.find(info.defId)
+	useRangeDisc(if info ~= nil then info.towerId else nil, if level ~= nil then level.range else nil)
 
-	if definition == nil then
+	if info == nil or definition == nil or level == nil then
 		return nil
 	end
 
 	local isOwner = info.ownerUserId == localPlayer.UserId
 	local upgradeCost = Economy.upgradeCost(definition, info.level)
 	local maxLevel = #definition.levels
+	local nextLevel = Towers.levelAt(definition, info.level + 1)
 
 	local children: { [string]: any } = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
@@ -231,6 +361,23 @@ local function TowerInspector()
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = 2,
 		}),
+
+		-- Damage, reach and rate. Shown for every tower, owned or not: they
+		-- describe the tower, and reading someone else's is not an action.
+		stats = e("Frame", {
+			Size = UDim2.new(1, 0, 0, 34),
+			BackgroundTransparency = 1,
+			LayoutOrder = 3,
+		}, {
+			layout = e("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 6),
+			}),
+			damage = e(Stat, { label = "DAMAGE", value = tostring(level.damage), layoutOrder = 1 }),
+			range = e(Stat, { label = "RANGE", value = tostring(level.range), layoutOrder = 2 }),
+			speed = e(Stat, { label = "SPEED", value = rateText(level.fireRate), layoutOrder = 3 }),
+		}),
 	}
 
 	if not isOwner then
@@ -242,12 +389,12 @@ local function TowerInspector()
 			TextColor3 = Theme.MUTED,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			LayoutOrder = 3,
+			LayoutOrder = 4,
 		})
 	else
 		if upgradeCost ~= nil then
 			children.upgrade = e(ActionButton, {
-				text = `UPGRADE  ${upgradeCost}`,
+				text = `UPGRADE  $${upgradeCost}`,
 				color = if cash >= upgradeCost then Theme.ACCENT else Theme.DISABLED,
 				textColor = if cash >= upgradeCost then Theme.INVERSE else Theme.MUTED,
 				layoutOrder = 4,
@@ -285,7 +432,7 @@ local function TowerInspector()
 		})
 
 		children.sell = e(ActionButton, {
-			text = `SELL  +${info.sellValue}`,
+			text = `SELL  +$${info.sellValue}`,
 			color = Theme.RAISED,
 			textColor = Theme.CASH,
 			layoutOrder = 6,
@@ -295,14 +442,106 @@ local function TowerInspector()
 		})
 	end
 
+	-- Second panel: what the money actually buys. Owner only, and only when
+	-- there IS a next level - at max there is nothing to preview.
+	local upgradePanel = nil
+
+	if isOwner and nextLevel ~= nil then
+		local rows: { [string]: any } = {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+			padding = e("UIPadding", {
+				PaddingTop = UDim.new(0, 10),
+				PaddingBottom = UDim.new(0, 10),
+				PaddingLeft = UDim.new(0, 12),
+				PaddingRight = UDim.new(0, 12),
+			}),
+			layout = e("UIListLayout", {
+				FillDirection = Enum.FillDirection.Vertical,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 4),
+			}),
+
+			header = e("TextLabel", {
+				Size = UDim2.new(1, 0, 0, 16),
+				BackgroundTransparency = 1,
+				Font = Theme.FONT,
+				Text = `NEXT  ·  LEVEL {info.level + 1}`,
+				TextColor3 = Theme.ACCENT,
+				TextSize = 12,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				LayoutOrder = 1,
+			}),
+
+			damage = e(DeltaRow, {
+				label = "Damage",
+				from = tostring(level.damage),
+				to = tostring(nextLevel.damage),
+				layoutOrder = 2,
+			}),
+			range = e(DeltaRow, {
+				label = "Range",
+				from = tostring(level.range),
+				to = tostring(nextLevel.range),
+				layoutOrder = 3,
+			}),
+			speed = e(DeltaRow, {
+				label = "Speed",
+				from = rateText(level.fireRate),
+				to = rateText(nextLevel.fireRate),
+				layoutOrder = 4,
+			}),
+		}
+
+		-- Splash only when it actually moves. For Mortar and Flak it is the
+		-- headline of the upgrade; everywhere else it is a constant zero and a
+		-- row reading "0 to 0" is noise.
+		if nextLevel.splashRadius ~= level.splashRadius then
+			rows.splash = e(DeltaRow, {
+				label = "Splash",
+				from = tostring(level.splashRadius),
+				to = tostring(nextLevel.splashRadius),
+				layoutOrder = 5,
+			})
+		end
+
+		upgradePanel = e("Frame", {
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+			BorderSizePixel = 0,
+			LayoutOrder = 1,
+		}, rows)
+	end
+
+	-- Transparent shell so the two panels stack with a real gap rather than
+	-- reading as one box with a line through it. AutomaticSize means neither
+	-- carries a hand-counted pixel height that goes stale when a row is added.
 	return e("Frame", {
 		AnchorPoint = Vector2.new(1, 1),
 		Position = UDim2.new(1, -16, 1, -16),
-		Size = UDim2.fromOffset(220, 190),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		Size = UDim2.fromOffset(240, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-	}, children)
+	}, {
+		layout = e("UIListLayout", {
+			FillDirection = Enum.FillDirection.Vertical,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 8),
+		}),
+
+		upgradePanel = upgradePanel,
+
+		mainPanel = e("Frame", {
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+			BorderSizePixel = 0,
+			LayoutOrder = 2,
+		}, children),
+	})
 end
 
 return TowerInspector
