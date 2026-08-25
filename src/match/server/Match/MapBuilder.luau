@@ -22,6 +22,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Footprint = require(ReplicatedStorage.Shared.Footprint)
@@ -253,6 +254,49 @@ local function buildSpawn(config: Types.MapConfig, parent: Instance): SpawnLocat
 	return spawn
 end
 
+--- Draggable markers for each waypoint, so a map can be reshaped in Studio
+--- and read back by MapExtract.
+---
+--- Visible only in Studio. In a live server these are invisible and inert -
+--- they exist so the tree MapBuilder produces is the same tree MapExtract
+--- consumes, which is what makes the round trip lossless. A player never sees
+--- them; the walkway drawn from the same waypoints is the visible thing.
+---
+--- The Order attribute rather than relying on the name: an author renumbering
+--- a lane should not have to rename anything.
+local function buildWaypointMarkers(config: Types.MapConfig, parent: Instance)
+	local lanes = Instance.new("Folder")
+	lanes.Name = "Lanes"
+	lanes.Parent = parent
+
+	local visible = RunService:IsStudio()
+
+	for laneIndex, lane in config.paths do
+		local folder = Instance.new("Folder")
+		folder.Name = `Lane{laneIndex}`
+		folder.Parent = lanes
+
+		for index, point in lane.waypoints do
+			local marker = newPart(
+				`Waypoint{index}`,
+				Vector3.new(3, 3, 3),
+				CFrame.new(point),
+				Color3.fromRGB(240, 200, 90),
+				folder
+			)
+
+			marker.Shape = Enum.PartType.Ball
+			marker.Material = Enum.Material.Neon
+			marker.Transparency = if visible then 0.45 else 1
+			marker.CanCollide = false
+			marker.CanQuery = false
+			marker.CanTouch = false
+			marker.CastShadow = false
+			marker:SetAttribute("Order", index)
+		end
+	end
+end
+
 function MapBuilder.build(config: Types.MapConfig): BuiltMap
 	MapBuilder.clear()
 
@@ -260,6 +304,7 @@ function MapBuilder.build(config: Types.MapConfig): BuiltMap
 	folder.Name = Constants.MAP_FOLDER
 
 	buildGround(config, folder)
+	buildWaypointMarkers(config, folder)
 	buildSurfaces(config, folder)
 	buildDecor(config, folder)
 	buildBaseMarker(config, folder)
