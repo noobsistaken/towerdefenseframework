@@ -14,9 +14,11 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
+local Motion = require(script.Parent.Motion)
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
@@ -29,6 +31,13 @@ local useAtom = require(ReplicatedStorage.Shared.useAtom)
 local e = React.createElement
 
 local localPlayer = Players.LocalPlayer
+
+--- Whether this device can hover at all.
+---
+--- Read once: a session does not gain or lose a mouse. On a device without
+--- one there is nothing to hover, so gating the upgrade preview behind hover
+--- would make it permanently unreachable - it stays visible there instead.
+local HOVER_AVAILABLE = UserInputService.MouseEnabled
 
 type TowerInfo = {
 	towerId: number,
@@ -159,10 +168,14 @@ type ActionProps = {
 	textColor: Color3,
 	layoutOrder: number,
 	onActivated: () -> (),
+	--- Both present only on the button that reveals the preview panel. The
+	--- other buttons render exactly as before.
+	onHover: ((hovering: boolean) -> ())?,
+	glowRef: { current: UIStroke? }?,
 }
 
 local function ActionButton(props: ActionProps)
-	return e("TextButton", {
+	local attributes: { [any]: any } = {
 		Size = UDim2.new(1, 0, 0, 30),
 		BackgroundColor3 = props.color,
 		BorderSizePixel = 0,
@@ -172,9 +185,43 @@ local function ActionButton(props: ActionProps)
 		TextSize = 13,
 		LayoutOrder = props.layoutOrder,
 		[React.Event.Activated] = props.onActivated,
-	}, {
+	}
+
+	local children: { [string]: any } = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-	})
+	}
+
+	local onHover = props.onHover
+
+	if onHover ~= nil then
+		attributes[React.Event.MouseEnter] = function()
+			onHover(true)
+		end
+
+		attributes[React.Event.MouseLeave] = function()
+			onHover(false)
+		end
+
+		-- AutoButtonColor is deliberately left at its default. The engine tint
+		-- is the only press feedback this button has, and it is the one button
+		-- here that spends money; the stroke is added to it, not swapped for it.
+		--
+		-- Off-white rather than the accent, because the button's own fill IS
+		-- the accent when the upgrade is affordable - an accent stroke would be
+		-- brightest on the state where the button cannot be pressed.
+		--
+		-- Every prop here is constant, so React writes them once at mount and
+		-- never again, leaving Transparency ours to animate. See Motion.luau.
+		children.glow = e("UIStroke", {
+			ref = props.glowRef,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = Theme.TEXT,
+			Thickness = 1.5,
+			Transparency = 1,
+		})
+	end
+
+	return e("TextButton", attributes, children)
 end
 
 --- Draws a flat disc showing the selected tower's range.
@@ -305,6 +352,88 @@ local function rateText(fireRate: number): string
 	return string.format("%.2f/s", fireRate)
 end
 
+--- Fades the upgrade preview in while the UPGRADE button is hovered.
+---
+--- FADE, not a height wipe. The panel keeps its full layout footprint whether
+--- shown or hidden, so the shell's height never changes and the UPGRADE button
+--- cannot move out from under the cursor. A wipe would shorten the shell,
+--- shift the button down, fire MouseLeave, hide the panel, move the button
+--- back under the cursor - a flicker loop, at whatever rate the tween runs.
+---
+--- GroupTransparency is declared as a CONSTANT 1 on the CanvasGroup, so React
+--- writes it once at mount and never again. That gives the correct hidden
+--- initial state without an imperative first paint, and leaves the property
+--- free to animate. See the rule in Motion.luau.
+local function useHoverReveal(
+	towerId: number?,
+	hasPreview: boolean
+): ({ current: CanvasGroup? }, { current: UIStroke? }, (boolean) -> ())
+	local previewRef = React.useRef(nil :: CanvasGroup?)
+	local glowRef = React.useRef(nil :: UIStroke?)
+	local previewTween = React.useRef(nil :: Motion.Handle)
+	local glowTween = React.useRef(nil :: Motion.Handle)
+
+	local setHovered = React.useCallback(function(hovering: boolean)
+		local preview = previewRef.current
+		local glow = glowRef.current
+
+		if preview ~= nil then
+			previewTween.current = Motion.retarget(
+				previewTween.current,
+				preview,
+				Theme.MOTION_REVEAL,
+				{ GroupTransparency = if hovering then 0 else 1 }
+			)
+		end
+
+		if glow ~= nil then
+			glowTween.current = Motion.retarget(
+				glowTween.current,
+				glow,
+				Theme.MOTION_QUICK,
+				{ Transparency = if hovering then 0.25 else 1 }
+			)
+		end
+	end, {})
+
+	-- Keyed on hasPreview as well as the tower, and that second key is not
+	-- decoration. Upgrading to max level unmounts BOTH animated instances
+	-- while towerId stays the same, so a tower-only key would never re-run and
+	-- would leave live tweens writing to destroyed instances.
+	--
+	-- Selecting a different tower is the other case: React reuses the same
+	-- button and CanvasGroup, so MouseLeave never fires and the panel would
+	-- stay visible on a tower the cursor is nowhere near.
+	React.useEffect(function(): () -> ()
+		local preview = previewRef.current
+		local glow = glowRef.current
+
+		Motion.stop(previewTween.current)
+		Motion.stop(glowTween.current)
+		previewTween.current = nil
+		glowTween.current = nil
+
+		if preview ~= nil then
+			preview.GroupTransparency = if HOVER_AVAILABLE then 1 else 0
+		end
+
+		if glow ~= nil then
+			glow.Transparency = 1
+		end
+
+		return function()
+			Motion.stop(previewTween.current)
+			Motion.stop(glowTween.current)
+			previewTween.current = nil
+			glowTween.current = nil
+		end
+		-- Numbers only: the dependency array is homogeneous, so the boolean
+		-- is carried as 1/0 rather than as itself.
+	end, { towerId or 0, if hasPreview then 1 else 0 })
+
+	return previewRef, glowRef, setHovered
+end
+
 local function TowerInspector()
 	local selectedId = useAtom(atoms.selectedTowerId)
 	local cash = useAtom(atoms.cash)
@@ -316,6 +445,15 @@ local function TowerInspector()
 	local level = if definition ~= nil and info ~= nil then Towers.levelAt(definition, info.level) else nil
 
 	useRangeDisc(if info ~= nil then info.towerId else nil, if level ~= nil then level.range else nil)
+
+	-- Whether a preview will render at all, computed here because the hook
+	-- below has to be called before any early return.
+	local hasPreview = info ~= nil
+		and definition ~= nil
+		and info.ownerUserId == localPlayer.UserId
+		and Towers.levelAt(definition, info.level + 1) ~= nil
+
+	local previewRef, glowRef, setHovered = useHoverReveal(if info ~= nil then info.towerId else nil, hasPreview)
 
 	if info == nil or definition == nil or level == nil then
 		return nil
@@ -398,6 +536,8 @@ local function TowerInspector()
 				color = if cash >= upgradeCost then Theme.ACCENT else Theme.DISABLED,
 				textColor = if cash >= upgradeCost then Theme.INVERSE else Theme.MUTED,
 				layoutOrder = 4,
+				onHover = if HOVER_AVAILABLE then setHovered else nil,
+				glowRef = if HOVER_AVAILABLE then glowRef else nil,
 				onActivated = function()
 					-- Fired regardless of the local affordability read. The
 					-- server is the authority; this button being dark is a
@@ -504,12 +644,20 @@ local function TowerInspector()
 			})
 		end
 
-		upgradePanel = e("Frame", {
+		-- A CanvasGroup rather than a Frame purely for GroupTransparency: it
+		-- fades the panel and everything in it as one surface, where fading a
+		-- Frame would leave every label inside it at full opacity.
+		--
+		-- Same size, same children, same layout slot as the Frame it replaces,
+		-- so the reveal costs no reflow.
+		upgradePanel = e("CanvasGroup", {
+			ref = previewRef,
 			Size = UDim2.fromScale(1, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundColor3 = Theme.PANEL,
 			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 			BorderSizePixel = 0,
+			GroupTransparency = if HOVER_AVAILABLE then 1 else 0,
 			LayoutOrder = 1,
 		}, rows)
 	end

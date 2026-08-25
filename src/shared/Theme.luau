@@ -37,6 +37,15 @@ Theme.CORNER_SMALL = UDim.new(0, 6)
 Theme.FONT = Enum.Font.GothamBold
 Theme.FONT_BODY = Enum.Font.GothamMedium
 
+--- Motion. Here rather than in the component so an art pass retunes every
+--- transition from one file, the same reason the colours live here.
+---
+--- Both are short on purpose. This UI sits over a live wave, and a
+--- transition long enough to notice is a transition competing with the
+--- enemies for the player's attention.
+Theme.MOTION_QUICK = TweenInfo.new(0.10, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+Theme.MOTION_REVEAL = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
 --- Human-readable text for each placement refusal. The server sends the
 --- reason as an enum, so this is the only place the wording lives.
 Theme.REJECTION_TEXT = {
