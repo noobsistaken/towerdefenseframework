@@ -80,6 +80,14 @@ type Entry = {
 	--- Present only while the enemy is enraged. Nothing else adorns these
 	--- parts, so its presence IS the on/off state.
 	highlight: Highlight?,
+	--- The rig child, resolved lazily: a rigged enemy's Model can replicate
+	--- AFTER its host part, so this is re-checked on every refresh rather
+	--- than read once at attach.
+	rig: Model?,
+	--- Original colours of the rig's parts, held only while a status tint is
+	--- painted over them and restored on detach - a pooled rig must not be
+	--- handed to its next occupant pre-painted.
+	rigColors: { [BasePart]: Color3 }?,
 }
 
 --- Reads a numeric attribute, or nil if absent or the wrong type.
@@ -125,16 +133,74 @@ local function tintFor(encoded: string): Color3?
 	return nil
 end
 
---- Repaints one enemy to its effect tint, or back to its definition colour
---- when nothing is live.
+--- Finds the rig child once it has replicated. Cheap, event-driven - this
+--- runs on attribute changes, not per frame.
+local function resolveRig(entry: Entry)
+	if entry.rig ~= nil then
+		return
+	end
+
+	local rig = entry.part:FindFirstChild("Rig")
+
+	if rig ~= nil and rig:IsA("Model") then
+		entry.rig = rig
+	end
+end
+
+--- Repaints one enemy to its effect tint, or back to its base look when
+--- nothing is live.
 ---
---- The part's Name is its definition id (EnemyView sets both), so the base
---- colour is recoverable without spending a second attribute on it. Writing
---- Color on the client is local-only; the server sets it once at spawn and
---- never again, so this does not fight replication.
-local function refreshTint(part: BasePart)
+--- A boxed enemy is tinted through part.Color, with the base colour
+--- recoverable from its definition (the part's Name is its definition id).
+--- A rigged enemy is tinted across the rig's parts instead - the host is
+--- invisible under a rig, so painting it would show nothing - and the
+--- originals are cached so clearing restores the real look. On a textured
+--- MeshPart the tint multiplies the texture rather than replacing it, which
+--- reads as a wash of the effect colour: subtler than the box, still
+--- legible.
+local function refreshTint(entry: Entry)
+	local part = entry.part
+	resolveRig(entry)
+
 	local encoded = stringAttribute(part, Constants.ATTR_STATUS_EFFECTS)
 	local tint = if encoded ~= nil then tintFor(encoded) else nil
+	local rig = entry.rig
+
+	if rig ~= nil then
+		if tint ~= nil then
+			if entry.rigColors == nil then
+				local originals: { [BasePart]: Color3 } = {}
+
+				for _, descendant in rig:GetDescendants() do
+					if descendant:IsA("BasePart") then
+						originals[descendant] = descendant.Color
+					end
+				end
+
+				entry.rigColors = originals
+			end
+
+			for _, descendant in rig:GetDescendants() do
+				if descendant:IsA("BasePart") then
+					descendant.Color = tint
+				end
+			end
+
+			return
+		end
+
+		local originals = entry.rigColors
+
+		if originals ~= nil then
+			for rigPart, original in originals do
+				rigPart.Color = original
+			end
+
+			entry.rigColors = nil
+		end
+
+		return
+	end
 
 	if tint ~= nil then
 		part.Color = tint
@@ -168,13 +234,22 @@ local function refreshEnrage(part: BasePart, entry: Entry)
 		return
 	end
 
+	resolveRig(entry)
+
+	-- The rig when there is one: a Highlight on the invisible host outlines
+	-- nothing. Re-adorned on every refresh rather than latched at creation,
+	-- because the rig Model can replicate to this client AFTER the enrage
+	-- flag does.
+	local adornee: Instance = if entry.rig ~= nil then entry.rig :: Instance else part
+
 	if entry.highlight ~= nil then
+		entry.highlight.Adornee = adornee
 		return
 	end
 
 	local highlight = Instance.new("Highlight")
 	highlight.Name = "TDEnrage"
-	highlight.Adornee = part
+	highlight.Adornee = adornee
 	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.FillColor = ENRAGE_FILL
 	highlight.FillTransparency = ENRAGE_FILL_MAX
@@ -323,6 +398,18 @@ function EnemyVisuals.start(): () -> ()
 			entry.highlight = nil
 		end
 
+		-- Same reasoning for a tint: the rig rides the pooled part back to
+		-- the pool, and the next occupant must not inherit a bleed wash.
+		local originals = entry.rigColors
+
+		if originals ~= nil then
+			for rigPart, original in originals do
+				rigPart.Color = original
+			end
+
+			entry.rigColors = nil
+		end
+
 		-- Health at or below zero when the part goes away means a kill.
 		-- Inferred rather than sent: a death event per enemy would be
 		-- hundreds of unreliable packets a wave for something the client can
@@ -394,11 +481,11 @@ function EnemyVisuals.start(): () -> ()
 			fill.Size = UDim2.fromScale(math.clamp(current / entry.maxHealth, 0, 1), 1)
 		end)
 
-		refreshTint(child)
+		refreshTint(entry)
 		refreshEnrage(child, entry)
 
 		entry.statusConnection = child:GetAttributeChangedSignal(Constants.ATTR_STATUS_EFFECTS):Connect(function()
-			refreshTint(child)
+			refreshTint(entry)
 		end)
 
 		entry.enrageConnection = child:GetAttributeChangedSignal(Constants.ATTR_ENRAGED):Connect(function()

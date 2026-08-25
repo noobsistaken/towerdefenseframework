@@ -140,6 +140,11 @@ export type EnemyDefinition = {
 	color: Color3,
 	--- Height of the model's centre above the path line.
 	hoverHeight: number,
+	--- Name of a rig template in ServerStorage.RigTemplates to wear instead
+	--- of the coloured box. Optional on purpose: templates live in the place
+	--- rather than the repo, so a missing one degrades to the box, never to
+	--- an error.
+	rig: string?,
 	--- Multiplier applied to incoming effect duration, keyed by effect id.
 	--- 0 means immune, 0.5 means half duration, absent means 1.
 	resistances: { [string]: number },

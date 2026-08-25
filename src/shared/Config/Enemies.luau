@@ -33,6 +33,7 @@ Enemies.DEFINITIONS = {
 		introducesAtWave = 1,
 		hitboxSize = Vector3.new(2, 4, 2),
 		color = Color3.fromRGB(106, 140, 88),
+		rig = "noobsv8",
 		hoverHeight = 2,
 		resistances = {},
 	},
@@ -100,6 +101,7 @@ Enemies.DEFINITIONS = {
 	Titan = {
 		id = "Titan",
 		displayName = "Titan",
+		rig = "noobsv8",
 		category = "Ground" :: Types.EnemyCategory,
 		baseHealth = 6000,
 		baseSpeed = 9,

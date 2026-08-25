@@ -54,6 +54,16 @@ function Rigs.find(name: string): Model?
 	return if template ~= nil and template:IsA("Model") then template else nil
 end
 
+--- Attribute on an attached rig naming its template, so a pooled part that
+--- comes back still dressed can be matched against its next occupant.
+Rigs.TEMPLATE_ATTR = "RigTemplate"
+
+--- Attribute recording the host height the rig was fitted to. Two enemy
+--- types can share one template at very different sizes - a recycled 4-stud
+--- Zombie rig must not be kept on an 11-stud Titan just because the template
+--- name matches.
+Rigs.FITTED_ATTR = "FittedHeight"
+
 --- Removes any rig previously attached to `host`.
 local function clearRig(host: BasePart)
 	local existing = host:FindFirstChild(Rigs.CHILD_NAME)
@@ -131,6 +141,136 @@ function Rigs.attachStatic(host: BasePart, templateName: string, rotationY: numb
 	fit(rig, host, rotationY)
 
 	return true
+end
+
+--- Removes any rig from `host`. For callers outside this module - the enemy
+--- view hands pooled parts between rigged and unrigged occupants.
+function Rigs.clear(host: BasePart)
+	clearRig(host)
+end
+
+--- The parts a moving rig contributes to the per-frame bulk move, each with
+--- its offset from the host.
+export type Offsets = { { part: BasePart, offset: CFrame } }
+
+local function offsetsFor(host: BasePart, rig: Model): Offsets
+	local offsets: Offsets = {}
+	local hostInverse = host.CFrame:Inverse()
+
+	for _, descendant in rig:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			table.insert(offsets, { part = descendant, offset = hostInverse * descendant.CFrame })
+		end
+	end
+
+	return offsets
+end
+
+--- Dresses `host` in `templateName`, for a host that MOVES, and returns the
+--- offsets the mover must carry. nil means no rig - keep the box visible.
+---
+--- NO WELDS OF ANY KIND, and that is a measured decision, not a style. The
+--- enemy mover is a single workspace:BulkMoveTo, and BulkMoveTo moves
+--- exactly the parts in its list - nothing attached to them. Both attachment
+--- mechanisms were tried against the live game and both failed the same way,
+--- the rig frozen at its attach point while the host walked away at 12
+--- studs/s: a WeldConstraint is solved by physics and a teleported anchored
+--- part never wakes the solver, and a classic Weld joint fared no better
+--- under BulkMoveTo. So the rig parts stay ANCHORED - consistent with this
+--- project simulating nothing by physics - and EnemyView appends them to the
+--- same bulk move using the offsets returned here.
+---
+--- Two more measured facts shape the fitting: Model.WorldPivot is IGNORED
+--- while PrimaryPart is set, and an unassigned WorldPivot is the ORIGIN, not
+--- the bounding-box centre - either wrong state sinks the rig into the
+--- walkway.
+function Rigs.attachMoving(host: BasePart, templateName: string): Offsets?
+	local existing = host:FindFirstChild(Rigs.CHILD_NAME)
+
+	-- A pooled part may come back still wearing the right rig at the right
+	-- size. Keep it - clone-and-fit is the expensive path - but recompute the
+	-- offsets from where things stand rather than trusting stored state.
+	if
+		existing ~= nil
+		and existing:IsA("Model")
+		and existing:GetAttribute(Rigs.TEMPLATE_ATTR) == templateName
+		and existing:GetAttribute(Rigs.FITTED_ATTR) == host.Size.Y
+	then
+		return offsetsFor(host, existing)
+	end
+
+	clearRig(host)
+
+	local template = Rigs.find(templateName)
+
+	if template == nil then
+		return nil
+	end
+
+	local rig = template:Clone()
+	rig.Name = Rigs.CHILD_NAME
+	rig:SetAttribute(Rigs.TEMPLATE_ATTR, templateName)
+	rig:SetAttribute(Rigs.FITTED_ATTR, host.Size.Y)
+
+	-- Same belt-and-braces as attachStatic, plus every joint and constraint:
+	-- the rig is a statue moved by explicit CFrames, and a surviving Motor6D
+	-- or BallSocketConstraint leaves limbs something else thinks it owns.
+	for _, descendant in rig:GetDescendants() do
+		if
+			descendant:IsA("BaseScript")
+			or descendant:IsA("ModuleScript")
+			or descendant:IsA("Humanoid")
+			or descendant:IsA("JointInstance")
+			or descendant:IsA("Constraint")
+			or descendant:IsA("WeldConstraint")
+		then
+			descendant:Destroy()
+		end
+	end
+
+	-- Refuse a rig with no visible geometry. The caller goes transparent on
+	-- success, so accepting an all-invisible rig renders the enemy as
+	-- NOTHING - towers keep firing at empty air and the player learns the
+	-- game is broken instead of the template.
+	local visible = false
+
+	for _, descendant in rig:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			if descendant.Transparency < 1 then
+				visible = true
+			end
+
+			descendant.Anchored = true
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			-- The host is what splash and any future query finds; a rig limb
+			-- answering raycasts would double-count the enemy.
+			descendant.CanQuery = false
+			descendant.CastShadow = false
+		end
+	end
+
+	if not visible then
+		rig:Destroy()
+		return nil
+	end
+
+	rig.PrimaryPart = nil
+
+	local boxCFrame, boxSize = rig:GetBoundingBox()
+	rig.WorldPivot = boxCFrame
+
+	if boxSize.Y > 0.01 then
+		rig:ScaleTo(host.Size.Y / boxSize.Y)
+	end
+
+	rig:PivotTo(host.CFrame)
+
+	local offsets = offsetsFor(host, rig)
+
+	rig.Parent = host
+
+	return offsets
 end
 
 --- Re-fits an already-attached rig after its host changed size, e.g. on an

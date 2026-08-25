@@ -26,6 +26,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
 local EnemySimulation = require(script.Parent.EnemySimulation)
 local PartPool = require(script.Parent.PartPool)
+local Rigs = require(script.Parent.Parent.Systems.Rigs)
 
 local EnemyView = {}
 EnemyView.__index = EnemyView
@@ -43,6 +44,11 @@ export type View = typeof(setmetatable(
 		lastEffects: { [Types.EnemyId]: string? },
 		--- Last enrage flag written per enemy. Same reason again.
 		lastEnraged: { [Types.EnemyId]: boolean? },
+		--- Enemies currently wearing a rig, and each rig's parts with their
+		--- offsets from the host - the extra entries sync() feeds into the
+		--- same BulkMoveTo, because BulkMoveTo moves only what it is given.
+		riggedCount: number,
+		rigOffsets: { [Part]: Rigs.Offsets? },
 		unsubscribeRemoved: EnemySimulation.Unsubscribe?,
 	},
 	EnemyView
@@ -51,6 +57,19 @@ export type View = typeof(setmetatable(
 --- FireCFrameChanged rather than FireAllEvents: the cheaper of the two modes
 --- the enum offers, and nothing here depends on the full event set.
 local MOVE_MODE = Enum.BulkMoveMode.FireCFrameChanged
+
+--- Hard ceiling on enemies wearing a rig at once. Beyond it new spawns fall
+--- back to the coloured box - degradation, never breakage.
+---
+--- A single blunt cap rather than the per-type budgets a concurrency sweep
+--- proposed, because that sweep was refuted on review: it omitted the Runner
+--- sprint, ignored the shipped Slow effect inflating time-on-path, and its
+--- headline cost model had the axis backwards - measured cost tracks PART
+--- count, not root count. 64 rigs at ~17 visible parts each is roughly
+--- 1,100 extra parts, which is conservative on the numbers that DID hold up.
+--- The honest way to raise this is profiling a real wave in Studio, not a
+--- bigger estimate.
+local MAX_RIGGED = 64
 
 function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance): View
 	local container = Instance.new("Folder")
@@ -68,6 +87,8 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 		lastHealth = {},
 		lastEffects = {},
 		lastEnraged = {},
+		riggedCount = 0,
+		rigOffsets = {},
 		unsubscribeRemoved = nil,
 	}, EnemyView)
 
@@ -123,7 +144,26 @@ local function acquireFor(self: View, enemy: BaseEnemy.Enemy): Part
 	fresh.Name = definition.id
 	fresh.Size = definition.hitboxSize
 	fresh.Color = definition.color
-	fresh.Transparency = 0
+
+	-- Rig or box. Attach reuses a matching rig a pooled part came back with,
+	-- and refuses a template with no visible geometry, so a non-nil result
+	-- genuinely means "there is something to look at" before the host goes
+	-- invisible.
+	local offsets: Rigs.Offsets? = nil
+
+	if definition.rig ~= nil and self.riggedCount < MAX_RIGGED then
+		offsets = Rigs.attachMoving(fresh, definition.rig)
+	end
+
+	if offsets ~= nil then
+		self.riggedCount += 1
+		self.rigOffsets[fresh] = offsets
+	else
+		-- A pooled part can come back wearing the previous occupant's rig.
+		Rigs.clear(fresh)
+	end
+
+	fresh.Transparency = if offsets ~= nil then 1 else 0
 	fresh:SetAttribute(Constants.ATTR_ENEMY_ID, enemy.id)
 	fresh:SetAttribute(Constants.ATTR_MAX_HEALTH, enemy.maxHealth)
 	fresh:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
@@ -149,6 +189,16 @@ function EnemyView.releaseEnemy(self: View, id: Types.EnemyId)
 	self.lastHealth[id] = nil
 	self.lastEffects[id] = nil
 	self.lastEnraged[id] = nil
+
+	-- The rig stays on the pooled part - recycling it is the cheap path - but
+	-- it stops counting toward the cap, which bounds what is on the FIELD.
+	-- The offsets go: a re-acquire recomputes them, and a part the pool
+	-- destroys must not be pinned by this table.
+	if self.rigOffsets[part] ~= nil then
+		self.rigOffsets[part] = nil
+		self.riggedCount -= 1
+	end
+
 	self.pool:release(part)
 end
 
@@ -189,9 +239,22 @@ function EnemyView.sync(self: View)
 
 		local position = simulation:positionOf(enemy)
 		local facing = simulation:directionOf(enemy)
+		local target = CFrame.lookAt(position, position + facing)
 
 		table.insert(movingParts, part)
-		table.insert(targetFrames, CFrame.lookAt(position, position + facing))
+		table.insert(targetFrames, target)
+
+		-- The rig rides in the SAME bulk move. BulkMoveTo moves exactly the
+		-- parts it is handed - measured, twice, against both weld mechanisms
+		-- - so each rig part is listed explicitly at its cached offset.
+		local rigParts = self.rigOffsets[part]
+
+		if rigParts ~= nil then
+			for _, entry in rigParts do
+				table.insert(movingParts, entry.part)
+				table.insert(targetFrames, target * entry.offset)
+			end
+		end
 	end
 
 	if #movingParts > 0 then
