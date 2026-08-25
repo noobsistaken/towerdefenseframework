@@ -149,54 +149,119 @@ function Rigs.clear(host: BasePart)
 	clearRig(host)
 end
 
---- The parts a moving rig contributes to the per-frame bulk move, each with
---- its offset from the host.
-export type Offsets = { { part: BasePart, offset: CFrame } }
+--- A moving rig's handle: the one part EnemyView drives directly, at its
+--- offset from the host.
+export type MovingRig = { root: BasePart, offset: CFrame }
 
-local function offsetsFor(host: BasePart, rig: Model): Offsets
-	local offsets: Offsets = {}
-	local hostInverse = host.CFrame:Inverse()
+--- The walk cycle every walking rig plays. One constant rather than config
+--- because exactly one rig walks today; move it to the template (an
+--- attribute) or the enemy definition when a second walking rig exists.
+---
+--- Roblox's own R15 walk. Verified live before being relied on: it loads and
+--- plays on the noobsv8 rig's AnimationConstraints with NO Humanoid present,
+--- driven by a plain AnimationController.
+local WALK_ANIMATION = "rbxassetid://507777826"
 
-	for _, descendant in rig:GetDescendants() do
-		if descendant:IsA("BasePart") then
-			table.insert(offsets, { part = descendant, offset = hostInverse * descendant.CFrame })
-		end
+--- Playback speed that reads as "walking" for a standard avatar moving at
+--- 16 studs/s; scaled by each enemy's real speed so feet roughly track the
+--- ground instead of moonwalking.
+local WALK_REFERENCE_SPEED = 16
+
+local function playWalk(rig: Model, walkSpeed: number)
+	-- Fresh non-optional locals rather than reassigning the FindFirstChild
+	-- result: strict mode does not refine a variable through an assignment
+	-- inside a branch, so the reassigning form stays optional and fails.
+	local foundController = rig:FindFirstChildWhichIsA("AnimationController")
+	local controller: AnimationController
+
+	if foundController ~= nil then
+		controller = foundController
+	else
+		controller = Instance.new("AnimationController")
+		controller.Parent = rig
 	end
 
-	return offsets
+	local foundAnimator = controller:FindFirstChildWhichIsA("Animator")
+	local animator: Animator
+
+	if foundAnimator ~= nil then
+		animator = foundAnimator
+	else
+		animator = Instance.new("Animator")
+		animator.Parent = controller
+	end
+
+	-- A pooled rig comes back with its track still in the playing state, so
+	-- only start one when nothing is playing - a second Play would stack.
+	if #animator:GetPlayingAnimationTracks() > 0 then
+		return
+	end
+
+	local animation = Instance.new("Animation")
+	animation.AnimationId = WALK_ANIMATION
+
+	local track = animator:LoadAnimation(animation)
+	track.Looped = true
+	track:Play()
+	track:AdjustSpeed(walkSpeed / WALK_REFERENCE_SPEED)
 end
 
---- Dresses `host` in `templateName`, for a host that MOVES, and returns the
---- offsets the mover must carry. nil means no rig - keep the box visible.
+local function rootOf(rig: Model): BasePart?
+	local humanoidRoot = rig:FindFirstChild("HumanoidRootPart")
+
+	if humanoidRoot ~= nil and humanoidRoot:IsA("BasePart") then
+		return humanoidRoot
+	end
+
+	if rig.PrimaryPart ~= nil then
+		return rig.PrimaryPart
+	end
+
+	return rig:FindFirstChildWhichIsA("BasePart")
+end
+
+--- Dresses `host` in `templateName` for a host that MOVES, plays its walk
+--- cycle, and returns the handle the mover needs. nil means no rig - keep
+--- the box visible.
 ---
---- NO WELDS OF ANY KIND, and that is a measured decision, not a style. The
---- enemy mover is a single workspace:BulkMoveTo, and BulkMoveTo moves
---- exactly the parts in its list - nothing attached to them. Both attachment
---- mechanisms were tried against the live game and both failed the same way,
---- the rig frozen at its attach point while the host walked away at 12
---- studs/s: a WeldConstraint is solved by physics and a teleported anchored
---- part never wakes the solver, and a classic Weld joint fared no better
---- under BulkMoveTo. So the rig parts stay ANCHORED - consistent with this
---- project simulating nothing by physics - and EnemyView appends them to the
---- same bulk move using the offsets returned here.
+--- HOW A MOVING RIG MOVES, all of it measured against the live game rather
+--- than assumed, because the first two designs failed exactly here:
 ---
---- Two more measured facts shape the fitting: Model.WorldPivot is IGNORED
---- while PrimaryPart is set, and an unassigned WorldPivot is the ORIGIN, not
---- the bounding-box centre - either wrong state sinks the rig into the
---- walkway.
-function Rigs.attachMoving(host: BasePart, templateName: string): Offsets?
+--- * BulkMoveTo moves ONLY the parts in its list. A WeldConstraint never
+---   wakes, a classic Weld joint fares no better - both left the rig frozen
+---   while its host walked away at 12 studs/s.
+--- * A DIRECT CFrame write on a rig's anchored root DOES carry every jointed
+---   limb with it: measured 24.98 of 25 studs. So EnemyView keeps the host
+---   in its bulk move and drives each rig root with one direct write.
+--- * The rig's AnimationConstraints, kept rather than stripped, are driven
+---   by a plain AnimationController + Animator with NO Humanoid - so the
+---   walk cycle animates limbs relative to the root the mover is driving.
+---   A Humanoid would be a second authority over position, which is the one
+---   thing D2 forbids.
+--- * BallSocketConstraints are stripped: they are ragdoll physics, and with
+---   the Humanoid gone they would fight the animation for the limbs.
+---
+--- Model.WorldPivot is IGNORED while PrimaryPart is set, and an unassigned
+--- WorldPivot is the ORIGIN - either wrong state sinks the rig into the
+--- walkway. Also measured.
+function Rigs.attachMoving(host: BasePart, templateName: string, walkSpeed: number): MovingRig?
 	local existing = host:FindFirstChild(Rigs.CHILD_NAME)
 
 	-- A pooled part may come back still wearing the right rig at the right
 	-- size. Keep it - clone-and-fit is the expensive path - but recompute the
-	-- offsets from where things stand rather than trusting stored state.
+	-- handle from where things stand rather than trusting stored state.
 	if
 		existing ~= nil
 		and existing:IsA("Model")
 		and existing:GetAttribute(Rigs.TEMPLATE_ATTR) == templateName
 		and existing:GetAttribute(Rigs.FITTED_ATTR) == host.Size.Y
 	then
-		return offsetsFor(host, existing)
+		local keptRoot = rootOf(existing)
+
+		if keptRoot ~= nil then
+			playWalk(existing, walkSpeed)
+			return { root = keptRoot, offset = host.CFrame:Inverse() * keptRoot.CFrame }
+		end
 	end
 
 	clearRig(host)
@@ -212,20 +277,27 @@ function Rigs.attachMoving(host: BasePart, templateName: string): Offsets?
 	rig:SetAttribute(Rigs.TEMPLATE_ATTR, templateName)
 	rig:SetAttribute(Rigs.FITTED_ATTR, host.Size.Y)
 
-	-- Same belt-and-braces as attachStatic, plus every joint and constraint:
-	-- the rig is a statue moved by explicit CFrames, and a surviving Motor6D
-	-- or BallSocketConstraint leaves limbs something else thinks it owns.
+	-- Belt and braces on scripts and Humanoids, then the ragdoll physics.
+	-- KEPT deliberately: AnimationConstraint and Motor6D (the animation
+	-- drives them), Weld and RigidConstraint (accessories hang from them),
+	-- and the Attachments they all reference.
 	for _, descendant in rig:GetDescendants() do
 		if
 			descendant:IsA("BaseScript")
 			or descendant:IsA("ModuleScript")
 			or descendant:IsA("Humanoid")
-			or descendant:IsA("JointInstance")
-			or descendant:IsA("Constraint")
-			or descendant:IsA("WeldConstraint")
+			or descendant:IsA("BallSocketConstraint")
+			or descendant:IsA("NoCollisionConstraint")
 		then
 			descendant:Destroy()
 		end
+	end
+
+	local root = rootOf(rig)
+
+	if root == nil then
+		rig:Destroy()
+		return nil
 	end
 
 	-- Refuse a rig with no visible geometry. The caller goes transparent on
@@ -240,7 +312,11 @@ function Rigs.attachMoving(host: BasePart, templateName: string): Offsets?
 				visible = true
 			end
 
-			descendant.Anchored = true
+			-- Root anchored, limbs free: the limbs hang off the root through
+			-- the animation joints, which is what lets the walk cycle move
+			-- them while the root is driven along the path.
+			descendant.Anchored = descendant == root
+			descendant.Massless = true
 			descendant.CanCollide = false
 			descendant.CanTouch = false
 			-- The host is what splash and any future query finds; a rig limb
@@ -266,11 +342,12 @@ function Rigs.attachMoving(host: BasePart, templateName: string): Offsets?
 
 	rig:PivotTo(host.CFrame)
 
-	local offsets = offsetsFor(host, rig)
+	local offset = host.CFrame:Inverse() * root.CFrame
 
 	rig.Parent = host
+	playWalk(rig, walkSpeed)
 
-	return offsets
+	return { root = root, offset = offset }
 end
 
 --- Re-fits an already-attached rig after its host changed size, e.g. on an

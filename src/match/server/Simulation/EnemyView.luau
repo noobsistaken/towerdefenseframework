@@ -44,11 +44,11 @@ export type View = typeof(setmetatable(
 		lastEffects: { [Types.EnemyId]: string? },
 		--- Last enrage flag written per enemy. Same reason again.
 		lastEnraged: { [Types.EnemyId]: boolean? },
-		--- Enemies currently wearing a rig, and each rig's parts with their
-		--- offsets from the host - the extra entries sync() feeds into the
-		--- same BulkMoveTo, because BulkMoveTo moves only what it is given.
+		--- Enemies currently wearing a rig, and each rig's root - driven with
+		--- a DIRECT CFrame write per frame, because a direct write carries the
+		--- whole jointed assembly and BulkMoveTo does not. Both measured.
 		riggedCount: number,
-		rigOffsets: { [Part]: Rigs.Offsets? },
+		rigRoots: { [Part]: Rigs.MovingRig? },
 		unsubscribeRemoved: EnemySimulation.Unsubscribe?,
 	},
 	EnemyView
@@ -88,7 +88,7 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 		lastEffects = {},
 		lastEnraged = {},
 		riggedCount = 0,
-		rigOffsets = {},
+		rigRoots = {},
 		unsubscribeRemoved = nil,
 	}, EnemyView)
 
@@ -149,21 +149,21 @@ local function acquireFor(self: View, enemy: BaseEnemy.Enemy): Part
 	-- and refuses a template with no visible geometry, so a non-nil result
 	-- genuinely means "there is something to look at" before the host goes
 	-- invisible.
-	local offsets: Rigs.Offsets? = nil
+	local movingRig: Rigs.MovingRig? = nil
 
 	if definition.rig ~= nil and self.riggedCount < MAX_RIGGED then
-		offsets = Rigs.attachMoving(fresh, definition.rig)
+		movingRig = Rigs.attachMoving(fresh, definition.rig, definition.baseSpeed)
 	end
 
-	if offsets ~= nil then
+	if movingRig ~= nil then
 		self.riggedCount += 1
-		self.rigOffsets[fresh] = offsets
+		self.rigRoots[fresh] = movingRig
 	else
 		-- A pooled part can come back wearing the previous occupant's rig.
 		Rigs.clear(fresh)
 	end
 
-	fresh.Transparency = if offsets ~= nil then 1 else 0
+	fresh.Transparency = if movingRig ~= nil then 1 else 0
 	fresh:SetAttribute(Constants.ATTR_ENEMY_ID, enemy.id)
 	fresh:SetAttribute(Constants.ATTR_MAX_HEALTH, enemy.maxHealth)
 	fresh:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
@@ -192,10 +192,10 @@ function EnemyView.releaseEnemy(self: View, id: Types.EnemyId)
 
 	-- The rig stays on the pooled part - recycling it is the cheap path - but
 	-- it stops counting toward the cap, which bounds what is on the FIELD.
-	-- The offsets go: a re-acquire recomputes them, and a part the pool
+	-- The handle goes: a re-acquire recomputes it, and a part the pool
 	-- destroys must not be pinned by this table.
-	if self.rigOffsets[part] ~= nil then
-		self.rigOffsets[part] = nil
+	if self.rigRoots[part] ~= nil then
+		self.rigRoots[part] = nil
 		self.riggedCount -= 1
 	end
 
@@ -244,16 +244,15 @@ function EnemyView.sync(self: View)
 		table.insert(movingParts, part)
 		table.insert(targetFrames, target)
 
-		-- The rig rides in the SAME bulk move. BulkMoveTo moves exactly the
-		-- parts it is handed - measured, twice, against both weld mechanisms
-		-- - so each rig part is listed explicitly at its cached offset.
-		local rigParts = self.rigOffsets[part]
+		-- The rig root gets a DIRECT write, not a bulk entry: a direct
+		-- CFrame write carries the whole jointed assembly - limbs, walk
+		-- animation and all - where BulkMoveTo moves only the parts it is
+		-- handed. Both halves measured live. One write per rigged enemy,
+		-- bounded by MAX_RIGGED.
+		local movingRig = self.rigRoots[part]
 
-		if rigParts ~= nil then
-			for _, entry in rigParts do
-				table.insert(movingParts, entry.part)
-				table.insert(targetFrames, target * entry.offset)
-			end
+		if movingRig ~= nil then
+			movingRig.root.CFrame = target * movingRig.offset
 		end
 	end
 
