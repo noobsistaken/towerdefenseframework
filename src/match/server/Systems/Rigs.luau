@@ -162,6 +162,13 @@ export type MovingRig = { root: BasePart, offset: CFrame }
 --- driven by a plain AnimationController.
 local WALK_ANIMATION = "rbxassetid://507777826"
 
+--- A template can override the walk cycle with a `WalkAnimation` attribute -
+--- set at install, read here. Needed because animations bind to joints by
+--- NAME: the R15 walk drives AnimationConstraint rigs like noobsv8, while a
+--- Motor6D rig from the store answers to different joint names and gets its
+--- own id, chosen by measuring which animation actually moves its limbs.
+local WALK_ANIM_ATTR = "WalkAnimation"
+
 --- Playback speed that reads as "walking" for a standard avatar moving at
 --- 16 studs/s; scaled by each enemy's real speed so feet roughly track the
 --- ground instead of moonwalking.
@@ -198,7 +205,8 @@ local function playWalk(rig: Model, walkSpeed: number)
 	end
 
 	local animation = Instance.new("Animation")
-	animation.AnimationId = WALK_ANIMATION
+	local override = rig:GetAttribute(WALK_ANIM_ATTR)
+	animation.AnimationId = if type(override) == "string" and override ~= "" then override else WALK_ANIMATION
 
 	local track = animator:LoadAnimation(animation)
 	track.Looped = true

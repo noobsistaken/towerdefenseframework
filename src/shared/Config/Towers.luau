@@ -106,7 +106,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		-- along is usually leading the pack rather than sitting in it.
 		defaultTargeting = "Last" :: Types.TargetingMode,
 		perPlayerCap = 8,
-		rig = "ArmyNoobSoldier",
+		rig = "SwatSoldier",
 		levels = {
 			{
 				cost = 400,
@@ -154,7 +154,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(7, 7),
 		defaultTargeting = "Strongest" :: Types.TargetingMode,
 		perPlayerCap = 8,
-		rig = "ArmyNoobSoldier",
+		rig = "VDVSoldier",
 		levels = {
 			{
 				cost = 350,
@@ -208,7 +208,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(8, 8),
 		defaultTargeting = "First" :: Types.TargetingMode,
 		perPlayerCap = 0,
-		rig = "ArmyNoobSoldier",
+		rig = "WinterSoldier",
 		levels = {
 			{
 				cost = 300,
@@ -256,7 +256,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(6, 6),
 		defaultTargeting = "First" :: Types.TargetingMode,
 		perPlayerCap = 0,
-		rig = "ArmyNoobSoldier",
+		rig = "ArmySoldier2",
 		levels = {
 			{
 				cost = 250,
@@ -312,7 +312,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		-- the most time to tick before that happens.
 		defaultTargeting = "First" :: Types.TargetingMode,
 		perPlayerCap = 0,
-		rig = "ArmyNoobSoldier",
+		rig = "ToySoldier",
 		levels = {
 			{
 				cost = 275,
