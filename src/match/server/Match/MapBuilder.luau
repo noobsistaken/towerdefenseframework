@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Footprint = require(ReplicatedStorage.Shared.Footprint)
+local Pads = require(ReplicatedStorage.Shared.Config.Maps.Pads)
 local Path = require(ReplicatedStorage.Shared.Path)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -40,8 +41,18 @@ export type BuiltMap = {
 
 local PATH_WIDTH = 16
 local PATH_THICKNESS = 1
---- Walkway sits a hair above y = 0 so it does not z-fight the ground plane.
-local PATH_TOP_Y = 0.15
+--- Walkway sits a hair above the BUILDABLE APRON, not above the ground
+--- plane.
+---
+--- Every map lays one broad ground pad over its whole play area with its
+--- top at Pads.GROUND_TOP, and every lane falls inside it. Measured from
+--- y = 0 the walkway topped out at 0.15, which is 0.85 studs UNDER that
+--- apron - so the lane was drawn, buried, and invisible, and the map read
+--- as one featureless slab with no path on it.
+---
+--- Derived from Pads rather than hardcoded, so raising the apron cannot
+--- bury the walkway again.
+local PATH_TOP_Y = Pads.GROUND_TOP + 0.15
 
 local function newPart(name: string, size: Vector3, cframe: CFrame, color: Color3, parent: Instance): Part
 	local part = Instance.new("Part")
