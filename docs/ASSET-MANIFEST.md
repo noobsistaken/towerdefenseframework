@@ -92,6 +92,27 @@ All geometry is built at runtime from config by
 [`MapBuilder.luau`](../src/match/server/Match/MapBuilder.luau). Maps are Luau
 modules, not `.rbxmx` files, so they stay diffable.
 
+**You can still author them in Studio.** The loop is build -> drag -> extract:
+
+1. Build the map into the Edit session:
+   `MapBuilder.build(MapRegistry.get("Crossroads"))`. It emits a `Lanes` folder
+   of draggable waypoint markers alongside the geometry - visible in Studio,
+   invisible in a live server.
+2. Move things. Drag waypoints, resize the ground, add decor, add buildable
+   pads (tag them `TDBuildable` and give them a `SurfaceType` attribute).
+3. Extract: `MapExtract.fromFolder(workspace.TDMap, id, displayName)` returns
+   the config plus a list of problems, and `MapExtract.toSource(config)`
+   renders the module to drop into `Config/Maps/`.
+
+The runtime still consumes plain data, which is why the placement and pathing
+specs keep working. Extraction reports rather than guesses: an untagged pad, a
+waypoint with no order, or a missing ground part comes back as a named problem
+instead of a silently wrong map.
+
+Re-extraction overwrites the module, so a generated map loses hand-written
+comments. Crossroads, Switchback and Fork stay hand-authored for that reason -
+their comments carry design intent worth keeping.
+
 | Map | Lanes | Lane lengths | Plateaus | Ground plane | Decor |
 |---|---|---|---|---|---|
 | **Crossroads** | 1 | 610 studs | 2 | 340 × 300 | 3 |
