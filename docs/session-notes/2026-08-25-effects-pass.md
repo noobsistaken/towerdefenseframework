@@ -106,3 +106,51 @@ Then run `build/test.rbxl` for the 253 assertions.
   Pre-existing — `maxHealth` has the same exposure. `Constants.ATTR_ENEMY_ID`
   is written every acquire and read by nothing; it is the obvious signal if
   this ever needs solving.
+
+---
+
+## Later the same day
+
+Four more commits after the four above, all on the same branch:
+
+| Commit | What |
+|---|---|
+| `0c3740d` | **fix:** walkway was drawn below the buildable apron, so every map
+  rendered as a featureless slab with no visible path |
+| `96998d8` | Inspector: DAMAGE/RANGE/SPEED row, a NEXT/LEVEL n delta panel, and a
+  range ring on the selected tower |
+| `e3cd64d` | Hover-reveal for the preview panel + `Motion.luau`, the one place a
+  UI tween is created |
+
+Gate green after each. **Still nothing has been run.**
+
+### Roblox Studio MCP — configured, needs a restart to use
+
+Studio ships a built-in MCP server (the standalone `Roblox/studio-rust-mcp-server`
+repo is archived). It is registered for Claude Code at **user scope**, so it loads
+from any directory:
+
+```
+Roblox_Studio  ->  cmd.exe /c %LOCALAPPDATA%\Roblox\mcp.bat
+```
+
+`claude mcp list` reports it Connected once Studio is open. Three gotchas, each of
+which cost a round trip:
+
+1. **Do not run `claude mcp add` from Git Bash.** MSYS rewrites the `/c` flag to
+   `C:/`, so cmd never runs the batch file. Use PowerShell or cmd.
+2. **Studio must already be running** or the server connects but reports
+   "tools fetch failed" — it is a bridge, and there is nothing behind it.
+3. **A session only sees MCP tools that existed when it started.** Opening Studio
+   mid-session does not help; Claude Code has to be restarted afterwards.
+
+### The next action, still
+
+Unchanged from the top of this file and still never done: open `build/test.rbxl`
+and run the 253 assertions. Everything else is worth less than knowing whether
+they pass. With the MCP connected this no longer needs a human to read Output.
+
+Then look at the seven unverified visuals: status tint, splash sphere, enrage
+pulse, walkway, the stats row, the delta panel, and the hover reveal. The hover
+reveal is the one most likely to be wrong — check it does not flicker
+(docs/MANUAL-VERIFICATION.md, "UI motion", step 3).
