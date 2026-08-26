@@ -19,6 +19,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
+local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Motion = require(script.Parent.Motion)
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
@@ -264,7 +265,47 @@ local RANGE_DOME_SECONDS = 0.5
 ---
 --- Lives here rather than in a module of its own because the lifetime it
 --- follows is exactly this panel's: the dome is visible when the panel is.
-local function useRangeDisc(towerId: number?, range: number?)
+local SPLASH_COLOR = Color3.fromRGB(236, 148, 58)
+
+--- Closest point on any lane polyline to `from`, on the XZ plane. This is
+--- where a splash tower's shells land in practice, which makes it the
+--- honest place to draw the splash-radius preview.
+local function closestLanePoint(from: Vector3): Vector3?
+	local map = MapRegistry.find(atoms.mapId())
+
+	if map == nil then
+		return nil
+	end
+
+	local best: Vector3? = nil
+	local bestDistance = math.huge
+
+	for _, lane in map.paths do
+		for index = 2, #lane.waypoints do
+			local a = lane.waypoints[index - 1]
+			local b = lane.waypoints[index]
+			local ab = Vector3.new(b.X - a.X, 0, b.Z - a.Z)
+			local length = ab.Magnitude
+
+			if length < 1e-3 then
+				continue
+			end
+
+			local t = math.clamp(((from.X - a.X) * ab.X + (from.Z - a.Z) * ab.Z) / (length * length), 0, 1)
+			local point = Vector3.new(a.X + ab.X * t, 0, a.Z + ab.Z * t)
+			local distance = (Vector3.new(from.X, 0, from.Z) - point).Magnitude
+
+			if distance < bestDistance then
+				bestDistance = distance
+				best = point
+			end
+		end
+	end
+
+	return best
+end
+
+local function useRangeDisc(towerId: number?, range: number?, splashRadius: number?)
 	React.useEffect(function(): () -> ()
 		if towerId == nil or range == nil or range <= 0 then
 			return NO_OP
@@ -276,39 +317,100 @@ local function useRangeDisc(towerId: number?, range: number?)
 			return NO_OP
 		end
 
-		local dome = Instance.new("Part")
-		dome.Name = "TDSelectionRange"
-		dome.Shape = Enum.PartType.Ball
-		dome.Size = Vector3.new(0.5, 0.5, 0.5)
-		dome.Anchored = true
-		dome.CanCollide = false
-		dome.CanQuery = false
-		dome.CanTouch = false
-		dome.CastShadow = false
-		dome.Transparency = 0.92
-		dome.Material = Enum.Material.Neon
-		dome.Color = Theme.ACCENT
+		-- One container for the whole preview, so cleanup is one Destroy no
+		-- matter how many pieces the attack type adds.
+		local container = Instance.new("Model")
+		container.Name = "TDSelectionRange"
 
-		-- Centred at the BASE, not the part centre: the buried half makes
-		-- the ball a dome, and the equator lands exactly on the ground the
-		-- tower stands on - plateau included, since the base is derived
-		-- from the part.
+		local function ball(size: number, color: Color3, transparency: number): Part
+			local sphere = Instance.new("Part")
+			sphere.Shape = Enum.PartType.Ball
+			sphere.Size = Vector3.new(size, size, size)
+			sphere.Anchored = true
+			sphere.CanCollide = false
+			sphere.CanQuery = false
+			sphere.CanTouch = false
+			sphere.CastShadow = false
+			sphere.Transparency = transparency
+			sphere.Material = Enum.Material.Neon
+			sphere.Color = color
+			sphere.Parent = container
+			return sphere
+		end
+
+		-- The range DOME. Centred at the BASE, not the part centre: the
+		-- buried half makes the ball a dome, and the equator lands exactly
+		-- on the ground the tower stands on - plateau included, since the
+		-- base is derived from the part.
 		local base = part.Position.Y - part.Size.Y / 2
+		local dome = ball(0.5, Theme.ACCENT, 0.92)
 		dome.CFrame = CFrame.new(part.Position.X, base, part.Position.Z)
-		dome.Parent = workspace
 
-		local tween = TweenService:Create(
-			dome,
-			TweenInfo.new(RANGE_DOME_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = Vector3.new(range * 2, range * 2, range * 2) }
-		)
-		tween:Play()
+		local tweens: { Tween } = {}
+
+		local function grow(target: Part, diameter: number)
+			local tween = TweenService:Create(
+				target,
+				TweenInfo.new(RANGE_DOME_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = Vector3.new(diameter, diameter, diameter) }
+			)
+			table.insert(tweens, tween)
+			tween:Play()
+		end
+
+		grow(dome, range * 2)
+
+		-- The ATTACK TYPE. Single-target towers say it with silence; splash
+		-- towers show WHERE a shell lands (the closest lane point, clamped
+		-- into range - the spot the server's shells actually favour) and
+		-- HOW it gets there (a thrown arc), with the blast radius drawn
+		-- true. No tower in the roster attacks in a cone; if one ever does,
+		-- this is where its wedge preview goes.
+		if splashRadius ~= nil and splashRadius > 0 then
+			local origin = Vector3.new(part.Position.X, base, part.Position.Z)
+			local lanePoint = closestLanePoint(part.Position)
+			local impact: Vector3
+
+			if lanePoint ~= nil then
+				local offset = Vector3.new(lanePoint.X - origin.X, 0, lanePoint.Z - origin.Z)
+				local reach = math.min(offset.Magnitude, range * 0.92)
+				impact = if offset.Magnitude > 1e-3
+					then origin + offset.Unit * reach
+					else origin + Vector3.new(reach, 0, 0)
+			else
+				impact = origin + Vector3.new(range * 0.6, 0, 0)
+			end
+
+			impact = Vector3.new(impact.X, base, impact.Z)
+
+			local blast = ball(0.5, SPLASH_COLOR, 0.72)
+			blast.CFrame = CFrame.new(impact)
+			grow(blast, splashRadius * 2)
+
+			-- The thrown arc: a handful of dots on a parabola from the
+			-- muzzle height to the impact point.
+			local top = part.Position + Vector3.new(0, part.Size.Y / 2 + 1, 0)
+			local flat = (Vector3.new(impact.X, 0, impact.Z) - Vector3.new(top.X, 0, top.Z)).Magnitude
+			local apex = math.max(8, flat * 0.3)
+
+			for step = 1, 6 do
+				local alpha = step / 7
+				local along = top:Lerp(impact, alpha)
+				local dot = ball(0.9, SPLASH_COLOR, 0.25)
+				dot.CFrame = CFrame.new(along + Vector3.new(0, math.sin(alpha * math.pi) * apex, 0))
+			end
+		end
+
+		container.Parent = workspace
 
 		return function()
-			tween:Cancel()
-			dome:Destroy()
+			for _, tween in tweens do
+				tween:Cancel()
+			end
+
+			container:Destroy()
 		end
-	end, { towerId or 0, range or 0 })
+	end, { towerId or 0, range or 0, splashRadius or 0 })
 end
 
 type StatProps = {
@@ -534,10 +636,15 @@ local function TowerInspector()
 	local definition = if info ~= nil then Towers.find(info.defId) else nil
 	local level = if definition ~= nil and info ~= nil then Towers.levelAt(definition, info.level) else nil
 
-	-- The disc draws the ATTRIBUTE range - the server's traited number -
+	-- The dome draws the ATTRIBUTE range - the server's traited number -
 	-- never the config's. (The placement ghost still shows base range: traits
 	-- are per-profile and the snapshot does not carry them pre-placement.)
-	useRangeDisc(if info ~= nil then info.towerId else nil, if info ~= nil then info.range else nil)
+	-- Splash radius is config: no trait touches it.
+	useRangeDisc(
+		if info ~= nil then info.towerId else nil,
+		if info ~= nil then info.range else nil,
+		if level ~= nil then level.splashRadius else nil
+	)
 
 	-- Whether a preview will render at all, computed here because the hook
 	-- below has to be called before any early return.

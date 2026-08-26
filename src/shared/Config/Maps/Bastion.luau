@@ -85,6 +85,79 @@ local map: Types.MapConfig = {
 			size = Vector3.new(12, 20, 12),
 			color = Color3.fromRGB(84, 92, 84),
 		},
+		-- Fortress dressing: curtain walls run the edges between the
+		-- watchtowers (the lanes START inside them, so no gate is needed),
+		-- banners flank the two plateaus, braziers burn at the keep.
+		{
+			position = Vector3.new(164, 6, 0),
+			size = Vector3.new(5, 12, 120),
+			color = Color3.fromRGB(84, 92, 84),
+			material = Enum.Material.Concrete,
+		},
+		{
+			position = Vector3.new(-164, 6, 0),
+			size = Vector3.new(5, 12, 120),
+			color = Color3.fromRGB(84, 92, 84),
+			material = Enum.Material.Concrete,
+		},
+		{
+			position = Vector3.new(0, 6, -164),
+			size = Vector3.new(120, 12, 5),
+			color = Color3.fromRGB(84, 92, 84),
+			material = Enum.Material.Concrete,
+		},
+		{
+			position = Vector3.new(0, 6, 164),
+			size = Vector3.new(120, 12, 5),
+			color = Color3.fromRGB(84, 92, 84),
+			material = Enum.Material.Concrete,
+		},
+		{
+			position = Vector3.new(35, 4.5, -45),
+			size = Vector3.new(0.8, 9, 0.8),
+			color = Color3.fromRGB(70, 62, 54),
+			material = Enum.Material.Wood,
+		},
+		{
+			position = Vector3.new(35, 6.5, -43.4),
+			size = Vector3.new(0.4, 5, 2.6),
+			color = Color3.fromRGB(168, 62, 62),
+		},
+		{
+			position = Vector3.new(-35, 4.5, 45),
+			size = Vector3.new(0.8, 9, 0.8),
+			color = Color3.fromRGB(70, 62, 54),
+			material = Enum.Material.Wood,
+		},
+		{
+			position = Vector3.new(-35, 6.5, 46.6),
+			size = Vector3.new(0.4, 5, 2.6),
+			color = Color3.fromRGB(168, 62, 62),
+		},
+		{
+			position = Vector3.new(16, 1.5, 16),
+			size = Vector3.new(2.2, 3, 2.2),
+			color = Color3.fromRGB(62, 58, 54),
+			material = Enum.Material.Concrete,
+		},
+		{
+			position = Vector3.new(16, 3.6, 16),
+			size = Vector3.new(1.6, 1.6, 1.6),
+			color = Color3.fromRGB(236, 140, 58),
+			material = Enum.Material.Neon,
+		},
+		{
+			position = Vector3.new(-16, 1.5, -16),
+			size = Vector3.new(2.2, 3, 2.2),
+			color = Color3.fromRGB(62, 58, 54),
+			material = Enum.Material.Concrete,
+		},
+		{
+			position = Vector3.new(-16, 3.6, -16),
+			size = Vector3.new(1.6, 1.6, 1.6),
+			color = Color3.fromRGB(236, 140, 58),
+			material = Enum.Material.Neon,
+		},
 		-- Spawn markers, one per pincer.
 		{
 			position = Vector3.new(-100, 6, -144),
