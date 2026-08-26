@@ -47,7 +47,6 @@ Rewards.XP_CURVE = 200
 export type Payout = {
 	coins: number,
 	xp: number,
-	tokens: number,
 }
 
 --- What a finished match pays.
@@ -72,8 +71,14 @@ function Rewards.forMatch(wavesCleared: number, won: boolean, difficulty: Types.
 	return {
 		coins = math.max(0, math.floor(coins * difficulty.rewardMultiplier + 0.5)),
 		xp = math.max(0, math.floor(xp * difficulty.rewardMultiplier + 0.5)),
-		tokens = Rewards.TOKENS_PER_PAYOUT + (if won then Rewards.TOKENS_FOR_WIN else 0),
 	}
+end
+
+--- RerollTokens for one run ENDING. Deliberately not part of forMatch:
+--- coins and XP settle incrementally per wave, and a token per settlement
+--- would put a reroll in every pocket by wave ten. Endings only.
+function Rewards.tokensFor(won: boolean): number
+	return Rewards.TOKENS_PER_PAYOUT + (if won then Rewards.TOKENS_FOR_WIN else 0)
 end
 
 --- Cumulative XP required to REACH `level`. Level 1 is free.

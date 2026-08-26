@@ -89,7 +89,13 @@ local function writeAttributes(part: Part, tower: BaseTower.Tower)
 	part:SetAttribute("Level", tower.level)
 	part:SetAttribute("OwnerUserId", tower.owner.UserId)
 	part:SetAttribute("TargetingMode", tower.targetingMode)
+	-- The TRAITED numbers, not the config's. These are what the server
+	-- actually fights with, and the inspector must show the fighting values
+	-- or the range ring lies about the acquisition radius.
+	local level = tower:currentLevel()
 	part:SetAttribute("Range", tower:range())
+	part:SetAttribute("Damage", level.damage * tower.traitMultipliers.damage)
+	part:SetAttribute("FireRate", level.fireRate * tower.traitMultipliers.fireRate)
 	part:SetAttribute("SellValue", tower:sellValue())
 	-- Comma-joined, because attributes cannot hold tables. The client
 	-- only displays these; the numbers they change already arrive

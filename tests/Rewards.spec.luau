@@ -62,12 +62,13 @@ describe("Rewards.forMatch", function()
 		expect(won.xp > lost.xp).toBe(true)
 	end)
 
-	it("pays tokens flat: one for the payout, one more for the win", function()
+	it("pays tokens per ENDING, flat: one for playing, one more for the win", function()
 		-- Difficulty-blind on purpose: tokens gate rerolls, and a currency
-		-- that farms exponentially makes the reroll button a formality.
-		expect(Rewards.forMatch(5, false, NORMAL).tokens).toBe(Rewards.TOKENS_PER_PAYOUT)
-		expect(Rewards.forMatch(40, true, NORMAL).tokens).toBe(Rewards.TOKENS_PER_PAYOUT + Rewards.TOKENS_FOR_WIN)
-		expect(Rewards.forMatch(5, false, difficulty(1.25)).tokens).toBe(Rewards.forMatch(5, false, NORMAL).tokens)
+		-- that farms exponentially makes the reroll button a formality. Not
+		-- part of forMatch, because waves settle incrementally and tokens
+		-- must not.
+		expect(Rewards.tokensFor(false)).toBe(Rewards.TOKENS_PER_PAYOUT)
+		expect(Rewards.tokensFor(true)).toBe(Rewards.TOKENS_PER_PAYOUT + Rewards.TOKENS_FOR_WIN)
 	end)
 
 	it("scales with the difficulty multiplier", function()

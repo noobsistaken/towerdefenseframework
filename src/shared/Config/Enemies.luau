@@ -97,7 +97,10 @@ Enemies.DEFINITIONS = {
 		hitboxSize = Vector3.new(3.4, 4.6, 3.4),
 		color = Color3.fromRGB(88, 96, 112),
 		hoverHeight = 2.3,
-		resistances = {},
+		resistances = {
+			-- Heavy plating halves how long a concussion sticks.
+			Concuss = 0.5,
+		},
 	},
 
 	Titan = {
@@ -127,6 +130,9 @@ Enemies.DEFINITIONS = {
 		resistances = {
 			Bleed = 0.5,
 			Slow = 0.4,
+			-- Stun-immune, as bosses are: a chain-stunnable boss is a DPS
+			-- check with the check removed.
+			Concuss = 0,
 		},
 	},
 } :: { [string]: Types.EnemyDefinition }

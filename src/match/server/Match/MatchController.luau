@@ -104,11 +104,16 @@ export type Controller = typeof(setmetatable(
 		awardRewards: RewardAwarder,
 		sfxEnabledFor: SettingsResolver,
 		traitsOf: TraitsResolver,
-		--- Highest wave already paid for. A run can pay out twice - once when
-		--- the campaign is cleared, once when endless finally ends - so a
-		--- boolean would either double-pay waves 1..finalWave or leave every
-		--- endless wave unrewarded. This makes each wave payable exactly once.
+		--- Highest wave already paid for. Settlement is INCREMENTAL - every
+		--- intermission pays the waves cleared since the last one - and this
+		--- ledger is what makes each wave payable exactly once across that.
 		paidThroughWave: number,
+		--- Cumulative amounts actually persisted this run, for MatchEnded:
+		--- with incremental settlement, the terminal slice alone would report
+		--- "+0 coins" after a 29-wave run.
+		paidCoins: number,
+		paidXp: number,
+		paidTokens: number,
 		--- Set once the return teleport has been fired, so the results phase
 		--- ticking repeatedly cannot fire it again.
 		returning: boolean,
@@ -211,27 +216,52 @@ local function beginWave(self: Controller)
 	Net.PlaySound.FireAll({ soundKey = "WaveStart", position = nil })
 end
 
---- Pays out for every wave not already paid for, and for the win if this is
---- the moment it happened. Returns what was paid, for the MatchEnded message.
+--- Pays the coins and XP for every wave cleared through `throughWave` that
+--- has not been paid yet. Called at EVERY intermission, not only at the end
+--- of the run: settlement that waits for a terminal event holds the whole
+--- payout in this server's memory, and a deploy or crash at wave 29 would
+--- destroy the entire run's earnings for everyone in it. Paying per wave
+--- bounds that loss to one wave.
 ---
 --- Persistence goes through the injected awarder rather than being done here:
 --- the controller owns the match, the entry point owns the profiles.
-local function payRewards(self: Controller, throughWave: number, won: boolean): Rewards.Payout
+local function settleWaves(self: Controller, throughWave: number)
 	local unpaid = math.max(0, throughWave - self.paidThroughWave)
 
-	if unpaid <= 0 and not won then
-		return { coins = 0, xp = 0, tokens = 0 }
+	if unpaid <= 0 then
+		return
 	end
 
 	self.paidThroughWave = math.max(self.paidThroughWave, throughWave)
 
-	local payout = Rewards.forMatch(unpaid, won, self.difficulty)
+	local payout = Rewards.forMatch(unpaid, false, self.difficulty)
+
+	self.paidCoins += payout.coins
+	self.paidXp += payout.xp
 
 	for _, player in Players:GetPlayers() do
-		self.awardRewards(player, payout.coins, payout.xp, payout.tokens)
+		self.awardRewards(player, payout.coins, payout.xp, 0)
 	end
+end
 
-	return payout
+--- The end-of-run settlement: any waves still unpaid, the win bonus when
+--- won, and the tokens - which flow ONLY here, once per ending, because a
+--- token per intermission would put a reroll in every pocket by wave ten.
+local function settleTerminal(self: Controller, throughWave: number, won: boolean)
+	settleWaves(self, throughWave)
+
+	local bonus: Rewards.Payout = if won
+		then Rewards.forMatch(0, true, self.difficulty)
+		else { coins = 0, xp = 0 }
+	local tokens = Rewards.tokensFor(won)
+
+	self.paidCoins += bonus.coins
+	self.paidXp += bonus.xp
+	self.paidTokens += tokens
+
+	for _, player in Players:GetPlayers() do
+		self.awardRewards(player, bonus.coins, bonus.xp, tokens)
+	end
 end
 
 --- Terminal. Only defeat ends a run: clearing the campaign is a milestone,
@@ -246,16 +276,18 @@ local function endMatchInDefeat(self: Controller)
 
 	-- The wave they died on does not count as cleared.
 	local cleared = math.max(0, self.waveNumber - 1)
-	local payout = payRewards(self, cleared, false)
+	settleTerminal(self, cleared, false)
 
 	setState(self, "Defeat", Constants.RESULTS_SECONDS)
 
+	-- Cumulative for the run, not the terminal slice - with incremental
+	-- settlement the final slice is usually zero.
 	Net.MatchEnded.FireAll({
 		won = false,
 		wavesCleared = cleared,
-		coinsAwarded = payout.coins,
-		xpAwarded = payout.xp,
-		tokensAwarded = payout.tokens,
+		coinsAwarded = self.paidCoins,
+		xpAwarded = self.paidXp,
+		tokensAwarded = self.paidTokens,
 	})
 end
 
@@ -268,14 +300,14 @@ end
 local function beginVictoryInterlude(self: Controller)
 	self.campaignCleared = true
 
-	local payout = payRewards(self, self.waveNumber, true)
+	settleTerminal(self, self.waveNumber, true)
 
 	Net.MatchEnded.FireAll({
 		won = true,
 		wavesCleared = self.waveNumber,
-		coinsAwarded = payout.coins,
-		xpAwarded = payout.xp,
-		tokensAwarded = payout.tokens,
+		coinsAwarded = self.paidCoins,
+		xpAwarded = self.paidXp,
+		tokensAwarded = self.paidTokens,
 	})
 
 	setState(self, "Victory", Constants.RESULTS_SECONDS)
@@ -313,6 +345,9 @@ function MatchController.new(
 		sfxEnabledFor = sfxEnabledFor,
 		traitsOf = traitsOf,
 		paidThroughWave = 0,
+		paidCoins = 0,
+		paidXp = 0,
+		paidTokens = 0,
 		returning = false,
 		heartbeat = nil,
 		finished = false,
@@ -579,6 +614,9 @@ local function tick(self: Controller, deltaTime: number)
 		-- an empty simulation is trivially true before the first spawn.
 		if self.director:isSpawningComplete() and self.simulation:count() == 0 then
 			self.economy:creditAll(Scaling.waveBonus(self.waveNumber, self.difficulty.rewardMultiplier))
+			-- Settle the cleared wave into persistence NOW, not at the end of
+			-- the run - see settleWaves for why the difference matters.
+			settleWaves(self, self.waveNumber)
 			setState(self, "Intermission", Constants.INTERMISSION_SECONDS)
 			Net.PlaySound.FireAll({ soundKey = "WaveCleared", position = nil })
 		end

@@ -335,7 +335,10 @@ funct RollTower = {
 	call: Async,
 	args: struct {},
 	rets: struct {
-		outcome: enum { Rolled, Duplicate, CannotAfford },
+		-- Unavailable means NO SESSION - distinct from CannotAfford so the
+		-- client neither shows "you are broke" nor patches its balances
+		-- from a reply that knows nothing.
+		outcome: enum { Rolled, Duplicate, CannotAfford, Unavailable },
 		towerId: string.utf8(..24),
 		rarityId: string.utf8(..24),
 		-- Coin balance AFTER the roll, so the UI never derives money.
@@ -354,7 +357,7 @@ funct RerollTrait = {
 		towerId: string.utf8(..24),
 	},
 	rets: struct {
-		outcome: enum { Rolled, CannotAfford, UnknownTower },
+		outcome: enum { Rolled, CannotAfford, UnknownTower, Unavailable },
 		traitId: string.utf8(..24),
 		rarityId: string.utf8(..24),
 		-- Token balance AFTER the reroll.
@@ -369,6 +372,12 @@ funct GetLobbyProfile = {
 	call: Async,
 	args: struct {},
 	rets: struct {
+		-- False when the profile session was not up when the server
+		-- answered. The zeroed fields that follow are then MEANINGLESS,
+		-- not a fresh account - without this flag the two were
+		-- byte-identical, and a client latched the zeros for the whole
+		-- session whenever the handoff outran the 10s wait.
+		loaded: boolean,
 		coins: u32,
 		rerollTokens: u16,
 		unlockedTowers: string.utf8(..24)[0..64],

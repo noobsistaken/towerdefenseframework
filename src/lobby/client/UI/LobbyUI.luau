@@ -75,11 +75,15 @@ local function Header()
 	return e("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 24),
-		Size = UDim2.fromOffset(420, 76),
+		-- Scale-with-cap rather than fixed 420: at fixed width the header's
+		-- right edge crossed the coin strip's left edge on viewports under
+		-- ~840px, and the two panels share a y band.
+		Size = UDim2.new(0.42, 0, 0, 76),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		BorderSizePixel = 0,
 	}, {
+		limit = e("UISizeConstraint", { MaxSize = Vector2.new(420, 76) }),
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		headline = label({
 			Position = UDim2.fromOffset(0, 14),
@@ -111,8 +115,8 @@ local function ProfileStrip()
 
 	return e("Frame", {
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -20, 0, 24),
-		Size = UDim2.fromOffset(190, 58),
+		Position = UDim2.new(1, -16, 0, 24),
+		Size = UDim2.fromOffset(170, 58),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		BorderSizePixel = 0,
@@ -218,7 +222,7 @@ local function oddsText(): string
 end
 
 type RollReply = {
-	outcome: "Rolled" | "Duplicate" | "CannotAfford",
+	outcome: "Rolled" | "Duplicate" | "CannotAfford" | "Unavailable",
 	towerId: string,
 	rarityId: string,
 	coins: number,
@@ -231,6 +235,10 @@ local function GachaPanel()
 	local coins = useAtom(atoms.coins)
 	local busy, setBusy = React.useState(false)
 	local lastRoll, setLastRoll = React.useState(nil :: RollReply?)
+	-- The real double-fire guard. `busy` is a render-closure value: a second
+	-- click landing before the re-render commits still sees busy=false, and
+	-- two Calls means paying twice. A ref reads and writes synchronously.
+	local rolling = React.useRef(false)
 
 	if station ~= "Gacha" then
 		return nil
@@ -251,6 +259,9 @@ local function GachaPanel()
 			resultColor = rarityColor(lastRoll.rarityId)
 		elseif lastRoll.outcome == "Duplicate" then
 			resultText = `Duplicate {name} - {lastRoll.refunded} coins back`
+			resultColor = Theme.MUTED
+		elseif lastRoll.outcome == "Unavailable" then
+			resultText = "Your collection is still loading - try again in a moment"
 			resultColor = Theme.MUTED
 		else
 			resultText = "Not enough coins"
@@ -303,10 +314,11 @@ local function GachaPanel()
 			TextColor3 = if affordable and not busy then Theme.INVERSE else Theme.MUTED,
 			TextSize = 16,
 			[React.Event.Activated] = function()
-				if busy or not atoms.profileLoaded() then
+				if rolling.current or not atoms.profileLoaded() then
 					return
 				end
 
+				rolling.current = true
 				setBusy(true)
 
 				task.spawn(function()
@@ -315,8 +327,12 @@ local function GachaPanel()
 					end)
 
 					if ok then
-						-- Server-returned balances, never derived locally.
-						atoms.coins(reply.coins)
+						-- Server-returned balances, never derived locally -
+						-- and never from an Unavailable reply, whose zeros
+						-- describe a missing session, not this player.
+						if reply.outcome ~= "Unavailable" then
+							atoms.coins(reply.coins)
+						end
 
 						if reply.outcome == "Rolled" then
 							local unlocked = table.clone(atoms.unlockedTowers())
@@ -327,6 +343,7 @@ local function GachaPanel()
 						setLastRoll(reply)
 					end
 
+					rolling.current = false
 					setBusy(false)
 				end)
 			end,
@@ -337,7 +354,7 @@ local function GachaPanel()
 end
 
 type RerollReply = {
-	outcome: "Rolled" | "CannotAfford" | "UnknownTower",
+	outcome: "Rolled" | "CannotAfford" | "UnknownTower" | "Unavailable",
 	traitId: string,
 	rarityId: string,
 	tokens: number,
@@ -406,16 +423,20 @@ local function RerollPanel()
 	local unlocked = useAtom(atoms.unlockedTowers)
 	local busy, setBusy = React.useState(false)
 	local lastReroll, setLastReroll = React.useState(nil :: RerollReply?)
+	-- Same synchronous double-fire guard as the gacha's roll button: `busy`
+	-- alone is a render-closure value and two fast clicks spend two tokens.
+	local rolling = React.useRef(false)
 
 	if station ~= "Reroll" then
 		return nil
 	end
 
 	local onReroll = function(towerId: string)
-		if busy then
+		if rolling.current then
 			return
 		end
 
+		rolling.current = true
 		setBusy(true)
 
 		task.spawn(function()
@@ -424,7 +445,9 @@ local function RerollPanel()
 			end)
 
 			if ok then
-				atoms.rerollTokens(reply.tokens)
+				if reply.outcome ~= "Unavailable" then
+					atoms.rerollTokens(reply.tokens)
+				end
 
 				if reply.outcome == "Rolled" then
 					local map = table.clone(atoms.traits())
@@ -435,6 +458,7 @@ local function RerollPanel()
 				setLastReroll(reply)
 			end
 
+			rolling.current = false
 			setBusy(false)
 		end)
 	end
@@ -452,6 +476,9 @@ local function RerollPanel()
 		elseif lastReroll.outcome == "CannotAfford" then
 			resultText = "Out of reroll tokens - finish a match to earn more"
 			resultColor = Theme.NEGATIVE
+		elseif lastReroll.outcome == "Unavailable" then
+			resultText = "Your collection is still loading - try again in a moment"
+			resultColor = Theme.MUTED
 		else
 			resultText = "You do not own that tower"
 			resultColor = Theme.NEGATIVE

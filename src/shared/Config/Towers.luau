@@ -674,9 +674,12 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		perPlayerCap = 4,
 		rig = "SwatSoldier",
 		levels = {
-			makeLevel(900, 28, 1.1, 46, 0, { { effectId = "Concuss", duration = 0.5, power = 0 } }, Vector3.new(5.5, 7.5, 5.5), Color3.fromRGB(196, 186, 120)),
-			makeLevel(800, 46, 1.15, 50, 0, { { effectId = "Concuss", duration = 0.6, power = 0 } }, Vector3.new(6, 8.5, 6), Color3.fromRGB(208, 198, 132)),
-			makeLevel(1500, 78, 1.2, 54, 0, { { effectId = "Concuss", duration = 0.7, power = 0 } }, Vector3.new(6.5, 9.5, 6.5), Color3.fromRGB(222, 212, 146)),
+			-- Stun durations sit under the FASTEST reload any trait can buy
+			-- (fireRate x1.3 Godslayer), so a permanent freeze is impossible
+			-- by arithmetic - TowerBalance.spec enforces the inequality.
+			makeLevel(900, 28, 1.1, 46, 0, { { effectId = "Concuss", duration = 0.35, power = 0 } }, Vector3.new(5.5, 7.5, 5.5), Color3.fromRGB(196, 186, 120)),
+			makeLevel(800, 46, 1.15, 50, 0, { { effectId = "Concuss", duration = 0.4, power = 0 } }, Vector3.new(6, 8.5, 6), Color3.fromRGB(208, 198, 132)),
+			makeLevel(1500, 78, 1.2, 54, 0, { { effectId = "Concuss", duration = 0.45, power = 0 } }, Vector3.new(6.5, 9.5, 6.5), Color3.fromRGB(222, 212, 146)),
 		},
 	},
 

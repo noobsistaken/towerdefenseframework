@@ -17,6 +17,7 @@ local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
 local StatusEffects = require(ReplicatedStorage.Shared.Config.StatusEffects)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local Traits = require(ReplicatedStorage.Shared.Config.Traits)
 
 local describe = JestGlobals.describe
 local expect = JestGlobals.expect
@@ -124,6 +125,33 @@ describe("Tower level tables", function()
 						expect(application.power > 0).toBe(true)
 					else
 						expect(application.power).toBe(0)
+					end
+				end
+			end
+		end
+	end)
+
+	it("keeps every stun shorter than its tower's fastest traited reload", function()
+		-- The permafreeze invariant, with both sides computed from config: a
+		-- Refresh stun reapplied faster than it expires is a permanently
+		-- frozen enemy, and fire-rate traits are how a reload gets faster
+		-- than its printed number. Caught here once already - Warden L3 at
+		-- 0.7s shipped over its Overclocked reload.
+		local fastestTrait = 1
+
+		for _, id in Traits.IDS do
+			fastestTrait = math.max(fastestTrait, Traits.get(id).fireRate)
+		end
+
+		for _, id in Towers.IDS do
+			for _, level in Towers.get(id).levels do
+				for _, application in level.applies do
+					local effect = StatusEffects.find(application.effectId)
+
+					if effect ~= nil and effect.kind == "Stun" then
+						local fastestReload = 1 / (level.fireRate * fastestTrait)
+
+						expect(application.duration < fastestReload).toBe(true)
 					end
 				end
 			end

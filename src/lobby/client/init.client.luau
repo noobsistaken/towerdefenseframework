@@ -78,23 +78,36 @@ janitor:Add(
 	true
 )
 
--- One-shot profile fetch. The reply is the whole collection; afterwards the
--- roll replies keep the hot numbers current (see LobbyUI).
+-- Profile fetch, retried until a REAL profile answers. The server's reply
+-- says loaded=false when the ProfileStore session was not up in time - a
+-- slow handoff from a match server can outrun its bounded wait - and
+-- treating that as data would latch an empty collection for the whole
+-- session. Afterwards the roll replies keep the hot numbers current.
 task.spawn(function()
-	local profile = Net.GetLobbyProfile.Call({})
+	while true do
+		local profile = Net.GetLobbyProfile.Call({})
 
-	atoms.coins(profile.coins)
-	atoms.rerollTokens(profile.rerollTokens)
-	atoms.unlockedTowers(profile.unlockedTowers)
+		if profile.loaded then
+			atoms.coins(profile.coins)
+			atoms.rerollTokens(profile.rerollTokens)
+			atoms.unlockedTowers(profile.unlockedTowers)
 
-	local map: { [string]: string } = {}
+			local map: { [string]: string } = {}
 
-	for _, pair in profile.traits do
-		map[pair.towerId] = pair.traitId
+			for _, pair in profile.traits do
+				map[pair.towerId] = pair.traitId
+			end
+
+			atoms.traits(map)
+			atoms.profileLoaded(true)
+
+			return
+		end
+
+		-- Unbounded on purpose: the session can arrive minutes late after a
+		-- crashed match server, and a poll this slow costs nothing.
+		task.wait(5)
 	end
-
-	atoms.traits(map)
-	atoms.profileLoaded(true)
 end)
 
 -- ---------------------------------------------------------------------------

@@ -97,8 +97,17 @@ local function onPlayerAdded(player: Player)
 	janitor:Add(
 		profile.OnSessionEnd:Connect(function()
 			-- Another server claimed the session - almost always the match
-			-- place mid-teleport. Drop the local handle and let them keep it.
+			-- place mid-teleport. Drop the local handle and let them keep it;
+			-- the gacha functs answer Unavailable from here on, which the
+			-- client shows as "not loaded" rather than as a zero balance.
 			profiles[player] = nil
+
+			local owned = janitors[player]
+			janitors[player] = nil
+
+			if owned ~= nil then
+				owned:Destroy()
+			end
 		end),
 		"Disconnect"
 	)
@@ -200,7 +209,9 @@ Net.RollTower.SetCallback(function(player: Player, _value: {})
 	local profile = profiles[player]
 
 	if profile == nil then
-		return { outcome = "CannotAfford" :: "CannotAfford", towerId = "", rarityId = "", coins = 0, refunded = 0 }
+		-- No session is NOT "broke": the client must neither scold the
+		-- player nor believe the zeros.
+		return { outcome = "Unavailable" :: "Unavailable", towerId = "", rarityId = "", coins = 0, refunded = 0 }
 	end
 
 	local result = GachaFlow.rollTower(profile.Data, rollRng)
@@ -218,7 +229,7 @@ Net.RerollTrait.SetCallback(function(player: Player, value: { towerId: string })
 	local profile = profiles[player]
 
 	if profile == nil then
-		return { outcome = "CannotAfford" :: "CannotAfford", traitId = "", rarityId = "", tokens = 0 }
+		return { outcome = "Unavailable" :: "Unavailable", traitId = "", rarityId = "", tokens = 0 }
 	end
 
 	local result = GachaFlow.rerollTrait(profile.Data, value.towerId, rollRng)
@@ -239,7 +250,11 @@ Net.GetLobbyProfile.SetCallback(function(player: Player, _value: {})
 	local profile = profiles[player]
 
 	if profile == nil then
-		return { coins = 0, rerollTokens = 0, unlockedTowers = {}, traits = {} }
+		-- loaded=false marks every zero below as meaningless. Without it this
+		-- reply was byte-identical to a fresh account, and the client latched
+		-- an empty collection for the whole session whenever the session
+		-- handoff outran the wait above.
+		return { loaded = false, coins = 0, rerollTokens = 0, unlockedTowers = {}, traits = {} }
 	end
 
 	local data = profile.Data
@@ -253,6 +268,7 @@ Net.GetLobbyProfile.SetCallback(function(player: Player, _value: {})
 	end
 
 	return {
+		loaded = true,
 		coins = data.Coins,
 		rerollTokens = data.RerollTokens,
 		unlockedTowers = table.clone(data.UnlockedTowers),

@@ -46,6 +46,13 @@ type TowerInfo = {
 	ownerUserId: number,
 	targetingMode: string,
 	sellValue: number,
+	--- The server's TRAITED combat numbers, from the replicated attributes.
+	--- The config's base values must not drive the display: a trait changes
+	--- what this tower actually does, and a range ring drawn from config
+	--- contradicts the real acquisition radius.
+	range: number,
+	damage: number,
+	fireRate: number,
 }
 
 --- Finds a tower part by its replicated TowerId attribute.
@@ -72,6 +79,9 @@ local function readInfo(part: BasePart): TowerInfo?
 	local ownerUserId = part:GetAttribute("OwnerUserId")
 	local mode = part:GetAttribute("TargetingMode")
 	local sellValue = part:GetAttribute("SellValue")
+	local range = part:GetAttribute("Range")
+	local damage = part:GetAttribute("Damage")
+	local fireRate = part:GetAttribute("FireRate")
 
 	if
 		typeof(towerId) ~= "number"
@@ -80,6 +90,9 @@ local function readInfo(part: BasePart): TowerInfo?
 		or typeof(ownerUserId) ~= "number"
 		or typeof(mode) ~= "string"
 		or typeof(sellValue) ~= "number"
+		or typeof(range) ~= "number"
+		or typeof(damage) ~= "number"
+		or typeof(fireRate) ~= "number"
 	then
 		return nil
 	end
@@ -91,6 +104,9 @@ local function readInfo(part: BasePart): TowerInfo?
 		ownerUserId = ownerUserId,
 		targetingMode = mode,
 		sellValue = sellValue,
+		range = range,
+		damage = damage,
+		fireRate = fireRate,
 	}
 end
 
@@ -138,7 +154,7 @@ local function useTowerInfo(towerId: number?): TowerInfo?
 
 		refresh()
 
-		for _, attribute in { "Level", "TargetingMode", "SellValue", "Range" } do
+		for _, attribute in { "Level", "TargetingMode", "SellValue", "Range", "Damage", "FireRate" } do
 			table.insert(connections, part:GetAttributeChangedSignal(attribute):Connect(refresh))
 		end
 
@@ -356,6 +372,12 @@ local function rateText(fireRate: number): string
 	return string.format("%.2f/s", fireRate)
 end
 
+--- Damage and range to at most one decimal. Traited values are fractional
+--- (8 x 1.05 = 8.4), and printing float noise would read as a bug.
+local function statText(value: number): string
+	return string.format("%g", math.round(value * 10) / 10)
+end
+
 --- Fades the upgrade preview in while the UPGRADE button is hovered.
 ---
 --- FADE, not a height wipe. The panel keeps its full layout footprint whether
@@ -490,7 +512,10 @@ local function TowerInspector()
 	local definition = if info ~= nil then Towers.find(info.defId) else nil
 	local level = if definition ~= nil and info ~= nil then Towers.levelAt(definition, info.level) else nil
 
-	useRangeDisc(if info ~= nil then info.towerId else nil, if level ~= nil then level.range else nil)
+	-- The disc draws the ATTRIBUTE range - the server's traited number -
+	-- never the config's. (The placement ghost still shows base range: traits
+	-- are per-profile and the snapshot does not carry them pre-placement.)
+	useRangeDisc(if info ~= nil then info.towerId else nil, if info ~= nil then info.range else nil)
 
 	-- Whether a preview will render at all, computed here because the hook
 	-- below has to be called before any early return.
@@ -510,6 +535,14 @@ local function TowerInspector()
 	local upgradeCost = Economy.upgradeCost(definition, info.level)
 	local maxLevel = #definition.levels
 	local nextLevel = Towers.levelAt(definition, info.level + 1)
+
+	-- The trait multipliers this tower carries, recovered from the ratio of
+	-- the server's traited attribute to the config base. Used to scale the
+	-- upgrade preview: showing base numbers there while the stat row shows
+	-- traited ones would make the panel disagree with itself.
+	local damageScale = if level ~= nil and level.damage > 0 then info.damage / level.damage else 1
+	local rangeScale = if level ~= nil and level.range > 0 then info.range / level.range else 1
+	local rateScale = if level ~= nil and level.fireRate > 0 then info.fireRate / level.fireRate else 1
 
 	local children: { [string]: any } = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
@@ -559,9 +592,9 @@ local function TowerInspector()
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				Padding = UDim.new(0, 6),
 			}),
-			damage = e(Stat, { label = "DAMAGE", value = tostring(level.damage), layoutOrder = 1 }),
-			range = e(Stat, { label = "RANGE", value = tostring(level.range), layoutOrder = 2 }),
-			speed = e(Stat, { label = "SPEED", value = rateText(level.fireRate), layoutOrder = 3 }),
+			damage = e(Stat, { label = "DAMAGE", value = statText(info.damage), layoutOrder = 1 }),
+			range = e(Stat, { label = "RANGE", value = statText(info.range), layoutOrder = 2 }),
+			speed = e(Stat, { label = "SPEED", value = rateText(info.fireRate), layoutOrder = 3 }),
 		}),
 	}
 
@@ -661,20 +694,20 @@ local function TowerInspector()
 
 			damage = e(DeltaRow, {
 				label = "Damage",
-				from = tostring(level.damage),
-				to = tostring(nextLevel.damage),
+				from = statText(info.damage),
+				to = statText(nextLevel.damage * damageScale),
 				layoutOrder = 2,
 			}),
 			range = e(DeltaRow, {
 				label = "Range",
-				from = tostring(level.range),
-				to = tostring(nextLevel.range),
+				from = statText(info.range),
+				to = statText(nextLevel.range * rangeScale),
 				layoutOrder = 3,
 			}),
 			speed = e(DeltaRow, {
 				label = "Speed",
-				from = rateText(level.fireRate),
-				to = rateText(nextLevel.fireRate),
+				from = rateText(info.fireRate),
+				to = rateText(nextLevel.fireRate * rateScale),
 				layoutOrder = 4,
 			}),
 		}

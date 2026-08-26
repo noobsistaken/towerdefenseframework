@@ -62,8 +62,11 @@ local DEFINITIONS: { [string]: Types.StatusEffectDefinition } = {
 	},
 
 	-- Short on purpose, and Refresh: a stun that outlasted its tower's
-	-- reload would be a permanent freeze with extra steps. At 0.5-0.7s
-	-- against a ~0.9s reload, uptime tops out near 60% on one target.
+	-- reload would be a permanent freeze with extra steps. The invariant
+	-- that actually guarantees it: every applier's stun duration stays
+	-- BELOW its fastest possible traited reload (fireRate times the
+	-- largest fire-rate trait). TowerBalance.spec computes both sides
+	-- from config, so a new stun tower cannot ship a permafreeze.
 	Concuss = {
 		id = "Concuss",
 		displayName = "Concuss",

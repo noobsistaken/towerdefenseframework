@@ -205,10 +205,10 @@ assert(reliable:IsA("RemoteEvent"), "Expected ZAP_RELIABLE to be a RemoteEvent")
 local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0"), remotes:WaitForChild("ZAP_UNRELIABLE_1") }
 assert(unreliable[1]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_0 to be an UnreliableRemoteEvent")
 assert(unreliable[2]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_1 to be an UnreliableRemoteEvent")
+export type LobbyState = ("Gathering" | "Voting" | "Launching")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 export type PollKind = ("Map" | "Difficulty")
 export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
-export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
-export type LobbyState = ("Gathering" | "Voting" | "Launching")
 export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "TowerCapReached" | "WrongMatchState")
 
 local function SendEvents()
@@ -478,6 +478,8 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 				value["outcome"] = "Duplicate"
 			elseif bit32.btest(bool_5, 0b0000000000000100) then
 				value["outcome"] = "CannotAfford"
+			elseif bit32.btest(bool_5, 0b0000000000001000) then
+				value["outcome"] = "Unavailable"
 			end
 			local len_8 = buffer.readu8(incoming_buff, read(1))
 			assert(len_8 <= 96, "value is more than 96!")
@@ -506,6 +508,8 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 				value["outcome"] = "CannotAfford"
 			elseif bit32.btest(bool_6, 0b0000000000000100) then
 				value["outcome"] = "UnknownTower"
+			elseif bit32.btest(bool_6, 0b0000000000001000) then
+				value["outcome"] = "Unavailable"
 			end
 			local len_10 = buffer.readu8(incoming_buff, read(1))
 			assert(len_10 <= 96, "value is more than 96!")
@@ -571,7 +575,9 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 		elseif id == 11 then -- GetLobbyProfile
 			local call_id = buffer.readu8(incoming_buff, read(1))
 			local value
+			local bool_8 = buffer.readu8(incoming_buff, read(1))
 			value = {  }
+			value["loaded"] = bit32.btest(bool_8, 0b0000000000000001)
 			value["coins"] = buffer.readu32(incoming_buff, read(4))
 			value["rerollTokens"] = buffer.readu16(incoming_buff, read(2))
 			local len_15 = buffer.readu8(incoming_buff, read(1))
@@ -640,13 +646,13 @@ unreliable[2].OnClientEvent:Connect(function(buff, inst) -- PlaySound
 	incoming_read = 0
 	incoming_ipos = 0
 	local value
-	local bool_8 = buffer.readu8(incoming_buff, read(1))
+	local bool_9 = buffer.readu8(incoming_buff, read(1))
 	value = {  }
 	local len_20 = buffer.readu8(incoming_buff, read(1))
 	assert(len_20 <= 128, "value is more than 128!")
 	value["soundKey"] = buffer.readstring(incoming_buff, read(len_20), len_20)
 	assert(utf8.len(value["soundKey"]) ~= nil, "value is not valid utf-8")
-	if bit32.btest(bool_8, 0b0000000000000001) then
+	if bit32.btest(bool_9, 0b0000000000000001) then
 		value["position"] = vector.create(buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)))
 	else
 		value["position"] = nil
@@ -711,18 +717,18 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
-			local bool_9 = 0
-			local bool_9_pos_1 = alloc(1)
+			local bool_10 = 0
+			local bool_10_pos_1 = alloc(1)
 			if Value["ready"] then
-				bool_9 = bit32.bor(bool_9, 0b0000000000000001)
+				bool_10 = bit32.bor(bool_10, 0b0000000000000001)
 			end
-			buffer.writeu8(outgoing_buff, bool_9_pos_1, bool_9)
+			buffer.writeu8(outgoing_buff, bool_10_pos_1, bool_10)
 		end,
 	},
 	RollTower = {
 		Call = function(Value: ({
 		})): (({
-			["outcome"]: ("Rolled" | "Duplicate" | "CannotAfford"),
+			["outcome"]: ("Rolled" | "Duplicate" | "CannotAfford" | "Unavailable"),
 			["towerId"]: (string),
 			["rarityId"]: (string),
 			["coins"]: (number),
@@ -746,7 +752,7 @@ local returns = {
 		Call = function(Value: ({
 			["towerId"]: (string),
 		})): (({
-			["outcome"]: ("Rolled" | "CannotAfford" | "UnknownTower"),
+			["outcome"]: ("Rolled" | "CannotAfford" | "UnknownTower" | "Unavailable"),
 			["traitId"]: (string),
 			["rarityId"]: (string),
 			["tokens"]: (number),
@@ -789,22 +795,22 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
-			local bool_10 = 0
-			local bool_10_pos_1 = alloc(1)
+			local bool_11 = 0
+			local bool_11_pos_1 = alloc(1)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
 			if Value["mode"] == "First" then
-				bool_10 = bit32.bor(bool_10, 0b0000000000000001)
+				bool_11 = bit32.bor(bool_11, 0b0000000000000001)
 			elseif Value["mode"] == "Last" then
-				bool_10 = bit32.bor(bool_10, 0b0000000000000010)
+				bool_11 = bit32.bor(bool_11, 0b0000000000000010)
 			elseif Value["mode"] == "Strongest" then
-				bool_10 = bit32.bor(bool_10, 0b0000000000000100)
+				bool_11 = bit32.bor(bool_11, 0b0000000000000100)
 			elseif Value["mode"] == "Closest" then
-				bool_10 = bit32.bor(bool_10, 0b0000000000001000)
+				bool_11 = bit32.bor(bool_11, 0b0000000000001000)
 			else
 				error("Invalid enumerator")
 			end
-			buffer.writeu8(outgoing_buff, bool_10_pos_1, bool_10)
+			buffer.writeu8(outgoing_buff, bool_11_pos_1, bool_11)
 		end,
 	},
 	RequestSellTower = {
@@ -973,6 +979,7 @@ local returns = {
 	GetLobbyProfile = {
 		Call = function(Value: ({
 		})): (({
+			["loaded"]: (boolean),
 			["coins"]: (number),
 			["rerollTokens"]: (number),
 			["unlockedTowers"]: ({ (string) }),
@@ -1002,10 +1009,10 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
-			local bool_11 = 0
-			local bool_11_pos_1 = alloc(1)
+			local bool_12 = 0
+			local bool_12_pos_1 = alloc(1)
 			if Value["poll"] == "Map" then
-				bool_11 = bit32.bor(bool_11, 0b0000000000000001)
+				bool_12 = bit32.bor(bool_12, 0b0000000000000001)
 			elseif Value["poll"] == "Difficulty" then
 				local _
 			else
@@ -1018,7 +1025,7 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_23)
 			alloc(len_23)
 			buffer.writestring(outgoing_buff, outgoing_apos, Value["option"], len_23)
-			buffer.writeu8(outgoing_buff, bool_11_pos_1, bool_11)
+			buffer.writeu8(outgoing_buff, bool_12_pos_1, bool_12)
 		end,
 	},
 	CashChanged = {

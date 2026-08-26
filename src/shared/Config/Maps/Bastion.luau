@@ -62,24 +62,27 @@ local map: Types.MapConfig = {
 
 	decor = {
 		-- Corner watchtowers, so the fortress premise is visible from spawn.
+		-- At +/-160 with a 12-stud footprint they clear the +/-146 corner
+		-- candidates MapBuilder's spawn derivation picks from - at +/-150
+		-- the northeast one swallowed the spawn pad whole.
 		{
-			position = Vector3.new(-150, 10, -150),
-			size = Vector3.new(14, 20, 14),
+			position = Vector3.new(-160, 10, -160),
+			size = Vector3.new(12, 20, 12),
 			color = Color3.fromRGB(84, 92, 84),
 		},
 		{
-			position = Vector3.new(150, 10, -150),
-			size = Vector3.new(14, 20, 14),
+			position = Vector3.new(160, 10, -160),
+			size = Vector3.new(12, 20, 12),
 			color = Color3.fromRGB(84, 92, 84),
 		},
 		{
-			position = Vector3.new(-150, 10, 150),
-			size = Vector3.new(14, 20, 14),
+			position = Vector3.new(-160, 10, 160),
+			size = Vector3.new(12, 20, 12),
 			color = Color3.fromRGB(84, 92, 84),
 		},
 		{
-			position = Vector3.new(150, 10, 150),
-			size = Vector3.new(14, 20, 14),
+			position = Vector3.new(160, 10, 160),
+			size = Vector3.new(12, 20, 12),
 			color = Color3.fromRGB(84, 92, 84),
 		},
 		-- Spawn markers, one per pincer.
