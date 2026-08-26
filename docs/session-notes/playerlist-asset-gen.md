@@ -81,3 +81,29 @@ Verified in playtests of BOTH places: lobby chips + gacha panel on
 steel with icons; match BASE/WAVE/CASH chips with heart/skull/coin.
 Deliberate taste call: the CTA buttons KEEP their flat accent colours -
 against steel everywhere, colour is what says "press me".
+
+## Run 3 - trait icons and interior textures (15 assets, 1 retry)
+
+Twelve trait emblems (one per Config/Traits entry, same icon clause) and
+three near-uniform interior weaves (brushed / carbon fiber / hex mesh,
+their own texture clause: "extremely low contrast, near-uniform deep
+charcoal #14161a, flat edge to edge"). All fifteen landed on the first
+pass - but the upload map exposed that trait_elite and trait_ascendant
+were BYTE-IDENTICAL files: six concurrent relay runs raced in the
+staging directory and one copied the other's output. The asset server's
+content-hash dedupe is what surfaced it (same rbxassetid for two
+"different" uploads). Regenerated elite solo. New rule: after a
+concurrent batch, md5 the outputs against each other, not just count.
+
+Textures ship opaque at 512 (no knockout - they ARE the background),
+applied as inset Crop ImageLabels. Icons knocked out and shipped at 128
+for the reroll reel.
+
+## The layout rule this session kept paying for
+
+A scale-sized image must never share a UIListLayout with the content it
+backs, and must never be a DIRECT child of an AutomaticSize element -
+it inflates the auto-size into a screen-height void. Hit three times
+(shop bar, roster, tower inspector). For auto-sized panels the fix is
+UiArt.Frame: the sliced image IS the host, so it tracks the resolved
+height and needs no scale child at all.
