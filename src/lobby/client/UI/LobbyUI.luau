@@ -31,6 +31,7 @@ local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
 local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
+local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
@@ -123,14 +124,12 @@ local function HudIdentity()
 	local players = useAtom(atoms.playerCount)
 	local state = useAtom(atoms.lobbyState)
 
-	return e("Frame", {
-		Position = UDim2.fromOffset(16, 16),
-		Size = UDim2.fromOffset(250, 62),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-		BorderSizePixel = 0,
-	}, {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+	return e(UiArt.Plate, {
+		frame = {
+			Position = UDim2.fromOffset(16, 16),
+			Size = UDim2.fromOffset(250, 62),
+		},
+		children = {
 		title = label({
 			Position = UDim2.fromOffset(14, 8),
 			Size = UDim2.new(1, -28, 0, 24),
@@ -150,6 +149,7 @@ local function HudIdentity()
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
 		}),
+		},
 	})
 end
 
@@ -169,15 +169,16 @@ local function HudWallet()
 		return nil
 	end
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, 16),
-		Size = UDim2.fromOffset(180, 62),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-		BorderSizePixel = 0,
-	}, {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+	return e(UiArt.Plate, {
+		frame = {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -16, 0, 16),
+			Size = UDim2.fromOffset(180, 62),
+		},
+		children = {
+		star = UiArt.icon("Star", UDim2.fromOffset(10, 8), 18),
+		coinIcon = UiArt.icon("Coin", UDim2.fromOffset(10, 26), 18),
+		tokenIcon = UiArt.icon("Token", UDim2.fromOffset(12, 44), 14),
 		level = label({
 			Position = UDim2.fromOffset(0, 6),
 			Size = UDim2.new(1, 0, 0, 18),
@@ -200,6 +201,7 @@ local function HudWallet()
 			TextColor3 = REROLL_COLOR,
 			TextSize = 11,
 		}),
+		},
 	})
 end
 
@@ -418,11 +420,10 @@ local function GamePanel()
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -110),
 			Size = UDim2.fromOffset(580, 290),
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+			BackgroundTransparency = 1,
 		},
 		children = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		art = UiArt.frameUnderlay(),
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 24),
@@ -616,11 +617,10 @@ local function LoadoutPanel()
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			Size = UDim2.fromOffset(480, 380),
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = 0.05,
+			BackgroundTransparency = 1,
 		},
 		children = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		art = UiArt.frameUnderlay(),
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 22),
@@ -786,11 +786,10 @@ local function GachaPanel()
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -110),
 			Size = UDim2.fromOffset(400, 190),
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+			BackgroundTransparency = 1,
 		},
 		children = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		art = UiArt.frameUnderlay(),
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 22),
@@ -1004,8 +1003,8 @@ local function overlay(onClose: () -> (), size: UDim2, children: { [string]: any
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			Size = size,
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = 0,
+			BackgroundColor3 = Theme.INVERSE,
+			BackgroundTransparency = 0.05,
 			BorderSizePixel = 0,
 			AutoButtonColor = false,
 			Text = "",
@@ -1393,12 +1392,10 @@ local function RerollPanel()
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -100),
 			Size = UDim2.fromOffset(520, 380),
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = 0.06,
+			BackgroundTransparency = 1,
 		},
 		children = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
-		panelStroke = e("UIStroke", { Color = REROLL_COLOR, Thickness = 1.5, Transparency = 0.45 }),
+		art = UiArt.frameUnderlay(),
 		title = e("TextLabel", {
 			Position = UDim2.fromOffset(0, 10),
 			Size = UDim2.new(1, 0, 0, 26),

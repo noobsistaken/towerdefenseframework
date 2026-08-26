@@ -236,7 +236,7 @@ function PlayerRoster.Panel(props: Props)
 							Image = RosterArt.FRAME,
 							ScaleType = Enum.ScaleType.Slice,
 							SliceCenter = RosterArt.FRAME_SLICE,
-							SliceScale = 0.25,
+							SliceScale = 0.18,
 							ZIndex = 0,
 						})
 						else nil,

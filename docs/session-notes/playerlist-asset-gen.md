@@ -63,3 +63,21 @@ matching ground so no repaint is needed.
 Probe-rendered in a playtest: slices clean at 260px panel and 44px rows,
 badges legible at 26px, no checkerboards, no visible squares. Looks good
 - shipping without another iteration round.
+
+## Run 2 - the HUD material system (6 assets, 0 retries)
+
+Same style clause, six more generations: a compact steel plate and five
+stat icons (coin, token crystal, armored heart, zombie skull, star
+medal). All six landed first try - counted files before trusting.
+Knockout cleared 29-91%; icons shipped at 96px, plate at 1024x613.
+
+Applied as ONE material system through shared UiArt components:
+  FRAME (the roster's frame, reused) skins every big panel underlay;
+  PLATE skins every HUD chip; BUTTON (the row plate, reused) is the CTA
+  surface awaiting adoption; ICONS sit beside the numbers they name.
+SliceScale 0.18 after the first look - 0.25 borders ate small panels.
+
+Verified in playtests of BOTH places: lobby chips + gacha panel on
+steel with icons; match BASE/WAVE/CASH chips with heart/skull/coin.
+Deliberate taste call: the CTA buttons KEEP their flat accent colours -
+against steel everywhere, colour is what says "press me".

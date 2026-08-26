@@ -18,6 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
+local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
 
 local ResultsScreen = require(script.Parent.ResultsScreen)
@@ -58,28 +59,10 @@ local function phaseLabel(state: string): string
 	return "DEFEATED"
 end
 
+--- Every HUD chip rides the generated steel plate (or the flat themed
+--- panel when the art is missing) - one skin, changed in one place.
 local function panel(props: { [string]: any }, children: { [string]: any }?)
-	local merged: { [string]: any } = {
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-		BorderSizePixel = 0,
-	}
-
-	for key, value in props do
-		merged[key] = value
-	end
-
-	local content: { [string]: any } = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
-	}
-
-	if children ~= nil then
-		for key, value in children do
-			content[key] = value
-		end
-	end
-
-	return e("Frame", merged, content)
+	return UiArt.Plate({ frame = props, children = children })
 end
 
 local function label(props: { [string]: any })
@@ -111,6 +94,7 @@ local function BaseHealthPanel()
 		Position = UDim2.fromOffset(16, 16),
 		Size = UDim2.fromOffset(220, 62),
 	}, {
+		icon = UiArt.icon("Heart", UDim2.new(1, -38, 0, 10), 26),
 		title = label({
 			Position = UDim2.fromOffset(14, 8),
 			Size = UDim2.fromOffset(190, 16),
@@ -163,6 +147,7 @@ local function WavePanel()
 		Position = UDim2.new(0.5, 0, 0, 16),
 		Size = UDim2.fromOffset(200, 62),
 	}, {
+		icon = UiArt.icon("Skull", UDim2.new(1, -34, 0, 8), 24),
 		phase = label({
 			Position = UDim2.fromOffset(0, 8),
 			Size = UDim2.new(1, 0, 0, 16),
@@ -199,6 +184,7 @@ local function CashPanel()
 		Position = UDim2.new(1, -16, 0, 16),
 		Size = UDim2.fromOffset(160, 62),
 	}, {
+		icon = UiArt.icon("Coin", UDim2.new(1, -38, 0, 10), 26),
 		title = label({
 			Position = UDim2.fromOffset(14, 8),
 			Size = UDim2.fromOffset(130, 16),
