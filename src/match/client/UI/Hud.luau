@@ -18,6 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 
 local ResultsScreen = require(script.Parent.ResultsScreen)
 local ShopBar = require(script.Parent.ShopBar)
@@ -98,8 +99,12 @@ end
 
 --- Base health, top left. Shared across the whole team.
 local function BaseHealthPanel()
-	local current = useAtom(atoms.baseHealth)
+	local currentTarget = useAtom(atoms.baseHealth)
 	local max = useAtom(atoms.baseHealthMax)
+	-- The number and the bar GLIDE to the new health. Smoothing the VALUE
+	-- and letting React declare from it keeps React and TweenService off
+	-- the same property.
+	local current = math.floor(UiFx.useSmoothedNumber(currentTarget, 0.3) + 0.5)
 	local fraction = if max > 0 then math.clamp(current / max, 0, 1) else 0
 
 	return panel({
@@ -186,7 +191,8 @@ end
 
 --- This player's cash, top right.
 local function CashPanel()
-	local cash = useAtom(atoms.cash)
+	local cashTarget = useAtom(atoms.cash)
+	local cash = math.floor(UiFx.useSmoothedNumber(cashTarget) + 0.5)
 
 	return panel({
 		AnchorPoint = Vector2.new(1, 0),

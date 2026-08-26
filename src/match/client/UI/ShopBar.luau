@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local React = require(ReplicatedStorage.Packages.React)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local Theme = require(ReplicatedStorage.Shared.Theme)
@@ -161,14 +162,16 @@ local function ShopBar()
 		end
 	end
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -16),
-		Size = UDim2.fromOffset(math.max(#loadout, 1) * (BUTTON_WIDTH + 8) + 16, BUTTON_HEIGHT + 16),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-		BorderSizePixel = 0,
-	}, children)
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -16),
+			Size = UDim2.fromOffset(math.max(#loadout, 1) * (BUTTON_WIDTH + 8) + 16, BUTTON_HEIGHT + 16),
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		},
+		children = children,
+	})
 end
 
 return ShopBar

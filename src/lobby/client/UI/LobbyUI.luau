@@ -29,6 +29,7 @@ local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
@@ -150,9 +151,13 @@ end
 --- profile answer so it cannot flash a zero balance.
 local function HudWallet()
 	local loaded = useAtom(atoms.profileLoaded)
-	local coins = useAtom(atoms.coins)
-	local tokens = useAtom(atoms.rerollTokens)
+	local coinsTarget = useAtom(atoms.coins)
+	local tokensTarget = useAtom(atoms.rerollTokens)
 	local level = useAtom(atoms.level)
+	-- The numbers CHASE their targets - a gacha refund or an admin grant
+	-- rolls in instead of snapping.
+	local coins = math.floor(UiFx.useSmoothedNumber(coinsTarget) + 0.5)
+	local tokens = math.floor(UiFx.useSmoothedNumber(tokensTarget) + 0.5)
 
 	if not loaded then
 		return nil
@@ -227,19 +232,24 @@ local function FailureToast()
 		return nil
 	end
 
-	return e("TextLabel", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -72),
-		Size = UDim2.fromOffset(520, 32),
-		BackgroundColor3 = Theme.NEGATIVE,
-		BackgroundTransparency = 0.1,
-		BorderSizePixel = 0,
-		Font = Theme.FONT_BODY,
-		Text = reason,
-		TextColor3 = Theme.TEXT,
-		TextSize = 13,
-	}, {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -72),
+			Size = UDim2.fromOffset(520, 32),
+			BackgroundColor3 = Theme.NEGATIVE,
+			BackgroundTransparency = 0.1,
+		},
+		restartKey = reason,
+		children = {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			text = label({
+				Size = UDim2.fromScale(1, 1),
+				Font = Theme.FONT_BODY,
+				Text = reason,
+				TextSize = 13,
+			}),
+		},
 	})
 end
 
@@ -355,6 +365,7 @@ local function GamePanel()
 	local state = useAtom(atoms.lobbyState)
 	local winningMap = useAtom(atoms.winningMapId)
 	local winningDifficulty = useAtom(atoms.winningDifficultyId)
+	local startScale = React.useRef(nil :: UIScale?)
 
 	if area ~= "Game" then
 		return nil
@@ -394,14 +405,15 @@ local function GamePanel()
 		difficultyButtons[difficultyId] = e(DifficultyButton, { difficultyId = difficultyId, order = order })
 	end
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -110),
-		Size = UDim2.fromOffset(580, 290),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-		BorderSizePixel = 0,
-	}, {
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -110),
+			Size = UDim2.fromOffset(580, 290),
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		},
+		children = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
@@ -455,12 +467,15 @@ local function GamePanel()
 			TextSize = 16,
 			[React.Event.Activated] = function()
 				if not launching then
+					UiFx.pressPop(startScale.current)
 					Net.RequestLaunch.Fire()
 				end
 			end,
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			pressScale = e("UIScale", { ref = startScale }),
 		}),
+		},
 	})
 end
 
@@ -527,6 +542,7 @@ local function LoadoutPanel()
 	local draft, setDraft = React.useState({} :: { string })
 	local status, setStatus = React.useState("")
 	local saving = React.useRef(false)
+	local saveScale = React.useRef(nil :: UIScale?)
 
 	-- Re-seed the draft from the saved deck each time the panel opens. The
 	-- boolean dep is deliberate: open/close is exactly when to reset.
@@ -587,14 +603,15 @@ local function LoadoutPanel()
 		end
 	end
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(480, 380),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = 0.05,
-		BorderSizePixel = 0,
-	}, {
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(480, 380),
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = 0.05,
+		},
+		children = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
@@ -636,6 +653,7 @@ local function LoadoutPanel()
 					return
 				end
 
+				UiFx.pressPop(saveScale.current)
 				saving.current = true
 
 				task.spawn(function()
@@ -660,6 +678,7 @@ local function LoadoutPanel()
 			end,
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			pressScale = e("UIScale", { ref = saveScale }),
 		}),
 		cancel = e("TextButton", {
 			AnchorPoint = Vector2.new(0, 1),
@@ -678,6 +697,7 @@ local function LoadoutPanel()
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
 		}),
+		},
 	})
 end
 
@@ -720,6 +740,7 @@ local function GachaPanel()
 	-- click landing before the re-render commits still sees busy=false, and
 	-- two Calls means paying twice. A ref reads and writes synchronously.
 	local rolling = React.useRef(false)
+	local rollScale = React.useRef(nil :: UIScale?)
 
 	if area ~= "Gacha" then
 		return nil
@@ -752,14 +773,15 @@ local function GachaPanel()
 		end
 	end
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -110),
-		Size = UDim2.fromOffset(400, 190),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-		BorderSizePixel = 0,
-	}, {
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -110),
+			Size = UDim2.fromOffset(400, 190),
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		},
+		children = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
@@ -800,6 +822,7 @@ local function GachaPanel()
 					return
 				end
 
+				UiFx.pressPop(rollScale.current)
 				rolling.current = true
 				setBusy(true)
 
@@ -849,7 +872,9 @@ local function GachaPanel()
 			end,
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			pressScale = e("UIScale", { ref = rollScale }),
 		}),
+		},
 	})
 end
 
@@ -952,7 +977,11 @@ end
 --- panel on top. Mounted at the UI root, above every panel - the first
 --- chances popup lived inside the panel and z-fought it into
 --- unreadability.
-local function overlay(onClose: () -> (), size: UDim2, children: { [string]: any })
+local function overlay(onClose: () -> (), size: UDim2, children: { [string]: any }): any
+	-- The panel pops on mount through a function-ref UIScale: overlays
+	-- render conditionally, so a hook here would break the rules of hooks.
+	children.uiFxScale = e("UIScale", { ref = UiFx.popScale })
+
 	return e("TextButton", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Color3.new(0, 0, 0),
@@ -1273,6 +1302,7 @@ local function RerollPanel()
 	-- Same synchronous double-fire guard as the gacha's roll button: `busy`
 	-- alone is a render-closure value and two fast clicks spend two tokens.
 	local rolling = React.useRef(false)
+	local rerollScale = React.useRef(nil :: UIScale?)
 
 	if area ~= "Reroll" then
 		return nil
@@ -1350,14 +1380,15 @@ local function RerollPanel()
 
 	local affordable = tokens >= 1 and currentId ~= nil
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -100),
-		Size = UDim2.fromOffset(520, 380),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = 0.06,
-		BorderSizePixel = 0,
-	}, {
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -100),
+			Size = UDim2.fromOffset(520, 380),
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = 0.06,
+		},
+		children = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		panelStroke = e("UIStroke", { Color = REROLL_COLOR, Thickness = 1.5, Transparency = 0.45 }),
 		title = e("TextLabel", {
@@ -1457,11 +1488,13 @@ local function RerollPanel()
 			TextSize = 16,
 			[React.Event.Activated] = function()
 				if affordable and not busy then
+					UiFx.pressPop(rerollScale.current)
 					onReroll()
 				end
 			end,
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			pressScale = e("UIScale", { ref = rerollScale }),
 			gradient = if affordable and not busy
 				then e("UIGradient", {
 					Color = ColorSequence.new(Color3.fromRGB(255, 150, 200), Color3.fromRGB(190, 120, 255)),
@@ -1469,6 +1502,7 @@ local function RerollPanel()
 				})
 				else nil,
 		}),
+		},
 	})
 end
 

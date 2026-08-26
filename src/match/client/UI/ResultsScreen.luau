@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local React = require(ReplicatedStorage.Packages.React)
 local Rewards = require(ReplicatedStorage.Shared.Rewards)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
@@ -38,13 +39,17 @@ local function label(props: { [string]: any })
 	return e("TextLabel", merged)
 end
 
---- One reward figure with its caption.
-local function Stat(props: { caption: string, value: string, color: Color3, x: number })
-	return e("Frame", {
-		Position = UDim2.fromOffset(props.x, 96),
-		Size = UDim2.fromOffset(140, 48),
-		BackgroundTransparency = 1,
-	}, {
+--- One reward figure with its caption. Each stat pops in a beat after
+--- the one before it, so the payout reads as a sequence, not a wall.
+local function Stat(props: { caption: string, value: string, color: Color3, x: number, order: number })
+	return e(UiFx.PopIn, {
+		frame = {
+			Position = UDim2.fromOffset(props.x, 96),
+			Size = UDim2.fromOffset(140, 48),
+			BackgroundTransparency = 1,
+		},
+		delay = 0.12 + props.order * 0.09,
+		children = {
 		value = label({
 			Size = UDim2.new(1, 0, 0, 26),
 			Text = props.value,
@@ -58,6 +63,7 @@ local function Stat(props: { caption: string, value: string, color: Color3, x: n
 			TextColor3 = Theme.MUTED,
 			TextSize = 12,
 		}),
+		},
 	})
 end
 
@@ -78,14 +84,16 @@ local function ResultsScreen()
 	local waves = result.wavesCleared
 	local wavesText = if waves == 1 then "1 WAVE" else `{waves} WAVES`
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(560, 172),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = 0.05,
-		BorderSizePixel = 0,
-	}, {
+	return e(UiFx.PopIn, {
+		frame = {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(560, 172),
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = 0.05,
+		},
+		restartKey = if won then "won" else "lost",
+		children = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		stroke = e("UIStroke", {
 			Color = if won then Theme.POSITIVE else Theme.NEGATIVE,
@@ -110,18 +118,21 @@ local function ResultsScreen()
 			value = wavesText,
 			color = Theme.TEXT,
 			x = 20,
+			order = 0,
 		}),
 		coins = e(Stat, {
 			caption = "COINS EARNED",
 			value = `+{result.coinsAwarded}`,
 			color = Theme.CASH,
 			x = 160,
+			order = 1,
 		}),
 		xp = e(Stat, {
 			caption = `XP EARNED`,
 			value = `+{result.xpAwarded}`,
 			color = Theme.ACCENT,
 			x = 300,
+			order = 2,
 		}),
 		-- Spent at the lobby's reroll station; earning them HERE is what makes
 		-- the results screen the bridge between the two places.
@@ -130,6 +141,7 @@ local function ResultsScreen()
 			value = `+{result.tokensAwarded}`,
 			color = Color3.fromRGB(158, 110, 208),
 			x = 420,
+			order = 3,
 		}),
 		-- Shown so the number means something. Level is derived from total XP
 		-- on the server, so this is only ever a preview of the gain.
@@ -140,6 +152,7 @@ local function ResultsScreen()
 			TextColor3 = Theme.MUTED,
 			TextSize = 11,
 		}),
+		},
 	})
 end
 
