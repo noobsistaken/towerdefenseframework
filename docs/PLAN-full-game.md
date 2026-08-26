@@ -17,16 +17,25 @@ draws at it and `Rigs.attachMoving` plants feet on it. Visual-only - the
 hitbox stays on the path plane, one comment in Rigs explains why. Verified
 live: feet at 1.15-1.4 on the walkway.
 
-## 1. Lobby v2: zones instead of menus - SHIPPED
+## 1. Lobby v2 - SHIPPED, then REDESIGNED same-day per Alexei's sketch
 
-`LobbyZones` (shared, pure) derives one walk-in zone per registered map
-with difficulty pads inside (map zone x difficulty pad, as recommended);
-occupancy scanned server-side each heartbeat from server-owned character
-positions - never Touched events, never client messages. Zone exit
-withdraws the vote AND un-readies. CastVote stays on the wire as the
-fallback path. Server-painted billboard vote boards, winner starred.
-The lobby floor derives its width from the zone row, so a sixth map
-grows the room. Tests: LobbyZones.spec (zones, pads, resolver, stations).
+First build: one walk-in vote zone per map. Alexei's correction: the
+lobby is a HUB - spawn in the centre, NO countdown ever, and nothing
+launches until you walk into the GAME area, where a chooser GUI opens
+(map + difficulty buttons with live tallies) and a START button - the
+only launch path in the game - teleports everyone standing in the area.
+GACHA and REROLL are walk-in areas on the other sides, each with a
+store-model prop (quarantine pipeline, scripts stripped) and a UI
+reveal animation over the server's already-decided result. A lobby HUD
+shows level/coins/tokens, player count, and the LOADOUT button.
+Occupancy still scanned server-side from positions the server owns.
+Tests: LobbyZones.spec (areas, resolver, spawn clearance).
+
+Loadouts joined the same rework: own the roster, BRING six. Pure rules
+in Loadouts.luau (1..6, owned, real, no dupes, replace-whole), schema
+v4 deals a first deck, the match shop renders ONLY the deck, placement
+refuses NotInLoadout, and the lobby edits it through a draft panel.
+Tests: Loadouts.spec, DataSchema.spec v3->v4, Placement.spec.
 
 ## 2. Persistence + economy for rolls - SHIPPED
 
