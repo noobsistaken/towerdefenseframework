@@ -85,15 +85,16 @@ end
 
 --- Writes a finished match's payout into persistent data.
 ---
---- The only place in the codebase that mutates Coins, XP, Level or the
---- lifetime Stats, which is what makes "where did this number come from"
---- answerable by reading one function.
+--- The only place in the codebase that mutates Coins, XP, RerollTokens,
+--- Level or the lifetime Stats in THIS place, which is what makes "where
+--- did this number come from" answerable by reading one function. (The
+--- lobby's gacha spends what this earns; each place owns its own half.)
 ---
 --- Silently does nothing for a player with no live session. That is correct
 --- rather than lazy: a player who left during the results screen has already
 --- had their profile released, and writing to a released profile is how you
 --- corrupt the next session.
-local function awardRewards(player: Player, coins: number, xp: number)
+local function awardRewards(player: Player, coins: number, xp: number, tokens: number)
 	local profile = profiles[player]
 
 	if profile == nil then
@@ -104,6 +105,7 @@ local function awardRewards(player: Player, coins: number, xp: number)
 
 	data.Coins += coins
 	data.XP += xp
+	data.RerollTokens += tokens
 
 	-- Derived from XP rather than incremented, so the two can never disagree
 	-- and a curve change re-levels everyone correctly on their next match.

@@ -62,6 +62,14 @@ describe("Rewards.forMatch", function()
 		expect(won.xp > lost.xp).toBe(true)
 	end)
 
+	it("pays tokens flat: one for the payout, one more for the win", function()
+		-- Difficulty-blind on purpose: tokens gate rerolls, and a currency
+		-- that farms exponentially makes the reroll button a formality.
+		expect(Rewards.forMatch(5, false, NORMAL).tokens).toBe(Rewards.TOKENS_PER_PAYOUT)
+		expect(Rewards.forMatch(40, true, NORMAL).tokens).toBe(Rewards.TOKENS_PER_PAYOUT + Rewards.TOKENS_FOR_WIN)
+		expect(Rewards.forMatch(5, false, difficulty(1.25)).tokens).toBe(Rewards.forMatch(5, false, NORMAL).tokens)
+	end)
+
 	it("scales with the difficulty multiplier", function()
 		local casual = Rewards.forMatch(20, false, difficulty(0.8))
 		local nightmare = Rewards.forMatch(20, false, difficulty(1.25))

@@ -34,6 +34,12 @@ Rewards.COINS_FOR_WIN = 250
 Rewards.XP_PER_WAVE = 10
 Rewards.XP_FOR_WIN = 150
 
+--- RerollTokens per payout: one for playing, one more for winning. Flat
+--- and difficulty-blind on purpose - tokens gate rerolls, and a currency
+--- that farms exponentially would make the reroll button a formality.
+Rewards.TOKENS_PER_PAYOUT = 1
+Rewards.TOKENS_FOR_WIN = 1
+
 --- Scales the whole level curve. Level L requires this times L(L-1)/2
 --- cumulative XP, so the gap between consecutive levels grows linearly.
 Rewards.XP_CURVE = 200
@@ -41,6 +47,7 @@ Rewards.XP_CURVE = 200
 export type Payout = {
 	coins: number,
 	xp: number,
+	tokens: number,
 }
 
 --- What a finished match pays.
@@ -65,6 +72,7 @@ function Rewards.forMatch(wavesCleared: number, won: boolean, difficulty: Types.
 	return {
 		coins = math.max(0, math.floor(coins * difficulty.rewardMultiplier + 0.5)),
 		xp = math.max(0, math.floor(xp * difficulty.rewardMultiplier + 0.5)),
+		tokens = Rewards.TOKENS_PER_PAYOUT + (if won then Rewards.TOKENS_FOR_WIN else 0),
 	}
 end
 

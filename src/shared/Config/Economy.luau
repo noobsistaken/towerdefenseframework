@@ -15,6 +15,19 @@ local Economy = {}
 --- punishment rather than a decision.
 Economy.SELL_REFUND_RATE = 0.6
 
+--- One gacha roll, paid in Coins - the meta-currency matches award.
+--- Tuned against Rewards: a decent run pays 400-800, so a roll is
+--- roughly one run, and a bad run is still most of the way there.
+Economy.GACHA_ROLL_COST = 400
+
+--- Fraction of the roll price returned when the roll lands a tower the
+--- player already owns. Below 1 so a full collection still burns coins
+--- slowly; above 0 so a duplicate stings rather than robs.
+Economy.GACHA_DUPLICATE_REFUND_RATE = 0.5
+
+--- One trait reroll, paid in RerollTokens (earned per match, not bought).
+Economy.TRAIT_REROLL_TOKEN_COST = 1
+
 --- Cash per second of build phase skipped, awarded to every player.
 Economy.EARLY_START_PER_SECOND = 3
 

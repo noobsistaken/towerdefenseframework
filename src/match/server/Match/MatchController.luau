@@ -74,7 +74,7 @@ export type UnlockedResolver = (player: Player) -> { string }
 --- same reason as UnlockedResolver: the controller must not reach into
 --- persistence itself. It is also what keeps the controller testable in
 --- principle - the reward path can be observed without a DataStore.
-export type RewardAwarder = (player: Player, coins: number, xp: number) -> ()
+export type RewardAwarder = (player: Player, coins: number, xp: number, tokens: number) -> ()
 
 --- This player's persisted audio setting. Injected for the same reason as the
 --- two above: profiles belong to the entry point.
@@ -220,7 +220,7 @@ local function payRewards(self: Controller, throughWave: number, won: boolean): 
 	local unpaid = math.max(0, throughWave - self.paidThroughWave)
 
 	if unpaid <= 0 and not won then
-		return { coins = 0, xp = 0 }
+		return { coins = 0, xp = 0, tokens = 0 }
 	end
 
 	self.paidThroughWave = math.max(self.paidThroughWave, throughWave)
@@ -228,7 +228,7 @@ local function payRewards(self: Controller, throughWave: number, won: boolean): 
 	local payout = Rewards.forMatch(unpaid, won, self.difficulty)
 
 	for _, player in Players:GetPlayers() do
-		self.awardRewards(player, payout.coins, payout.xp)
+		self.awardRewards(player, payout.coins, payout.xp, payout.tokens)
 	end
 
 	return payout
@@ -255,6 +255,7 @@ local function endMatchInDefeat(self: Controller)
 		wavesCleared = cleared,
 		coinsAwarded = payout.coins,
 		xpAwarded = payout.xp,
+		tokensAwarded = payout.tokens,
 	})
 end
 
@@ -274,6 +275,7 @@ local function beginVictoryInterlude(self: Controller)
 		wavesCleared = self.waveNumber,
 		coinsAwarded = payout.coins,
 		xpAwarded = payout.xp,
+		tokensAwarded = payout.tokens,
 	})
 
 	setState(self, "Victory", Constants.RESULTS_SECONDS)

@@ -190,6 +190,9 @@ event MatchEnded = {
 		wavesCleared: u16,
 		coinsAwarded: u32,
 		xpAwarded: u32,
+		-- RerollTokens granted by this payout, spent on trait rerolls in the
+		-- lobby. Small by design; u8 is generous.
+		tokensAwarded: u8,
 	},
 }
 
@@ -246,7 +249,7 @@ funct GetMatchSnapshot = {
 		-- Which towers this player owns, so the shop can grey out the rest.
 		-- Advisory: the server re-checks unlock on every placement request,
 		-- so a client that ignores this gains nothing.
-		unlockedTowers: string.utf8(..24)[0..32],
+		unlockedTowers: string.utf8(..24)[0..64],
 	},
 }
 
@@ -316,6 +319,65 @@ event VoteTallyChanged = {
 		-- Recomputing it per client would mean reimplementing the tie-break.
 		winningMapId: string.utf8(..24),
 		winningDifficultyId: string.utf8(..24),
+	},
+}
+
+-- One gacha roll, paid in Coins (Economy.GACHA_ROLL_COST). The server owns
+-- the RNG, the price and the pool; the client owns nothing but the button.
+-- A funct rather than an event pair so the reveal animation has its result
+-- in hand the moment it starts.
+--
+-- `outcome` tells the client which of three screens to render. On Rolled
+-- the tower was ADDED to the player's unlocks; on Duplicate the refund has
+-- already been credited; on CannotAfford nothing changed. towerId and
+-- rarityId are empty strings when there was no roll.
+funct RollTower = {
+	call: Async,
+	args: struct {},
+	rets: struct {
+		outcome: enum { Rolled, Duplicate, CannotAfford },
+		towerId: string.utf8(..24),
+		rarityId: string.utf8(..24),
+		-- Coin balance AFTER the roll, so the UI never derives money.
+		coins: u32,
+		-- Coins handed back on a duplicate. 0 otherwise.
+		refunded: u32,
+	},
+}
+
+-- Rerolls the trait on one OWNED tower, paid in RerollTokens. The old
+-- trait is replaced, never stacked - Traits.SLOTS is 1 and the server
+-- enforces it regardless of what the client believes.
+funct RerollTrait = {
+	call: Async,
+	args: struct {
+		towerId: string.utf8(..24),
+	},
+	rets: struct {
+		outcome: enum { Rolled, CannotAfford, UnknownTower },
+		traitId: string.utf8(..24),
+		rarityId: string.utf8(..24),
+		-- Token balance AFTER the reroll.
+		tokens: u16,
+	},
+}
+
+-- Everything the lobby UI renders about this player's collection. Fetched
+-- once at join and refreshed after every roll and reroll; the amounts on
+-- the roll replies keep the hot numbers current between fetches.
+funct GetLobbyProfile = {
+	call: Async,
+	args: struct {},
+	rets: struct {
+		coins: u32,
+		rerollTokens: u16,
+		unlockedTowers: string.utf8(..24)[0..64],
+		-- Flattened { towerId, traitId } pairs: zap structs cannot carry a
+		-- map, and SLOTS = 1 makes one pair per tower exact.
+		traits: struct {
+			towerId: string.utf8(..24),
+			traitId: string.utf8(..24),
+		}[0..64],
 	},
 }
 
