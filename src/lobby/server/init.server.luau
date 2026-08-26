@@ -33,7 +33,7 @@ local TeleportGate = require(script.TeleportGate)
 -- resolve every require from one sourcemap. Without this guard, opening it
 -- would boot a match and a lobby into the same world. In a published place
 -- only one of the two entry scripts exists, so this always passes there.
-if not Places.shouldBoot("Lobby", RunService:IsStudio()) then
+if not Places.shouldBoot("Lobby", RunService:IsStudio(), game.PlaceId) then
 	return
 end
 

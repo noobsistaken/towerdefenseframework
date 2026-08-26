@@ -28,7 +28,7 @@ local atoms = require(script.State.atoms)
 -- Mirrors the guard in the lobby server entry. The test place mounts both
 -- clients so luau-lsp can resolve every require from one sourcemap; without
 -- this, opening it would mount the lobby UI on top of the match HUD.
-if not Places.shouldBoot("Lobby", RunService:IsStudio()) then
+if not Places.shouldBoot("Lobby", RunService:IsStudio(), game.PlaceId) then
 	return
 end
 

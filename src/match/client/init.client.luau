@@ -15,6 +15,17 @@
 	anything the server has not already decided.
 ]]
 
+local RunService = game:GetService("RunService")
+
+local Places = require(game:GetService("ReplicatedStorage").Shared.Config.Places)
+
+-- The same gate the lobby entries carry, for the same reason: the dev window
+-- syncs the full test superset, so BOTH entries exist in one tree and only
+-- the role - or in production, the place id - may decide which one runs.
+if not Places.shouldBoot("Match", RunService:IsStudio(), game.PlaceId) then
+	return
+end
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
