@@ -96,8 +96,9 @@ local function buildEgg(tint: Color3): Model
 end
 
 --- The unit: the rig template when the place carries one, the tower's
---- config box when it does not.
-local function buildUnit(definition: Types.TowerDefinition?): Model
+--- config box when it does not. Public: the reroll panel's portrait uses
+--- the same builder, so the two screens can never disagree about a unit.
+function EggReveal.buildUnit(definition: Types.TowerDefinition?): Model
 	local model = Instance.new("Model")
 
 	if definition ~= nil then
@@ -284,7 +285,7 @@ function EggReveal.play(request: Request, onDone: () -> ())
 
 		egg:Destroy()
 
-		local unit = buildUnit(definition)
+		local unit = EggReveal.buildUnit(definition)
 		unit.Parent = viewport
 		frame(camera, unit, true)
 

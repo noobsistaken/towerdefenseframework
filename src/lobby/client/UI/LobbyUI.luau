@@ -864,72 +864,267 @@ type RerollReply = {
 	tokens: number,
 }
 
---- One tower's button in the reroll grid: name in its rarity colour, the
---- current trait underneath.
-local function RerollRow(props: { towerId: string, onReroll: (towerId: string) -> (), busy: boolean, order: number })
-	local traits = useAtom(atoms.traits)
+--- The odds of landing one trait: its tier's ladder weight split evenly
+--- across the tier's traits - exactly how Gacha.roll draws, so the chances
+--- table shows the numbers the roll actually uses.
+local function traitChance(traitId: string): number
+	local definition = Traits.get(traitId)
+	local inTier = 0
+
+	for _, id in Traits.IDS do
+		if Traits.get(id).rarity == definition.rarity then
+			inTier += 1
+		end
+	end
+
+	return Rarity.get(definition.rarity).gachaWeight / inTier
+end
+
+--- "13.33%", "8%", "0.7%" - two decimals with the noise trimmed.
+local function formatChance(percent: number): string
+	local text = string.format("%.2f", percent)
+	text = text:gsub("%.?0+$", "")
+
+	return text .. "%"
+end
+
+--- The featured unit, standing in a viewport on a slow pedestal spin - the
+--- same presentation the egg reveal ends on, through the same model
+--- builder, so the reroll screen and the hatch can never disagree about
+--- what a unit looks like.
+local function UnitPortrait(props: { towerId: string? })
+	local viewportRef = React.useRef(nil :: ViewportFrame?)
+
+	React.useEffect(function(): () -> ()
+		local viewport = viewportRef.current
+		local towerId = props.towerId
+
+		if viewport == nil or towerId == nil then
+			return function() end
+		end
+
+		local camera = Instance.new("Camera")
+		camera.Parent = viewport
+		viewport.CurrentCamera = camera
+
+		local unit = EggReveal.buildUnit(Towers.find(towerId))
+		unit.Parent = viewport
+
+		local _, extents = unit:GetBoundingBox()
+		camera.CFrame = CFrame.lookAt(
+			Vector3.new(0, extents.Y * 0.15, extents.Magnitude * 0.85 + 2),
+			Vector3.new(0, 0, 0)
+		)
+
+		local alive = true
+
+		task.spawn(function()
+			while alive do
+				unit:PivotTo(unit:GetPivot() * CFrame.Angles(0, math.rad(0.8), 0))
+				task.wait(0.03)
+			end
+		end)
+
+		return function()
+			alive = false
+			unit:Destroy()
+			camera:Destroy()
+		end
+	end, { props.towerId or "" })
+
+	return e("ViewportFrame", {
+		ref = viewportRef,
+		Position = UDim2.fromOffset(16, 64),
+		Size = UDim2.fromOffset(190, 190),
+		BackgroundColor3 = Theme.INVERSE,
+		BackgroundTransparency = 0.25,
+		Ambient = Color3.fromRGB(185, 185, 195),
+		LightColor = Color3.fromRGB(255, 250, 240),
+		LightDirection = Vector3.new(-0.4, -1, -0.6),
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		stroke = e("UIStroke", { Color = REROLL_COLOR, Thickness = 1.5, Transparency = 0.4 }),
+	})
+end
+
+--- The odds popup, genre-standard: every trait, rarity-coloured, with the
+--- true percentage beside it.
+local function TraitChances(props: { onClose: () -> () })
+	local ordered: { string } = {}
+
+	for _, id in Traits.IDS do
+		table.insert(ordered, id)
+	end
+
+	table.sort(ordered, function(a, b)
+		local orderA = Rarity.get(Traits.get(a).rarity).order
+		local orderB = Rarity.get(Traits.get(b).rarity).order
+
+		if orderA ~= orderB then
+			return orderA < orderB
+		end
+
+		return a < b
+	end)
+
+	local rows: { [string]: any } = {
+		layout = e("UIListLayout", {
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			Padding = UDim.new(0, 6),
+		}),
+	}
+
+	for index, id in ordered do
+		local definition = Traits.get(id)
+		local color = rarityColor(definition.rarity)
+
+		rows[id] = e("Frame", {
+			Size = UDim2.fromOffset(280, 34),
+			BackgroundColor3 = Theme.RAISED,
+			BorderSizePixel = 0,
+			LayoutOrder = index,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			stroke = e("UIStroke", { Color = color, Thickness = 1, Transparency = 0.35 }),
+			name = label({
+				Position = UDim2.fromOffset(12, 0),
+				Size = UDim2.new(1, -90, 1, 0),
+				Text = definition.displayName,
+				TextColor3 = color,
+				TextSize = 15,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			chance = label({
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -12, 0, 0),
+				Size = UDim2.fromOffset(80, 34),
+				Text = formatChance(traitChance(id)),
+				TextColor3 = color,
+				TextSize = 15,
+				TextXAlignment = Enum.TextXAlignment.Right,
+			}),
+		})
+	end
+
+	return e("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(320, 430),
+		BackgroundColor3 = Theme.PANEL,
+		BackgroundTransparency = 0.03,
+		BorderSizePixel = 0,
+		ZIndex = 5,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		stroke = e("UIStroke", { Color = Theme.CASH, Thickness = 1.5, Transparency = 0.3 }),
+		title = label({
+			Position = UDim2.fromOffset(0, 10),
+			Size = UDim2.new(1, 0, 0, 24),
+			Text = "Trait Chances",
+			TextColor3 = Theme.CASH,
+			TextSize = 19,
+		}),
+		close = e("TextButton", {
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -8, 0, 8),
+			Size = UDim2.fromOffset(28, 28),
+			BackgroundColor3 = Theme.NEGATIVE,
+			BorderSizePixel = 0,
+			AutoButtonColor = true,
+			Font = Theme.FONT,
+			Text = "X",
+			TextColor3 = Theme.TEXT,
+			TextSize = 15,
+			ZIndex = 6,
+			[React.Event.Activated] = props.onClose,
+		}, {
+			corner = e("UICorner", { CornerRadius = UDim.new(0.5, 0) }),
+		}),
+		list = e("ScrollingFrame", {
+			Position = UDim2.fromOffset(12, 44),
+			Size = UDim2.new(1, -24, 1, -56),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ScrollBarThickness = 4,
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+			ZIndex = 5,
+		}, rows),
+	})
+end
+
+type PickButtonProps = {
+	towerId: string,
+	selected: boolean,
+	traitId: string?,
+	onPick: (towerId: string) -> (),
+	order: number,
+}
+
+local function PickButton(props: PickButtonProps)
 	local definition = Towers.find(props.towerId)
 
 	if definition == nil then
 		return nil
 	end
 
-	local traitId: string? = traits[props.towerId]
 	local traitText = "no trait"
-	local traitColor = Theme.MUTED
 
-	if traitId ~= nil then
-		local trait = Traits.find(traitId)
+	if props.traitId ~= nil then
+		local trait = Traits.find(props.traitId)
 
 		if trait ~= nil then
-			traitText = `{trait.displayName} ({trait.rarity})`
-			traitColor = rarityColor(trait.rarity)
+			traitText = trait.displayName
 		end
 	end
 
 	return e("TextButton", {
-		Size = UDim2.fromOffset(180, 44),
-		BackgroundColor3 = Theme.RAISED,
+		Size = UDim2.fromOffset(170, 40),
+		BackgroundColor3 = if props.selected then Theme.ACCENT else Theme.RAISED,
 		BorderSizePixel = 0,
-		AutoButtonColor = not props.busy,
+		AutoButtonColor = true,
 		Text = "",
 		LayoutOrder = props.order,
 		[React.Event.Activated] = function()
-			if not props.busy then
-				props.onReroll(props.towerId)
-			end
+			props.onPick(props.towerId)
 		end,
 	}, {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
 		name = label({
-			Position = UDim2.fromOffset(0, 5),
+			Position = UDim2.fromOffset(0, 4),
 			Size = UDim2.new(1, 0, 0, 18),
 			Text = definition.displayName,
-			TextColor3 = rarityColor(definition.rarity),
-			TextSize = 14,
+			TextColor3 = if props.selected then Theme.INVERSE else rarityColor(definition.rarity),
+			TextSize = 13,
 		}),
 		trait = label({
-			Position = UDim2.fromOffset(0, 24),
+			Position = UDim2.fromOffset(0, 22),
 			Size = UDim2.new(1, 0, 0, 14),
 			Font = Theme.FONT_BODY,
 			Text = traitText,
-			TextColor3 = traitColor,
-			TextSize = 11,
+			TextColor3 = if props.selected then Theme.INVERSE else Theme.MUTED,
+			TextSize = 10,
 		}),
 	})
 end
 
---- The reroll station panel: every owned tower, click one to reroll its
---- trait for one token.
+--- The reroll station, genre-shaped: pick a unit from the grid, see it
+--- standing in the portrait with its current trait, reroll for one token,
+--- and read the true odds off the Trait Chances popup.
 local function RerollPanel()
 	local area = useAtom(atoms.activeArea)
 	local tokens = useAtom(atoms.rerollTokens)
 	local unlocked = useAtom(atoms.unlockedTowers)
+	local traits = useAtom(atoms.traits)
 	local busy, setBusy = React.useState(false)
+	local chancesOpen, setChancesOpen = React.useState(false)
+	local selected, setSelectedRaw = React.useState(nil :: string?)
 	local lastReroll, setLastRerollRaw = React.useState(nil :: RerollReply?)
 	local reveal, setRevealRaw = React.useState(nil :: Reveal?)
 	-- Same optional-initial inference gotcha as GachaPanel; same one cast
 	-- per setter.
+	local setSelected = setSelectedRaw :: (string?) -> ()
 	local setLastReroll = setLastRerollRaw :: (RerollReply?) -> ()
 	local setReveal = setRevealRaw :: (Reveal?) -> ()
 	-- Same synchronous double-fire guard as the gacha's roll button: `busy`
@@ -940,10 +1135,15 @@ local function RerollPanel()
 		return nil
 	end
 
-	local onReroll = function(towerId: string)
-		if rolling.current then
+	local currentId: string? = selected or unlocked[1]
+	local currentDefinition = if currentId ~= nil then Towers.find(currentId) else nil
+
+	local onReroll = function()
+		if rolling.current or currentId == nil then
 			return
 		end
+
+		local towerId = currentId
 
 		rolling.current = true
 		setBusy(true)
@@ -977,82 +1177,172 @@ local function RerollPanel()
 		end)
 	end
 
-	local resultText = `1 token per reroll  ·  {tokens} available`
-	local resultColor = Theme.MUTED
+	-- The line under the portrait: the current trait, the live reveal
+	-- flicker, or the refusal - whichever is the truth right now.
+	local traitLine = "No trait"
+	local traitColor = Theme.MUTED
+	local currentTraitId: string? = if currentId ~= nil then traits[currentId] else nil
 
-	if reveal ~= nil then
-		resultText = reveal.text
-		resultColor = reveal.color
-	elseif lastReroll ~= nil then
-		if lastReroll.outcome == "Rolled" then
-			local trait = Traits.find(lastReroll.traitId)
-			local name = if trait ~= nil then trait.displayName else lastReroll.traitId
+	if currentTraitId ~= nil then
+		local trait = Traits.find(currentTraitId)
 
-			resultText = `Rolled {name}  ({lastReroll.rarityId})`
-			resultColor = rarityColor(lastReroll.rarityId)
-		elseif lastReroll.outcome == "CannotAfford" then
-			resultText = "Out of reroll tokens - finish a match to earn more"
-			resultColor = Theme.NEGATIVE
-		elseif lastReroll.outcome == "Unavailable" then
-			resultText = "Your collection is still loading - try again in a moment"
-			resultColor = Theme.MUTED
-		else
-			resultText = "You do not own that tower"
-			resultColor = Theme.NEGATIVE
+		if trait ~= nil then
+			traitLine = `{trait.displayName}  ({trait.rarity})`
+			traitColor = rarityColor(trait.rarity)
 		end
 	end
 
-	local rows: { [string]: any } = {
+	if reveal ~= nil then
+		traitLine = reveal.text
+		traitColor = reveal.color
+	elseif lastReroll ~= nil and lastReroll.outcome ~= "Rolled" then
+		if lastReroll.outcome == "CannotAfford" then
+			traitLine = "Out of tokens - finish a match to earn more"
+			traitColor = Theme.NEGATIVE
+		elseif lastReroll.outcome == "Unavailable" then
+			traitLine = "Collection still loading..."
+			traitColor = Theme.MUTED
+		end
+	end
+
+	local grid: { [string]: any } = {
 		layout = e("UIGridLayout", {
-			CellSize = UDim2.fromOffset(180, 44),
+			CellSize = UDim2.fromOffset(170, 40),
 			CellPadding = UDim2.fromOffset(8, 8),
 			SortOrder = Enum.SortOrder.LayoutOrder,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		}),
 	}
 
 	for order, towerId in unlocked do
-		rows[towerId] = e(RerollRow, {
+		grid[towerId] = e(PickButton, {
 			towerId = towerId,
-			onReroll = onReroll,
-			busy = busy,
+			selected = towerId == currentId,
+			traitId = traits[towerId],
+			onPick = setSelected,
 			order = order,
 		})
 	end
 
+	local affordable = tokens >= 1 and currentId ~= nil
+
 	return e("Frame", {
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -110),
-		Size = UDim2.fromOffset(420, 280),
+		Position = UDim2.new(0.5, 0, 1, -100),
+		Size = UDim2.fromOffset(620, 400),
 		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		BackgroundTransparency = 0.06,
 		BorderSizePixel = 0,
 	}, {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
-		title = label({
-			Position = UDim2.fromOffset(0, 12),
-			Size = UDim2.new(1, 0, 0, 22),
+		panelStroke = e("UIStroke", { Color = REROLL_COLOR, Thickness = 1.5, Transparency = 0.45 }),
+		title = e("TextLabel", {
+			Position = UDim2.fromOffset(0, 10),
+			Size = UDim2.new(1, 0, 0, 26),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT,
 			Text = "TRAIT REROLL",
-			TextColor3 = REROLL_COLOR,
-			TextSize = 18,
+			TextColor3 = Color3.new(1, 1, 1),
+			TextSize = 22,
+		}, {
+			gradient = e("UIGradient", {
+				Color = ColorSequence.new(Color3.fromRGB(236, 110, 170), Color3.fromRGB(150, 110, 236)),
+			}),
 		}),
-		result = label({
-			Position = UDim2.fromOffset(0, 36),
-			Size = UDim2.new(1, 0, 0, 18),
+		tokensLine = label({
+			Position = UDim2.fromOffset(0, 38),
+			Size = UDim2.new(1, 0, 0, 16),
 			Font = Theme.FONT_BODY,
-			Text = resultText,
-			TextColor3 = resultColor,
+			Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}  ·  rerolling replaces the current trait`,
+			TextColor3 = Theme.MUTED,
 			TextSize = 12,
 		}),
-		grid = e("ScrollingFrame", {
-			Position = UDim2.fromOffset(12, 62),
-			Size = UDim2.new(1, -24, 1, -78),
+		portrait = e(UnitPortrait, { towerId = currentId }),
+		unitName = label({
+			Position = UDim2.fromOffset(16, 258),
+			Size = UDim2.fromOffset(190, 22),
+			Text = if currentDefinition ~= nil then currentDefinition.displayName else "-",
+			TextColor3 = if currentDefinition ~= nil then rarityColor(currentDefinition.rarity) else Theme.MUTED,
+			TextSize = 17,
+		}),
+		traitName = label({
+			Position = UDim2.fromOffset(16, 280),
+			Size = UDim2.fromOffset(190, 18),
+			Font = Theme.FONT_BODY,
+			Text = traitLine,
+			TextColor3 = traitColor,
+			TextSize = 12,
+			TextWrapped = true,
+		}),
+		pickHeader = label({
+			Position = UDim2.fromOffset(222, 58),
+			Size = UDim2.fromOffset(190, 16),
+			Text = "PICK A UNIT",
+			TextColor3 = Theme.MUTED,
+			TextSize = 11,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		picker = e("ScrollingFrame", {
+			Position = UDim2.fromOffset(222, 78),
+			Size = UDim2.new(1, -238, 1, -158),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
 			ScrollBarThickness = 4,
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			CanvasSize = UDim2.new(),
-		}, rows),
+		}, grid),
+		chances = e("TextButton", {
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0, 16, 1, -16),
+			Size = UDim2.fromOffset(170, 44),
+			BackgroundColor3 = Theme.CASH,
+			BorderSizePixel = 0,
+			AutoButtonColor = true,
+			Font = Theme.FONT,
+			Text = "TRAIT CHANCES",
+			TextColor3 = Theme.INVERSE,
+			TextSize = 14,
+			[React.Event.Activated] = function()
+				setChancesOpen(not chancesOpen)
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			gradient = e("UIGradient", {
+				Color = ColorSequence.new(Color3.fromRGB(255, 214, 120), Color3.fromRGB(236, 160, 70)),
+				Rotation = 90,
+			}),
+		}),
+		reroll = e("TextButton", {
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -16, 1, -16),
+			Size = UDim2.fromOffset(240, 44),
+			BackgroundColor3 = if affordable and not busy then Color3.fromRGB(236, 110, 170) else Theme.DISABLED,
+			BorderSizePixel = 0,
+			AutoButtonColor = affordable and not busy,
+			Font = Theme.FONT,
+			Text = if busy then "REROLLING..." else "REROLL  -  1 TOKEN",
+			TextColor3 = if affordable and not busy then Theme.INVERSE else Theme.MUTED,
+			TextSize = 16,
+			[React.Event.Activated] = function()
+				if affordable and not busy then
+					onReroll()
+				end
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			gradient = if affordable and not busy
+				then e("UIGradient", {
+					Color = ColorSequence.new(Color3.fromRGB(255, 150, 200), Color3.fromRGB(190, 120, 255)),
+					Rotation = 10,
+				})
+				else nil,
+		}),
+		chancesPopup = if chancesOpen
+			then e(TraitChances, {
+				onClose = function()
+					setChancesOpen(false)
+				end,
+			})
+			else nil,
 	})
 end
 
