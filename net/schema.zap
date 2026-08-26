@@ -417,6 +417,24 @@ funct GetLobbyProfile = {
 	},
 }
 
+-- Admin console. The server checks Config/Admins.luau on EVERY call -
+-- the console rendering client-side is cosmetic, this check is the gate.
+-- Cash is the per-match currency and only the match place honours it;
+-- Coins and Tokens write to the profile and work in both places.
+funct AdminGrant = {
+	call: Async,
+	args: struct {
+		currency: enum { Cash, Coins, Tokens },
+		-- Clamped server-side to a sane grant; u32 alone is not a policy.
+		amount: u32,
+	},
+	rets: struct {
+		ok: boolean,
+		-- The balance AFTER the grant, for the console's feedback line.
+		balance: u32,
+	},
+}
+
 -- The teleport failed, or was never attempted because Config/Places.luau
 -- still has placeholder ids. Carries a human-readable reason because there is
 -- nothing an exploiter can do with it and a silent failure here is

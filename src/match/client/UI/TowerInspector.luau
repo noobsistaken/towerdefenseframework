@@ -14,6 +14,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
@@ -244,16 +245,25 @@ local function ActionButton(props: ActionProps)
 	return e("TextButton", attributes, children)
 end
 
---- Draws a flat disc showing the selected tower's range.
+--- Seconds the range dome takes to expand out of the unit. Half a second,
+--- per the brief - long enough to read as motion, short enough that
+--- clicking through several towers never feels gated.
+local RANGE_DOME_SECONDS = 0.5
+
+--- Draws a half-sphere DOME showing the selected tower's range.
+---
+--- A dome rather than the old flat disc, deliberately: range checks are
+--- 3D (TowerSystem measures straight-line distance), so an air enemy
+--- crossing the dome's curve is genuinely in range where a flat ring lied
+--- about anything above ground level. Roblox has no half-sphere primitive;
+--- a full Ball centred on the tower's base is one, because the lower half
+--- is buried and only the dome shows.
+---
+--- The dome EXPANDS from the unit over RANGE_DOME_SECONDS - tweened Size
+--- with the CFrame pinned, so it inflates in place.
 ---
 --- Lives here rather than in a module of its own because the lifetime it
---- follows is exactly this panel's: the disc is visible when the panel is.
---- Sized and tipped the way the placement preview does it - cylinders extrude
---- along local X, so a disc has to be rolled onto its side to lie flat.
----
---- Sits just above whatever the tower is standing on, derived from the part
---- rather than assumed, so a Hillside tower on a 12-stud plateau gets its ring
---- on the plateau instead of buried under it.
+--- follows is exactly this panel's: the dome is visible when the panel is.
 local function useRangeDisc(towerId: number?, range: number?)
 	React.useEffect(function(): () -> ()
 		if towerId == nil or range == nil or range <= 0 then
@@ -266,25 +276,37 @@ local function useRangeDisc(towerId: number?, range: number?)
 			return NO_OP
 		end
 
-		local disc = Instance.new("Part")
-		disc.Name = "TDSelectionRange"
-		disc.Shape = Enum.PartType.Cylinder
-		disc.Size = Vector3.new(0.2, range * 2, range * 2)
-		disc.Anchored = true
-		disc.CanCollide = false
-		disc.CanQuery = false
-		disc.CanTouch = false
-		disc.CastShadow = false
-		disc.Transparency = 0.88
-		disc.Material = Enum.Material.Neon
-		disc.Color = Theme.ACCENT
+		local dome = Instance.new("Part")
+		dome.Name = "TDSelectionRange"
+		dome.Shape = Enum.PartType.Ball
+		dome.Size = Vector3.new(0.5, 0.5, 0.5)
+		dome.Anchored = true
+		dome.CanCollide = false
+		dome.CanQuery = false
+		dome.CanTouch = false
+		dome.CastShadow = false
+		dome.Transparency = 0.92
+		dome.Material = Enum.Material.Neon
+		dome.Color = Theme.ACCENT
 
-		local base = part.Position.Y - part.Size.Y / 2 + 0.3
-		disc.CFrame = CFrame.new(part.Position.X, base, part.Position.Z) * CFrame.Angles(0, 0, math.rad(90))
-		disc.Parent = workspace
+		-- Centred at the BASE, not the part centre: the buried half makes
+		-- the ball a dome, and the equator lands exactly on the ground the
+		-- tower stands on - plateau included, since the base is derived
+		-- from the part.
+		local base = part.Position.Y - part.Size.Y / 2
+		dome.CFrame = CFrame.new(part.Position.X, base, part.Position.Z)
+		dome.Parent = workspace
+
+		local tween = TweenService:Create(
+			dome,
+			TweenInfo.new(RANGE_DOME_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Size = Vector3.new(range * 2, range * 2, range * 2) }
+		)
+		tween:Play()
 
 		return function()
-			disc:Destroy()
+			tween:Cancel()
+			dome:Destroy()
 		end
 	end, { towerId or 0, range or 0 })
 end

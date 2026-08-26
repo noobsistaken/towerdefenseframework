@@ -31,6 +31,8 @@ local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
+local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
+
 local atoms = require(script.Parent.Parent.State.atoms)
 
 local e = React.createElement
@@ -1064,6 +1066,19 @@ local function LobbyUI()
 		loadout = e(LoadoutPanel),
 		gacha = e(GachaPanel),
 		reroll = e(RerollPanel),
+		-- F2. No Cash here - there is no match to be cash in - and grants
+		-- patch the same atoms the roll replies do, from the same kind of
+		-- server-returned balance.
+		admin = e(AdminConsole, {
+			showCash = false,
+			onGranted = function(currency: AdminConsole.Currency, balance: number)
+				if currency == "Coins" then
+					atoms.coins(balance)
+				elseif currency == "Tokens" then
+					atoms.rerollTokens(balance)
+				end
+			end,
+		}),
 	})
 end
 

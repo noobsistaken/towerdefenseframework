@@ -37,6 +37,7 @@ local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local Bursts = require(script.Effects.Bursts)
 local EnemyVisuals = require(script.Effects.EnemyVisuals)
+local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
 local Hud = require(script.UI.Hud)
 local PlacementController = require(script.Placement.PlacementController)
 local SoundController = require(script.Audio.SoundController)
@@ -197,4 +198,12 @@ screenGui.Parent = playerGui
 janitor:Add(screenGui, "Destroy")
 
 local root = ReactRoblox.createRoot(Instance.new("Folder"))
-root:render(ReactRoblox.createPortal(React.createElement(Hud), screenGui))
+root:render(ReactRoblox.createPortal(
+	React.createElement(React.Fragment, nil, {
+		hud = React.createElement(Hud),
+		-- F2. Renders only for Config/Admins.luau accounts; the server
+		-- re-checks regardless. Cash exists only here, so it is offered.
+		admin = React.createElement(AdminConsole, { showCash = true, onGranted = nil }),
+	}),
+	screenGui
+))

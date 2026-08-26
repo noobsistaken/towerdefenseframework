@@ -198,6 +198,9 @@ if not RunService:IsRunning() then
 		BaseHealthChanged = table.freeze({
 			On = noop
 		}),
+		AdminGrant = table.freeze({
+			Call = noop
+		}),
 	}) :: Events
 end
 local remotes = ReplicatedStorage:WaitForChild("ZAP")
@@ -209,10 +212,10 @@ local unreliable = { remotes:WaitForChild("ZAP_UNRELIABLE_0"), remotes:WaitForCh
 assert(unreliable[1]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_0 to be an UnreliableRemoteEvent")
 assert(unreliable[2]:IsA("UnreliableRemoteEvent"), "Expected ZAP_UNRELIABLE_1 to be an UnreliableRemoteEvent")
 export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
-export type LobbyState = ("Gathering" | "Launching")
-export type PollKind = ("Map" | "Difficulty")
 export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
 export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState")
+export type LobbyState = ("Gathering" | "Launching")
+export type PollKind = ("Map" | "Difficulty")
 
 local function SendEvents()
 	if outgoing_used ~= 0 then
@@ -230,8 +233,8 @@ end
 
 RunService.Heartbeat:Connect(SendEvents)
 
-local reliable_events = table.create(13)
-local reliable_event_queue: { [number]: { any } } = table.create(13)
+local reliable_events = table.create(14)
+local reliable_event_queue: { [number]: { any } } = table.create(14)
 local unreliable_events = table.create(2)
 local unreliable_event_queue: { [number]: { any } } = table.create(2)
 local function_call_id = 0
@@ -260,6 +263,7 @@ reliable_event_queue[10] = table.create(255)
 reliable_event_queue[11] = table.create(255)
 reliable_event_queue[8] = table.create(255)
 reliable_event_queue[12] = table.create(255)
+reliable_event_queue[13] = table.create(255)
 reliable.OnClientEvent:Connect(function(buff, inst)
 	incoming_buff = buff
 	incoming_inst = inst
@@ -667,6 +671,19 @@ reliable.OnClientEvent:Connect(function(buff, inst)
 				task.spawn(thread, value)
 			end
 			reliable_event_queue[12][call_id] = nil
+		elseif id == 13 then -- AdminGrant
+			local call_id = buffer.readu8(incoming_buff, read(1))
+			local value
+			local bool_10 = buffer.readu8(incoming_buff, read(1))
+			value = {  }
+			value["ok"] = bit32.btest(bool_10, 0b0000000000000001)
+			value["balance"] = buffer.readu32(incoming_buff, read(4))
+			local thread = reliable_event_queue[13][call_id]
+			-- When using actors it's possible for multiple Zap clients to exist, but only one called the Zap remote function.
+			if thread then
+				task.spawn(thread, value)
+			end
+			reliable_event_queue[13][call_id] = nil
 		else
 			error("Unknown event id")
 		end
@@ -698,13 +715,13 @@ unreliable[2].OnClientEvent:Connect(function(buff, inst) -- PlaySound
 	incoming_read = 0
 	incoming_ipos = 0
 	local value
-	local bool_10 = buffer.readu8(incoming_buff, read(1))
+	local bool_11 = buffer.readu8(incoming_buff, read(1))
 	value = {  }
 	local len_26 = buffer.readu8(incoming_buff, read(1))
 	assert(len_26 <= 128, "value is more than 128!")
 	value["soundKey"] = buffer.readstring(incoming_buff, read(len_26), len_26)
 	assert(utf8.len(value["soundKey"]) ~= nil, "value is not valid utf-8")
-	if bit32.btest(bool_10, 0b0000000000000001) then
+	if bit32.btest(bool_11, 0b0000000000000001) then
 		value["position"] = vector.create(buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)), buffer.readf32(incoming_buff, read(4)))
 	else
 		value["position"] = nil
@@ -869,22 +886,22 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
-			local bool_11 = 0
-			local bool_11_pos_1 = alloc(1)
+			local bool_12 = 0
+			local bool_12_pos_1 = alloc(1)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
 			if Value["mode"] == "First" then
-				bool_11 = bit32.bor(bool_11, 0b0000000000000001)
+				bool_12 = bit32.bor(bool_12, 0b0000000000000001)
 			elseif Value["mode"] == "Last" then
-				bool_11 = bit32.bor(bool_11, 0b0000000000000010)
+				bool_12 = bit32.bor(bool_12, 0b0000000000000010)
 			elseif Value["mode"] == "Strongest" then
-				bool_11 = bit32.bor(bool_11, 0b0000000000000100)
+				bool_12 = bit32.bor(bool_12, 0b0000000000000100)
 			elseif Value["mode"] == "Closest" then
-				bool_11 = bit32.bor(bool_11, 0b0000000000001000)
+				bool_12 = bit32.bor(bool_12, 0b0000000000001000)
 			else
 				error("Invalid enumerator")
 			end
-			buffer.writeu8(outgoing_buff, bool_11_pos_1, bool_11)
+			buffer.writeu8(outgoing_buff, bool_12_pos_1, bool_12)
 		end,
 	},
 	RequestSellTower = {
@@ -1091,10 +1108,10 @@ local returns = {
 		}))
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
-			local bool_12 = 0
-			local bool_12_pos_1 = alloc(1)
+			local bool_13 = 0
+			local bool_13_pos_1 = alloc(1)
 			if Value["poll"] == "Map" then
-				bool_12 = bit32.bor(bool_12, 0b0000000000000001)
+				bool_13 = bit32.bor(bool_13, 0b0000000000000001)
 			elseif Value["poll"] == "Difficulty" then
 				local _
 			else
@@ -1107,7 +1124,7 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_31)
 			alloc(len_31)
 			buffer.writestring(outgoing_buff, outgoing_apos, Value["option"], len_31)
-			buffer.writeu8(outgoing_buff, bool_12_pos_1, bool_12)
+			buffer.writeu8(outgoing_buff, bool_13_pos_1, bool_13)
 		end,
 	},
 	CashChanged = {
@@ -1137,6 +1154,42 @@ local returns = {
 			return function()
 				table.remove(reliable_events[2], table.find(reliable_events[2], Callback))
 			end
+		end,
+	},
+	AdminGrant = {
+		Call = function(Value: ({
+			["currency"]: ("Cash" | "Coins" | "Tokens"),
+			["amount"]: (number),
+		})): (({
+			["ok"]: (boolean),
+			["balance"]: (number),
+		}))
+			function_call_id += 1
+			function_call_id %= 256
+			if reliable_event_queue[13][function_call_id] then
+				function_call_id -= 1
+				error("Zap has more than 256 calls awaiting a response, and therefore this packet has been dropped")
+			end
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 12)
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, function_call_id)
+			local bool_14 = 0
+			local bool_14_pos_1 = alloc(1)
+			if Value["currency"] == "Cash" then
+				bool_14 = bit32.bor(bool_14, 0b0000000000000001)
+			elseif Value["currency"] == "Coins" then
+				bool_14 = bit32.bor(bool_14, 0b0000000000000010)
+			elseif Value["currency"] == "Tokens" then
+				bool_14 = bit32.bor(bool_14, 0b0000000000000100)
+			else
+				error("Invalid enumerator")
+			end
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["amount"])
+			buffer.writeu8(outgoing_buff, bool_14_pos_1, bool_14)
+			reliable_event_queue[13][function_call_id] = coroutine.running()
+			return coroutine.yield()
 		end,
 	},
 }

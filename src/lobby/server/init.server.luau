@@ -24,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Admins = require(ReplicatedStorage.Shared.Config.Admins)
 local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local GachaFlow = require(ReplicatedStorage.Shared.GachaFlow)
 local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
@@ -190,6 +191,38 @@ end)
 -- mutate it in place - ProfileStore persists whatever Data holds, so there
 -- is no separate save step to forget.
 -- ---------------------------------------------------------------------------
+
+--- Same cap and same gate as the match entry's handler.
+local MAX_ADMIN_GRANT = 100000
+
+Net.AdminGrant.SetCallback(function(player: Player, value: { currency: "Cash" | "Coins" | "Tokens", amount: number })
+	if not Admins.isAdmin(player.UserId, RunService:IsStudio()) then
+		return { ok = false, balance = 0 }
+	end
+
+	-- Cash is per-match currency; there is no match here to be cash in.
+	if value.currency == "Cash" then
+		return { ok = false, balance = 0 }
+	end
+
+	local profile = profiles[player]
+
+	if profile == nil then
+		return { ok = false, balance = 0 }
+	end
+
+	local amount = math.clamp(value.amount, 1, MAX_ADMIN_GRANT)
+
+	if value.currency == "Coins" then
+		profile.Data.Coins += amount
+
+		return { ok = true, balance = profile.Data.Coins }
+	end
+
+	profile.Data.RerollTokens += amount
+
+	return { ok = true, balance = profile.Data.RerollTokens }
+end)
 
 Net.CastVote.On(function(player: Player, value: { poll: "Map" | "Difficulty", option: string })
 	controller:castVote(player, value.poll, value.option)

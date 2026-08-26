@@ -574,6 +574,15 @@ function MatchController.setTargeting(
 	return true
 end
 
+--- Admin grant of match cash. Routed through the same EconomyService
+--- credit every legitimate payment uses, so CashChanged replicates it and
+--- no second bookkeeping path exists to drift. Returns the new balance.
+function MatchController.grantCash(self: Controller, player: Player, amount: number): number
+	self.economy:credit(player, amount)
+
+	return math.floor(self.economy:balance(player))
+end
+
 --- Ends the build phase early, paying everyone for the time skipped. The
 --- server reads its own clock: a client-supplied duration would be free cash.
 function MatchController.requestEarlyStart(self: Controller): boolean

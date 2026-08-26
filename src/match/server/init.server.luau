@@ -28,6 +28,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Admins = require(ReplicatedStorage.Shared.Config.Admins)
 local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
@@ -337,6 +338,40 @@ Net.RequestEarlyStart.On(function(player: Player)
 	end
 
 	match:requestEarlyStart()
+end)
+
+--- Grants are capped so a fat-fingered zero cannot mint a balance that
+--- overflows the u32 wire fields a few thousand matches later.
+local MAX_ADMIN_GRANT = 100000
+
+Net.AdminGrant.SetCallback(function(player: Player, value: { currency: "Cash" | "Coins" | "Tokens", amount: number })
+	-- The allowlist is THE check. The console not rendering for
+	-- non-admins is cosmetic; this line is the gate.
+	if not Admins.isAdmin(player.UserId, RunService:IsStudio()) then
+		return { ok = false, balance = 0 }
+	end
+
+	local amount = math.clamp(value.amount, 1, MAX_ADMIN_GRANT)
+
+	if value.currency == "Cash" then
+		return { ok = true, balance = match:grantCash(player, amount) }
+	end
+
+	local profile = profiles[player]
+
+	if profile == nil then
+		return { ok = false, balance = 0 }
+	end
+
+	if value.currency == "Coins" then
+		profile.Data.Coins += amount
+
+		return { ok = true, balance = profile.Data.Coins }
+	end
+
+	profile.Data.RerollTokens += amount
+
+	return { ok = true, balance = profile.Data.RerollTokens }
 end)
 
 Net.GetMatchSnapshot.SetCallback(function(player: Player, _value: {})
