@@ -214,7 +214,7 @@ local function RejectionToast()
 
 	return e("TextLabel", {
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -104),
+		Position = UDim2.new(0.5, 0, 1, -158),
 		Size = UDim2.fromOffset(300, 28),
 		BackgroundColor3 = Theme.NEGATIVE,
 		BackgroundTransparency = 0.1,
@@ -239,7 +239,7 @@ local function EarlyStartButton()
 
 	return e("TextButton", {
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -104),
+		Position = UDim2.new(0.5, 0, 1, -158),
 		Size = UDim2.fromOffset(200, 38),
 		BackgroundColor3 = Theme.ACCENT,
 		BorderSizePixel = 0,

@@ -28,7 +28,7 @@ local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
 local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
-local Types = require(ReplicatedStorage.Shared.Types)
+local UnitPreview = require(ReplicatedStorage.Shared.UnitPreview)
 
 local EggReveal = {}
 
@@ -96,65 +96,10 @@ local function buildEgg(tint: Color3): Model
 	return model
 end
 
---- The unit: the rig template when the place carries one, the tower's
---- config box when it does not. Public: the reroll panel's portrait uses
---- the same builder, so the two screens can never disagree about a unit.
-function EggReveal.buildUnit(definition: Types.TowerDefinition?): Model
-	local model = Instance.new("Model")
-
-	if definition ~= nil then
-		local rigName = definition.rig
-		local templates = ReplicatedStorage:FindFirstChild("RigTemplates")
-		local template = if templates ~= nil and rigName ~= nil then templates:FindFirstChild(rigName) else nil
-
-		if template ~= nil and template:IsA("Model") then
-			local rig = template:Clone()
-
-			-- Statues only: no scripts ride along (templates are stripped at
-			-- insert), and everything anchors because a viewport simulates
-			-- no physics to catch a falling limb.
-			for _, descendant in rig:GetDescendants() do
-				if descendant:IsA("BasePart") then
-					descendant.Anchored = true
-				end
-			end
-
-			rig:PivotTo(CFrame.new(0, 0, 0))
-			rig.Parent = model
-
-			return model
-		end
-	end
-
-	-- Fallback: the same coloured box the match shows when a template is
-	-- missing, so the reveal always reveals SOMETHING true.
-	local box = Instance.new("Part")
-	box.Anchored = true
-	box.Material = Enum.Material.SmoothPlastic
-
-	if definition ~= nil then
-		local level = definition.levels[1]
-		box.Size = level.modelSize
-		box.Color = level.color
-	else
-		box.Size = Vector3.new(4, 6, 4)
-		box.Color = Theme.MUTED
-	end
-
-	box.CFrame = CFrame.new(0, 0, 0)
-	box.Parent = model
-
-	return model
-end
-
---- Points the viewport camera at a model, framed by its bounding box.
-local function frame(camera: Camera, model: Model, lowAngle: boolean)
-	local _, extents = model:GetBoundingBox()
-	local distance = extents.Magnitude * 0.85 + 2
-	local height = if lowAngle then extents.Y * 0.15 else extents.Y * 0.05
-
-	camera.CFrame = CFrame.lookAt(Vector3.new(0, height, distance), Vector3.new(0, 0, 0))
-end
+-- Unit building and camera framing live in shared UnitPreview: one
+-- builder for the reveal, the reroll portrait, and the match shop, so no
+-- two screens can disagree about what a unit looks like.
+local frame = UnitPreview.frame
 
 --- Plays the whole cinematic. `onDone` fires exactly once, after the
 --- overlay has destroyed itself - hold roll guards until then.
@@ -290,7 +235,7 @@ function EggReveal.play(request: Request, onDone: () -> ())
 
 		egg:Destroy()
 
-		local unit = EggReveal.buildUnit(definition)
+		local unit = UnitPreview.buildUnit(definition)
 		unit.Parent = viewport
 		frame(camera, unit, true)
 

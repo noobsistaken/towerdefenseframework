@@ -19,6 +19,7 @@ local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Types = require(ReplicatedStorage.Shared.Types)
 local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
+local UnitPreview = require(ReplicatedStorage.Shared.UnitPreview)
 
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local atoms = require(script.Parent.Parent.State.atoms)
@@ -26,8 +27,8 @@ local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local e = React.createElement
 
-local BUTTON_WIDTH = 116
-local BUTTON_HEIGHT = 74
+local BUTTON_WIDTH = 120
+local BUTTON_HEIGHT = 118
 
 --- Short tag showing where a tower may stand, since that is the constraint
 --- players get wrong most often.
@@ -54,6 +55,30 @@ local function TowerButton(props: ButtonProps)
 	local cost = definition.levels[1].cost
 	local affordable = props.cash >= cost
 	local usable = props.unlocked and affordable
+	local viewportRef = React.useRef(nil :: ViewportFrame?)
+
+	-- The unit stands in the button, angled a quarter-turn for depth.
+	React.useEffect(function(): () -> ()
+		local viewport = viewportRef.current
+
+		if viewport == nil then
+			return function() end
+		end
+
+		local camera = Instance.new("Camera")
+		camera.Parent = viewport
+		viewport.CurrentCamera = camera
+
+		local unit = UnitPreview.buildUnit(definition)
+		unit:PivotTo(CFrame.Angles(0, math.rad(25), 0))
+		unit.Parent = viewport
+		UnitPreview.frame(camera, unit, true, 0.72)
+
+		return function()
+			unit:Destroy()
+			camera:Destroy()
+		end
+	end, { definition.id })
 
 	-- Tint multiplied into the steel row plate: white leaves the material
 	-- as generated, accent marks the tower in hand, dark grey mutes what
@@ -87,32 +112,16 @@ local function TowerButton(props: ButtonProps)
 			end
 		end,
 		children = {
-			name = e("TextLabel", {
-				Position = UDim2.fromOffset(10, 8),
-				Size = UDim2.new(1, -20, 0, 18),
-				BackgroundTransparency = 1,
-				Font = Theme.FONT,
-				Text = definition.displayName,
-				TextColor3 = Theme.TEXT,
-				TextSize = 14,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextTruncate = Enum.TextTruncate.AtEnd,
-			}),
-
-			category = e("TextLabel", {
-				Position = UDim2.fromOffset(10, 26),
-				Size = UDim2.new(1, -20, 0, 14),
-				BackgroundTransparency = 1,
-				Font = Theme.FONT_BODY,
-				Text = categoryTag(definition.category),
-				TextColor3 = Theme.MUTED,
-				TextSize = 11,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}),
-
+			-- A multiplied tint can only darken steel, so the held tower
+			-- gets a bright accent stroke on top of its accent tint.
+			stroke = if props.selected
+				then e("UIStroke", { Color = Theme.ACCENT, Thickness = 2, Transparency = 0.1 })
+				else nil,
+			-- Centred stack, top to bottom: price, the unit itself,
+			-- placement type, name.
 			cost = e("TextLabel", {
-				Position = UDim2.fromOffset(10, 46),
-				Size = UDim2.new(1, -20, 0, 20),
+				Position = UDim2.fromOffset(0, 6),
+				Size = UDim2.new(1, 0, 0, 16),
 				BackgroundTransparency = 1,
 				Font = Theme.FONT,
 				Text = if props.unlocked then `${cost}` else "LOCKED",
@@ -120,8 +129,35 @@ local function TowerButton(props: ButtonProps)
 					then Theme.MUTED
 					elseif affordable then Theme.CASH
 					else Theme.NEGATIVE,
-				TextSize = 16,
-				TextXAlignment = Enum.TextXAlignment.Left,
+				TextSize = 15,
+			}),
+			viewport = e("ViewportFrame", {
+				ref = viewportRef,
+				Position = UDim2.fromOffset(16, 24),
+				Size = UDim2.new(1, -32, 0, 58),
+				BackgroundTransparency = 1,
+				Ambient = Color3.fromRGB(185, 185, 195),
+				LightColor = Color3.fromRGB(255, 250, 240),
+				LightDirection = Vector3.new(-0.4, -1, -0.6),
+			}),
+			category = e("TextLabel", {
+				Position = UDim2.fromOffset(0, 82),
+				Size = UDim2.new(1, 0, 0, 12),
+				BackgroundTransparency = 1,
+				Font = Theme.FONT_BODY,
+				Text = categoryTag(definition.category),
+				TextColor3 = Theme.MUTED,
+				TextSize = 10,
+			}),
+			name = e("TextLabel", {
+				Position = UDim2.fromOffset(4, 94),
+				Size = UDim2.new(1, -8, 0, 18),
+				BackgroundTransparency = 1,
+				Font = Theme.FONT,
+				Text = definition.displayName,
+				TextColor3 = Theme.TEXT,
+				TextSize = 13,
+				TextTruncate = Enum.TextTruncate.AtEnd,
 			}),
 		},
 	})

@@ -33,6 +33,7 @@ local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
 local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
+local UnitPreview = require(ReplicatedStorage.Shared.UnitPreview)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
@@ -945,7 +946,7 @@ local function UnitPortrait(props: { towerId: string? })
 		camera.Parent = viewport
 		viewport.CurrentCamera = camera
 
-		local unit = EggReveal.buildUnit(Towers.find(towerId))
+		local unit = UnitPreview.buildUnit(Towers.find(towerId))
 		unit.Parent = viewport
 
 		local _, extents = unit:GetBoundingBox()
