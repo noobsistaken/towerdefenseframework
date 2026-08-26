@@ -27,8 +27,8 @@ export type PlaceRole = "Match" | "Lobby"
 
 --- Set these to the real place ids after publishing. `game.PlaceId` on the
 --- published place is the value each one wants.
-Places.LOBBY_PLACE_ID = 0
-Places.MATCH_PLACE_ID = 0
+Places.LOBBY_PLACE_ID = 108948328624758
+Places.MATCH_PLACE_ID = 80721394481917
 
 --- Which entry point boots in Studio and in the test place. Flip to "Lobby"
 --- to work on the lobby without publishing anything.
@@ -43,14 +43,27 @@ end
 
 --- Whether an entry script should boot.
 ---
---- Pure, and takes `isStudio` rather than reaching for RunService, so that
---- src/shared/ stays free of service lookups at require time and this stays
---- testable.
-function Places.shouldBoot(role: PlaceRole, isStudio: boolean): boolean
+--- Pure, and takes `isStudio` and `placeId` rather than reaching for
+--- RunService or game, so that src/shared/ stays free of service lookups at
+--- require time and this stays testable.
+---
+--- Outside Studio the PLACE ID decides, not the entry script's mere
+--- presence. "Only one entry exists per published place" was the old
+--- production rule, and it stopped being safe the day the dev window
+--- started syncing the full test superset: one accidental Publish from that
+--- window would have shipped BOTH entries into the start place and booted a
+--- match inside the live lobby. With the id check, publishing the superset
+--- anywhere is harmless - each place boots only its own role.
+function Places.shouldBoot(role: PlaceRole, isStudio: boolean, placeId: number): boolean
 	if not isStudio then
-		-- Published places contain exactly one entry script, so its presence
-		-- is the answer.
-		return true
+		if not Places.isConfigured() then
+			-- Ids unset: fall back to the old rule, entry presence decides.
+			return true
+		end
+
+		local expected = if role == "Lobby" then Places.LOBBY_PLACE_ID else Places.MATCH_PLACE_ID
+
+		return placeId == expected
 	end
 
 	return Places.STUDIO_ROLE == role

@@ -19,6 +19,32 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Jest = require(ReplicatedStorage.DevPackages.Jest)
 
+--- Jest cannot run from a playtest, so do not try and do not spam the Output
+--- window with twelve identical stack traces when someone presses Play.
+---
+--- jest-runtime loads a module by reading its `Source`, which needs the
+--- `PluginOrOpenCloud` capability. A plugin thread has it; a Script running
+--- under Play does not, so every suite dies with "cannot read 'Source'" before
+--- collecting a single test.
+---
+--- That failure is easy to misread as a pass: this file computes
+--- `passed = numFailedTests == 0`, and when nothing runs, nothing fails.
+--- Bailing out with one honest line is better than a red wall that reports
+--- zero failures.
+local canReadSource = pcall(function()
+	return (script :: any).Source
+end)
+
+if not canReadSource then
+	print(
+		"[tests] Skipped - Jest needs a plugin context to read module Source, "
+			.. "which a playtest does not have. Run it from the command bar or "
+			.. "the Studio MCP instead; see AGENTS.md -> Tests."
+	)
+
+	return
+end
+
 -- ProcessService is a Studio-internal service, so it is absent from selene's
 -- Roblox standard library and from the published type definitions. It only
 -- exists under `run-in-roblox`; in normal Studio the pcall below fails and we

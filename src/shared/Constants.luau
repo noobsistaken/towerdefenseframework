@@ -103,6 +103,14 @@ Constants.PLACEMENT_RAY_LENGTH = 400
 Constants.ATTR_HEALTH = "Health"
 Constants.ATTR_MAX_HEALTH = "MaxHealth"
 Constants.ATTR_ENEMY_ID = "EnemyId"
+Constants.ATTR_STATUS_EFFECTS = "StatusEffects"
+Constants.ATTR_ENRAGED = "Enraged"
+
+--- Rig height as a fraction of the host part's height. Shared because the
+--- server fits real rigs with it and the client fits the placement ghost's
+--- preview rig with it - if the two disagree, the ghost lies about the size
+--- of what will be built.
+Constants.RIG_SCALE = 0.5
 Constants.ATTR_SURFACE_TYPE = "SurfaceType"
 
 --- Folder names inside workspace. MapBuilder owns these and clears them

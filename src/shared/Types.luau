@@ -46,6 +46,11 @@ export type PlayerData = {
 	XP: number,
 	Level: number,
 	UnlockedTowers: { string },
+	--- Rolled trait ids per tower, persistent across matches - the
+	--- collection half of the gacha. Absent key means no traits rolled yet.
+	Traits: { [string]: { string } },
+	--- Spent by trait rerolls. Earned at match end alongside Coins.
+	RerollTokens: number,
 	Stats: PlayerStats,
 	Settings: PlayerSettings,
 }
@@ -140,6 +145,11 @@ export type EnemyDefinition = {
 	color: Color3,
 	--- Height of the model's centre above the path line.
 	hoverHeight: number,
+	--- Name of a rig template in ServerStorage.RigTemplates to wear instead
+	--- of the coloured box. Optional on purpose: templates live in the place
+	--- rather than the repo, so a missing one degrades to the box, never to
+	--- an error.
+	rig: string?,
 	--- Multiplier applied to incoming effect duration, keyed by effect id.
 	--- 0 means immune, 0.5 means half duration, absent means 1.
 	resistances: { [string]: number },
@@ -311,6 +321,14 @@ export type TowerDefinition = {
 	perPlayerCap: number,
 	--- At least three, per the brief. Index is the tower's level.
 	levels: { TowerLevel },
+	--- Name of a rig in ServerStorage.RigTemplates to wear instead of the
+	--- placeholder box. Optional, and optional on purpose: templates live in
+	--- the place file rather than the repo, so a fresh clone has none and
+	--- every tower falls back to its coloured part.
+	rig: string?,
+	--- Tier in Config/Rarity.luau. Drives the gacha's odds and every
+	--- surface's colour for this tower.
+	rarity: string,
 }
 
 -- ===========================================================================

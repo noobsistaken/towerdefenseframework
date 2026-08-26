@@ -100,8 +100,25 @@ Tests:
 
 ```bash
 rojo build test.project.json --output build/test.rbxl
-# open build/test.rbxl in Studio -> Run -> read the Output window
 ```
+
+Then run the suite from a **plugin context** - the Studio MCP server, or the
+command bar. NOT by pressing Play:
+
+```lua
+local Jest = require(game.ReplicatedStorage.DevPackages.Jest)
+local root = game.ServerScriptService.Tests
+local status, result = Jest.runCLI(root, { ci = false }, { root }):awaitStatus()
+print(status, result.results.numPassedTests, "passed", result.results.numFailedTests, "failed")
+```
+
+> **Pressing Play does not work, and the failure does not look like one.**
+> jest-runtime reads `ModuleScript.Source` to load each module, and a Script in
+> a playtest lacks the `PluginOrOpenCloud` capability to do that. Every suite
+> then fails with `cannot read 'Source'` before collecting a test - and
+> `tests/init.server.luau` reports that as "0 failing test(s) across 12
+> suite(s)", because zero tests failed for the reason that zero tests ran.
+> A plugin thread has the capability; a playtest thread does not.
 
 > Jest-Lua runs inside a Roblox VM. There is **no** way to run it on a
 > GitHub-hosted runner without a Roblox Studio install. CI therefore proves

@@ -15,8 +15,6 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
-local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(ReplicatedStorage.Shared.Theme)
@@ -39,118 +37,6 @@ local function label(props: { [string]: any })
 	end
 
 	return e("TextLabel", merged)
-end
-
---- Votes for one option, looked up from a tally list.
-local function votesFor(tallies: { atoms.Tally }, option: string): number
-	for _, entry in tallies do
-		if entry.option == option then
-			return entry.votes
-		end
-	end
-
-	return 0
-end
-
---- One vote button. Highlighted when this player picked it, outlined when it
---- is currently winning - two different facts that need to be separable at a
---- glance, since your pick losing is the interesting case.
-local function VoteButton(props: {
-	option: string,
-	displayName: string,
-	votes: number,
-	picked: boolean,
-	winning: boolean,
-	layoutOrder: number,
-	onClick: () -> (),
-})
-	return e("TextButton", {
-		Size = UDim2.fromOffset(150, 54),
-		LayoutOrder = props.layoutOrder,
-		BackgroundColor3 = if props.picked then Theme.ACCENT else Theme.RAISED,
-		BorderSizePixel = 0,
-		AutoButtonColor = true,
-		Font = Theme.FONT,
-		Text = "",
-		[React.Event.Activated] = props.onClick,
-	}, {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-		stroke = if props.winning
-			then e("UIStroke", {
-				Color = Theme.POSITIVE,
-				Thickness = 2,
-			})
-			else nil,
-		name = label({
-			Position = UDim2.fromOffset(0, 8),
-			Size = UDim2.new(1, 0, 0, 20),
-			Text = props.displayName,
-			TextColor3 = if props.picked then Theme.INVERSE else Theme.TEXT,
-			TextSize = 15,
-		}),
-		votes = label({
-			Position = UDim2.fromOffset(0, 30),
-			Size = UDim2.new(1, 0, 0, 16),
-			Text = if props.votes == 1 then "1 vote" else `{props.votes} votes`,
-			TextColor3 = if props.picked then Theme.INVERSE else Theme.MUTED,
-			TextSize = 12,
-		}),
-	})
-end
-
---- A titled row of vote buttons.
-local function VoteRow(props: {
-	title: string,
-	y: number,
-	options: { string },
-	displayNames: { [string]: string },
-	tallies: { atoms.Tally },
-	picked: string?,
-	winning: string,
-	onPick: (string) -> (),
-})
-	local children: { [string]: any } = {
-		layout = e("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 10),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	}
-
-	for index, option in props.options do
-		children[option] = e(VoteButton, {
-			option = option,
-			displayName = props.displayNames[option] or option,
-			votes = votesFor(props.tallies, option),
-			picked = props.picked == option,
-			winning = props.winning == option,
-			layoutOrder = index,
-			onClick = function()
-				props.onPick(option)
-			end,
-		})
-	end
-
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, props.y),
-		Size = UDim2.fromOffset(700, 84),
-		BackgroundTransparency = 1,
-	}, {
-		title = label({
-			Size = UDim2.new(1, 0, 0, 16),
-			Text = props.title,
-			TextColor3 = Theme.MUTED,
-			TextSize = 12,
-		}),
-		buttons = e("Frame", {
-			Position = UDim2.fromOffset(0, 22),
-			Size = UDim2.new(1, 0, 0, 58),
-			BackgroundTransparency = 1,
-		}, children),
-	})
 end
 
 local function Header()
@@ -249,59 +135,18 @@ local function FailureToast()
 	})
 end
 
-local function MapVotes()
-	local tallies = useAtom(atoms.mapTallies)
-	local winning = useAtom(atoms.winningMapId)
-	local picked = useAtom(atoms.myMapVote)
-
-	local displayNames: { [string]: string } = {}
-
-	for id, map in MapRegistry.MAPS do
-		displayNames[id] = map.displayName
-	end
-
-	return e(VoteRow, {
-		title = "MAP",
-		y = 124,
-		options = MapRegistry.IDS,
-		displayNames = displayNames,
-		tallies = tallies,
-		picked = picked,
-		winning = winning,
-		onPick = function(option: string)
-			atoms.myMapVote(option)
-			Net.CastVote.Fire({ poll = "Map", option = option })
-		end,
-	})
-end
-
-local function DifficultyVotes()
-	local tallies = useAtom(atoms.difficultyTallies)
-	local winning = useAtom(atoms.winningDifficultyId)
-	local picked = useAtom(atoms.myDifficultyVote)
-
-	local displayNames: { [string]: string } = {}
-
-	for _, id in Difficulty.IDS do
-		local preset = Difficulty.find(id)
-
-		if preset ~= nil then
-			displayNames[id] = preset.displayName
-		end
-	end
-
-	return e(VoteRow, {
-		title = "DIFFICULTY",
-		y = 224,
-		options = Difficulty.IDS,
-		displayNames = displayNames,
-		tallies = tallies,
-		picked = picked,
-		winning = winning,
-		onPick = function(option: string)
-			atoms.myDifficultyVote(option)
-			Net.CastVote.Fire({ poll = "Difficulty", option = option })
-		end,
+--- One line of instruction where two rows of buttons used to be. The vote
+--- moved into the WORLD: stand in a map's zone, step onto a difficulty pad.
+local function ZoneHint()
+	return e("TextLabel", {
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 124),
+		Size = UDim2.fromOffset(480, 22),
+		BackgroundTransparency = 1,
+		Font = Theme.FONT_BODY,
+		Text = "Stand in a map's zone to vote for it - step onto a pad to pick the difficulty",
+		TextColor3 = Theme.MUTED,
+		TextSize = 14,
 	})
 end
 
@@ -311,8 +156,7 @@ local function LobbyUI()
 		BackgroundTransparency = 1,
 	}, {
 		header = e(Header),
-		maps = e(MapVotes),
-		difficulties = e(DifficultyVotes),
+		hint = e(ZoneHint),
 		ready = e(ReadyButton),
 		failure = e(FailureToast),
 	})

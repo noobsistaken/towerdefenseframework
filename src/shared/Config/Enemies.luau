@@ -33,6 +33,7 @@ Enemies.DEFINITIONS = {
 		introducesAtWave = 1,
 		hitboxSize = Vector3.new(2, 4, 2),
 		color = Color3.fromRGB(106, 140, 88),
+		rig = "FastZombie",
 		hoverHeight = 2,
 		resistances = {},
 	},
@@ -40,6 +41,7 @@ Enemies.DEFINITIONS = {
 	Runner = {
 		id = "Runner",
 		displayName = "Runner",
+		rig = "RusherZombie",
 		category = "Ground" :: Types.EnemyCategory,
 		baseHealth = 55,
 		baseSpeed = 26,
@@ -84,6 +86,7 @@ Enemies.DEFINITIONS = {
 	Tank = {
 		id = "Tank",
 		displayName = "Tank",
+		rig = "SciFiRobot",
 		category = "Ground" :: Types.EnemyCategory,
 		baseHealth = 480,
 		baseSpeed = 6.5,
@@ -100,6 +103,12 @@ Enemies.DEFINITIONS = {
 	Titan = {
 		id = "Titan",
 		displayName = "Titan",
+		-- FastZombie rather than noobsv8: the boss shares the zombie rig at
+		-- 11 studs tall. noobsv8 lives only in the original place file and
+		-- cannot follow the match into its own place until rig templates are
+		-- exported into the repo - the standing assets/ follow-up. Scaled to
+		-- nearly triple the trash zombie's height it still reads as a boss.
+		rig = "FastZombie",
 		category = "Ground" :: Types.EnemyCategory,
 		baseHealth = 6000,
 		baseSpeed = 9,

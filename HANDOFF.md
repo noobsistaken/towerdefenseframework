@@ -38,8 +38,20 @@ CI proves lint + format + types + build and *nothing about behaviour*.
 rojo build test.project.json --output build/test.rbxl
 ```
 
-Open `build/test.rbxl` in Studio, press **Play**, read the Output window. You
-are looking for `[tests] All suites passed.`
+Run it from a **plugin context** - the Studio MCP server, or the command bar.
+Pressing Play does NOT work; see AGENTS.md -> Tests for why.
+
+```lua
+local Jest = require(game.ReplicatedStorage.DevPackages.Jest)
+local root = game.ServerScriptService.Tests
+local status, result = Jest.runCLI(root, { ci = false }, { root }):awaitStatus()
+print(status, result.results.numPassedTests, "passed", result.results.numFailedTests, "failed")
+```
+
+**Status: run for the first time on 2026-08-25. 12 suites, 182 tests, 253
+assertions - all passing.** Two things had to be fixed to get there, and both
+are in the repo now: `tests/jest.config.luau` did not exist (Jest refuses to
+start without it), and the documented Play-based procedure cannot work at all.
 
 The three worth reading closely if something is red:
 
@@ -318,14 +330,23 @@ subclass hierarchy".
 
 **Known gaps that are genuinely empty, not placeholder:**
 
-- Splash has no visual at all — Mortar and Flak area damage is invisible
-- Bleed and Slow have no visual, though `StatusEffectDefinition` already
-  carries an unused `color` field that would be the cheapest possible fix
-- `BossDeath` and `Splash` sound keys are defined but never fired
+- Four sound keys have no call site anywhere: `PlacementRejected`,
+  `ButtonClick`, `VoteCast` and `MatchLaunching`. The last two are lobby cues
+  and `src/lobby/` has no audio path at all, so they are unfireable rather
+  than merely unfired
 - No music. `PlayerData.Settings.MusicEnabled` is persisted and unused —
   deliberately, because music needs a track list and a crossfade policy, which
   is a design decision rather than a slot
-- Titan's enrage below 35% health has no visual tell
+
+**Known defects — bugs, not empty slots:**
+
+- No death cue fires for a kill by a damage-over-time tick. `EnemyDeath` and
+  `BossDeath` are both inferred client-side from last replicated health, and
+  `EnemySimulation.step` runs `collectDead` at the end of the same step a
+  bleed tick kills in, so `Health = 0` never reaches a `view:sync()`. A
+  bullet kill is unaffected because `towers:update` runs between
+  `simulation:update` and `view:sync()`. Read out of the call order, not
+  observed in Studio — confirm in Studio before changing server ordering
 
 **Adding content is config-only:**
 

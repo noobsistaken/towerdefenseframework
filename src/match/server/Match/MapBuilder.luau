@@ -22,9 +22,11 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Footprint = require(ReplicatedStorage.Shared.Footprint)
+local Pads = require(ReplicatedStorage.Shared.Config.Maps.Pads)
 local Path = require(ReplicatedStorage.Shared.Path)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -40,8 +42,19 @@ export type BuiltMap = {
 
 local PATH_WIDTH = 16
 local PATH_THICKNESS = 1
---- Walkway sits a hair above y = 0 so it does not z-fight the ground plane.
-local PATH_TOP_Y = 0.15
+--- Walkway sits a hair above the BUILDABLE APRON, not above the ground
+--- plane.
+---
+--- Every map lays one broad ground pad over its whole play area with its
+--- top at Pads.GROUND_TOP, and every lane falls inside it. Measured from
+--- y = 0 the walkway topped out at 0.15, which is 0.85 studs UNDER that
+--- apron - so the lane was drawn, buried, and invisible, and the map read
+--- as one featureless slab with no path on it.
+---
+--- Derived from Pads rather than hardcoded, so raising the apron cannot
+--- bury the walkway again - and shared with the rig fitting, so enemies
+--- stand ON this surface rather than on the y = 0 path plane beneath it.
+local PATH_TOP_Y = Pads.WALKWAY_TOP
 
 local function newPart(name: string, size: Vector3, cframe: CFrame, color: Color3, parent: Instance): Part
 	local part = Instance.new("Part")
@@ -242,6 +255,49 @@ local function buildSpawn(config: Types.MapConfig, parent: Instance): SpawnLocat
 	return spawn
 end
 
+--- Draggable markers for each waypoint, so a map can be reshaped in Studio
+--- and read back by MapExtract.
+---
+--- Visible only in Studio. In a live server these are invisible and inert -
+--- they exist so the tree MapBuilder produces is the same tree MapExtract
+--- consumes, which is what makes the round trip lossless. A player never sees
+--- them; the walkway drawn from the same waypoints is the visible thing.
+---
+--- The Order attribute rather than relying on the name: an author renumbering
+--- a lane should not have to rename anything.
+local function buildWaypointMarkers(config: Types.MapConfig, parent: Instance)
+	local lanes = Instance.new("Folder")
+	lanes.Name = "Lanes"
+	lanes.Parent = parent
+
+	local visible = RunService:IsStudio()
+
+	for laneIndex, lane in config.paths do
+		local folder = Instance.new("Folder")
+		folder.Name = `Lane{laneIndex}`
+		folder.Parent = lanes
+
+		for index, point in lane.waypoints do
+			local marker = newPart(
+				`Waypoint{index}`,
+				Vector3.new(3, 3, 3),
+				CFrame.new(point),
+				Color3.fromRGB(240, 200, 90),
+				folder
+			)
+
+			marker.Shape = Enum.PartType.Ball
+			marker.Material = Enum.Material.Neon
+			marker.Transparency = if visible then 0.45 else 1
+			marker.CanCollide = false
+			marker.CanQuery = false
+			marker.CanTouch = false
+			marker.CastShadow = false
+			marker:SetAttribute("Order", index)
+		end
+	end
+end
+
 function MapBuilder.build(config: Types.MapConfig): BuiltMap
 	MapBuilder.clear()
 
@@ -249,6 +305,7 @@ function MapBuilder.build(config: Types.MapConfig): BuiltMap
 	folder.Name = Constants.MAP_FOLDER
 
 	buildGround(config, folder)
+	buildWaypointMarkers(config, folder)
 	buildSurfaces(config, folder)
 	buildDecor(config, folder)
 	buildBaseMarker(config, folder)

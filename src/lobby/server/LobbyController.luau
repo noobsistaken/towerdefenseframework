@@ -28,6 +28,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
+local LobbyZones = require(ReplicatedStorage.Shared.LobbyZones)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ServerScriptService.Net)
 local Poll = require(ReplicatedStorage.Shared.Poll)
@@ -46,6 +47,14 @@ export type Controller = typeof(setmetatable(
 		mapPoll: Poll.Poll,
 		difficultyPoll: Poll.Poll,
 		ready: { [Player]: boolean },
+		--- Which map zone each player stood in at the last scan. The change
+		--- detection: casting only on a CHANGE keeps the tally broadcast
+		--- quiet, and leaving your zone is what un-readies you.
+		lastZone: { [Player]: string? },
+		lastPad: { [Player]: string? },
+		--- Fires after every tally broadcast, so the world's zone boards can
+		--- repaint without this module knowing geometry exists.
+		tallyChanged: (() -> ())?,
 		heartbeat: thread?,
 	},
 	LobbyController
@@ -85,6 +94,12 @@ local function broadcastTally(self: Controller)
 		winningMapId = self.mapPoll:winner(),
 		winningDifficultyId = self.difficultyPoll:winner(),
 	})
+
+	local tallyChanged = self.tallyChanged
+
+	if tallyChanged ~= nil then
+		tallyChanged()
+	end
 end
 
 --- Single entry point for state changes, so a transition can never forget to
@@ -151,6 +166,9 @@ function LobbyController.new(): Controller
 		mapPoll = Poll.new(MapRegistry.IDS, MapRegistry.DEFAULT_ID),
 		difficultyPoll = Poll.new(Difficulty.IDS, Difficulty.DEFAULT_ID),
 		ready = {},
+		lastZone = {},
+		lastPad = {},
+		tallyChanged = nil,
 		heartbeat = nil,
 	}, LobbyController)
 
@@ -172,6 +190,8 @@ function LobbyController.removePlayer(self: Controller, player: Player)
 	self.mapPoll:remove(player.UserId)
 	self.difficultyPoll:remove(player.UserId)
 	self.ready[player] = nil
+	self.lastZone[player] = nil
+	self.lastPad[player] = nil
 
 	broadcastState(self)
 	broadcastTally(self)
@@ -195,6 +215,66 @@ function LobbyController.castVote(self: Controller, player: Player, kind: string
 	end
 
 	broadcastTally(self)
+end
+
+-- ---------------------------------------------------------------------------
+-- Zones
+--
+-- Standing in a zone IS the map vote; standing on a pad inside it is the
+-- difficulty vote. Scanned on the same heartbeat as the state machine, from
+-- character positions the server already owns - never from anything the
+-- client sends, which is what makes walking unforgeable where a message is
+-- merely validated.
+-- ---------------------------------------------------------------------------
+
+local function scanZones(self: Controller)
+	local changed = false
+
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		local root = if character ~= nil then character.PrimaryPart else nil
+
+		local mapId: string? = nil
+		local difficultyId: string? = nil
+
+		if root ~= nil then
+			mapId, difficultyId = LobbyZones.resolve(root.Position)
+		end
+
+		if mapId ~= self.lastZone[player] then
+			-- Leaving your zone withdraws the vote AND the ready flag: a
+			-- player wandering off must not hold "everyone is ready" true,
+			-- and must not keep voting for a zone they left.
+			if mapId == nil then
+				self.mapPoll:remove(player.UserId)
+			else
+				self.mapPoll:cast(player.UserId, mapId)
+			end
+
+			if self.ready[player] then
+				self.ready[player] = nil
+				broadcastState(self)
+			end
+
+			self.lastZone[player] = mapId
+			changed = true
+		end
+
+		if difficultyId ~= self.lastPad[player] then
+			if difficultyId == nil then
+				self.difficultyPoll:remove(player.UserId)
+			else
+				self.difficultyPoll:cast(player.UserId, difficultyId)
+			end
+
+			self.lastPad[player] = difficultyId
+			changed = true
+		end
+	end
+
+	if changed then
+		broadcastTally(self)
+	end
 end
 
 function LobbyController.setReady(self: Controller, player: Player, ready: boolean)
@@ -238,6 +318,13 @@ end
 
 local function tick(self: Controller)
 	local present = #Players:GetPlayers()
+
+	-- Zones vote in Gathering AND Voting - a player already standing in a
+	-- zone when the countdown starts is a vote, not a race. Launching is
+	-- frozen exactly as castVote is.
+	if self.state ~= "Launching" then
+		scanZones(self)
+	end
 
 	if self.state == "Gathering" then
 		if present >= Constants.LOBBY_MIN_PLAYERS then

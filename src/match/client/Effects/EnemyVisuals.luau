@@ -23,8 +23,12 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local StatusEffects = require(ReplicatedStorage.Shared.Config.StatusEffects)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 
+local Bursts = require(script.Parent.Bursts)
 local SoundController = require(script.Parent.Parent.Audio.SoundController)
 
 local EnemyVisuals = {}
@@ -45,6 +49,17 @@ local FLUSH_INTERVAL = 0.15
 --- screen is unreadable anyway.
 local MAX_NUMBERS = 40
 
+--- Enrage tell. Warm and hot rather than the status palette's flat red: a
+--- bleeding Titan and an enraged one must not look like the same thing.
+local ENRAGE_FILL = Color3.fromRGB(255, 92, 48)
+local ENRAGE_OUTLINE = Color3.fromRGB(255, 196, 128)
+
+--- Pulse bounds and period. Steady would read as "selected"; the point is
+--- that this one is dangerous.
+local ENRAGE_FILL_MIN = 0.35
+local ENRAGE_FILL_MAX = 0.72
+local ENRAGE_PULSE_SECONDS = 0.55
+
 local NUMBER_RISE = 6
 local NUMBER_SECONDS = 0.8
 
@@ -54,9 +69,26 @@ type Entry = {
 	fill: Frame,
 	maxHealth: number,
 	lastHealth: number,
+	--- Cached at attach, like maxHealth above, because PartPool wipes every
+	--- attribute and re-stamps Name when it recycles a part - so nothing read
+	--- off the part at detach is guaranteed to still describe this occupant.
+	isBoss: boolean,
 	pendingDamage: number,
 	sinceFlush: number,
 	connection: RBXScriptConnection,
+	statusConnection: RBXScriptConnection,
+	enrageConnection: RBXScriptConnection,
+	--- Present only while the enemy is enraged. Nothing else adorns these
+	--- parts, so its presence IS the on/off state.
+	highlight: Highlight?,
+	--- The rig child, resolved lazily: a rigged enemy's Model can replicate
+	--- AFTER its host part, so this is re-checked on every refresh rather
+	--- than read once at attach.
+	rig: Model?,
+	--- Original colours of the rig's parts, held only while a status tint is
+	--- painted over them and restored on detach - a pooled rig must not be
+	--- handed to its next occupant pre-painted.
+	rigColors: { [BasePart]: Color3 }?,
 }
 
 --- Reads a numeric attribute, or nil if absent or the wrong type.
@@ -69,6 +101,188 @@ local function numberAttribute(instance: Instance, name: string): number?
 	end
 
 	return value
+end
+
+--- Reads a string attribute, or nil if absent or the wrong type.
+local function stringAttribute(instance: Instance, name: string): string?
+	local value = instance:GetAttribute(name)
+
+	if type(value) ~= "string" then
+		return nil
+	end
+
+	return value
+end
+
+--- The colour an enemy should render as, given the effect ids the server
+--- published on ATTR_STATUS_EFFECTS.
+---
+--- First id wins. The server writes them sorted, so this is deterministic -
+--- but between two live effects it is ARBITRARY. Blending a red bleed with a
+--- blue slow gives a purple that reads as neither, and nothing in the config
+--- ranks one above the other. A `priority` field on StatusEffectDefinition is
+--- the natural upgrade if which one shows ever matters.
+local function tintFor(encoded: string): Color3?
+	for id in string.gmatch(encoded, "[^,]+") do
+		local definition = StatusEffects.find(id)
+
+		if definition ~= nil then
+			return definition.color
+		end
+	end
+
+	return nil
+end
+
+--- Finds the rig child once it has replicated. Cheap, event-driven - this
+--- runs on attribute changes, not per frame.
+local function resolveRig(entry: Entry)
+	if entry.rig ~= nil then
+		return
+	end
+
+	local rig = entry.part:FindFirstChild("Rig")
+
+	if rig ~= nil and rig:IsA("Model") then
+		entry.rig = rig
+	end
+end
+
+--- Repaints one enemy to its effect tint, or back to its base look when
+--- nothing is live.
+---
+--- A boxed enemy is tinted through part.Color, with the base colour
+--- recoverable from its definition (the part's Name is its definition id).
+--- A rigged enemy is tinted across the rig's parts instead - the host is
+--- invisible under a rig, so painting it would show nothing - and the
+--- originals are cached so clearing restores the real look. On a textured
+--- MeshPart the tint multiplies the texture rather than replacing it, which
+--- reads as a wash of the effect colour: subtler than the box, still
+--- legible.
+local function refreshTint(entry: Entry)
+	local part = entry.part
+	resolveRig(entry)
+
+	local encoded = stringAttribute(part, Constants.ATTR_STATUS_EFFECTS)
+	local tint = if encoded ~= nil then tintFor(encoded) else nil
+	local rig = entry.rig
+
+	if rig ~= nil then
+		if tint ~= nil then
+			if entry.rigColors == nil then
+				local originals: { [BasePart]: Color3 } = {}
+
+				for _, descendant in rig:GetDescendants() do
+					if descendant:IsA("BasePart") then
+						originals[descendant] = descendant.Color
+					end
+				end
+
+				entry.rigColors = originals
+			end
+
+			for _, descendant in rig:GetDescendants() do
+				if descendant:IsA("BasePart") then
+					descendant.Color = tint
+				end
+			end
+
+			return
+		end
+
+		local originals = entry.rigColors
+
+		if originals ~= nil then
+			for rigPart, original in originals do
+				rigPart.Color = original
+			end
+
+			entry.rigColors = nil
+		end
+
+		return
+	end
+
+	if tint ~= nil then
+		part.Color = tint
+		return
+	end
+
+	local definition = Enemies.find(part.Name)
+
+	if definition ~= nil then
+		part.Color = definition.color
+	end
+end
+
+--- Turns the enrage tell on or off for one enemy, idempotently.
+---
+--- A Highlight rather than a colour change, deliberately: Color is already
+--- spoken for by the status tint above, and a Titan that is both bleeding and
+--- enraged has to show both at once. Highlight also tracks its adornee with no
+--- per-frame work, which matters because enemies move via one bulk call and
+--- nothing here gets a step callback.
+---
+--- Occluded rather than AlwaysOnTop so the glow does not shine through a
+--- plateau the Titan is walking behind.
+local function refreshEnrage(part: BasePart, entry: Entry)
+	if part:GetAttribute(Constants.ATTR_ENRAGED) ~= true then
+		if entry.highlight ~= nil then
+			entry.highlight:Destroy()
+			entry.highlight = nil
+		end
+
+		return
+	end
+
+	resolveRig(entry)
+
+	-- The rig when there is one: a Highlight on the invisible host outlines
+	-- nothing. Re-adorned on every refresh rather than latched at creation,
+	-- because the rig Model can replicate to this client AFTER the enrage
+	-- flag does.
+	local adornee: Instance = if entry.rig ~= nil then entry.rig :: Instance else part
+
+	if entry.highlight ~= nil then
+		entry.highlight.Adornee = adornee
+		return
+	end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "TDEnrage"
+	highlight.Adornee = adornee
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.FillColor = ENRAGE_FILL
+	highlight.FillTransparency = ENRAGE_FILL_MAX
+	highlight.OutlineColor = ENRAGE_OUTLINE
+	highlight.OutlineTransparency = 0
+	highlight.LineThickness = 2
+	highlight.Parent = part
+
+	-- Repeats until the Highlight is destroyed, which detach guarantees on the
+	-- way out and the pool guarantees if the part is dropped instead.
+	local info = TweenInfo.new(ENRAGE_PULSE_SECONDS, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+
+	TweenService:Create(highlight, info, { FillTransparency = ENRAGE_FILL_MIN }):Play()
+
+	entry.highlight = highlight
+end
+
+--- Which death cue an enemy gets.
+---
+--- The fallback is the point. BossDeath replacing EnemyDeath outright would
+--- mean that the day someone records EnemyDeath and not BossDeath, the Titan
+--- becomes the one enemy in the game that dies in silence - a regression from
+--- today, and one no gate here could catch because every assetId is empty and
+--- both keys are equally inaudible.
+---
+--- Sounds.isFilled exists for exactly this and had no callers until now.
+local function deathCueFor(isBoss: boolean): string
+	if isBoss and Sounds.isFilled("BossDeath") then
+		return "BossDeath"
+	end
+
+	return "EnemyDeath"
 end
 
 local function buildBar(part: BasePart): (BillboardGui, Frame)
@@ -175,13 +389,43 @@ function EnemyVisuals.start(): () -> ()
 
 		entries[part] = nil
 		entry.connection:Disconnect()
+		entry.statusConnection:Disconnect()
+		entry.enrageConnection:Disconnect()
+
+		-- Enemy parts are recycled rather than destroyed, so an adornment left
+		-- behind here would reappear on whatever spawns into this part next.
+		if entry.highlight ~= nil then
+			entry.highlight:Destroy()
+			entry.highlight = nil
+		end
+
+		-- Same reasoning for a tint: the rig rides the pooled part back to
+		-- the pool, and the next occupant must not inherit a bleed wash.
+		local originals = entry.rigColors
+
+		if originals ~= nil then
+			for rigPart, original in originals do
+				rigPart.Color = original
+			end
+
+			entry.rigColors = nil
+		end
 
 		-- Health at or below zero when the part goes away means a kill.
 		-- Inferred rather than sent: a death event per enemy would be
 		-- hundreds of unreliable packets a wave for something the client can
 		-- already see.
+		--
+		-- This misses one whole class of kill, and always has: a bleed tick
+		-- that finishes an enemy is collected inside the same simulation step,
+		-- before any sync writes Health = 0, so the last value this client saw
+		-- is still positive and no cue plays. Pre-existing and not fixed here -
+		-- the fix is server-side ordering, not a sound lookup.
 		if entry.lastHealth <= 0 then
-			SoundController.play("EnemyDeath", part.Position)
+			SoundController.play(deathCueFor(entry.isBoss), part.Position)
+			-- A visible death to go with the audible one. Red for everything,
+			-- bigger for a boss - same client-side inference, no message.
+			Bursts.emit(part.Position, Color3.fromRGB(220, 76, 76), if entry.isBoss then 48 else 14)
 		end
 
 		if entry.gui.Parent ~= nil then
@@ -205,15 +449,23 @@ function EnemyVisuals.start(): () -> ()
 
 		local gui, fill = buildBar(child)
 
+		-- The part's Name is its definition id, the same lookup the tint uses.
+		-- An unknown id is not a boss rather than an error.
+		local definition = Enemies.find(child.Name)
+
 		local entry: Entry = {
 			part = child,
 			gui = gui,
 			fill = fill,
 			maxHealth = maxHealth,
 			lastHealth = health,
+			isBoss = definition ~= nil and definition.isBoss,
 			pendingDamage = 0,
 			sinceFlush = 0,
 			connection = nil :: any,
+			statusConnection = nil :: any,
+			enrageConnection = nil :: any,
+			highlight = nil,
 		}
 
 		entry.connection = child:GetAttributeChangedSignal(Constants.ATTR_HEALTH):Connect(function()
@@ -231,6 +483,17 @@ function EnemyVisuals.start(): () -> ()
 			end
 
 			fill.Size = UDim2.fromScale(math.clamp(current / entry.maxHealth, 0, 1), 1)
+		end)
+
+		refreshTint(entry)
+		refreshEnrage(child, entry)
+
+		entry.statusConnection = child:GetAttributeChangedSignal(Constants.ATTR_STATUS_EFFECTS):Connect(function()
+			refreshTint(entry)
+		end)
+
+		entry.enrageConnection = child:GetAttributeChangedSignal(Constants.ATTR_ENRAGED):Connect(function()
+			refreshEnrage(child, entry)
 		end)
 
 		entries[child] = entry

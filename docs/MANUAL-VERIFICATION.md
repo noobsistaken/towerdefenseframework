@@ -163,3 +163,32 @@ nothing about whether `TeleportAsync` would accept it.
 
 Set `STUDIO_ROLE` back to `"Match"` when you are done, or the test place will
 stop booting the game.
+
+---
+
+## UI motion
+
+Not part of the teleport loop, and listed here for the same reason it is: no
+gate in this repo can see it. selene, stylua and luau-lsp prove the tween
+compiles. They cannot prove it reads as motion rather than as a glitch.
+
+Select one of your own towers below max level, in the match place.
+
+1. **The preview is hidden until hovered.** Selecting a tower shows the main
+   panel only. The NEXT / LEVEL n panel above it should be invisible.
+2. **Hover the UPGRADE button.** The preview fades in over ~0.16s and a thin
+   off-white stroke fades onto the button. Moving off fades both back.
+3. **Nothing moves.** The panel holds its layout slot whether shown or hidden,
+   so the UPGRADE button must not shift under the cursor. If it does, the
+   reveal will flicker on and off - that is the failure to watch for.
+4. **Whip the cursor on and off the button.** The fade should reverse from
+   wherever it had reached, never snap to fully open first.
+5. **Select a different tower while hovering.** The preview must be hidden on
+   the new tower, not still showing from the old one.
+6. **Upgrade to max level while hovering.** The preview and the button both
+   disappear; nothing should error in Output.
+
+**Touch and gamepad have no hover.** There the preview stays visible at all
+times instead, so the information is never unreachable - but that means the
+panel behaves differently per input device, which is a deliberate trade and
+worth eyeballing on a phone if this ever ships to one.

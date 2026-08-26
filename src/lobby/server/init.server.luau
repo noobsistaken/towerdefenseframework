@@ -19,7 +19,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ServerScriptService.Net)
 local Places = require(ReplicatedStorage.Shared.Config.Places)
 
@@ -34,14 +33,20 @@ local TeleportGate = require(script.TeleportGate)
 -- resolve every require from one sourcemap. Without this guard, opening it
 -- would boot a match and a lobby into the same world. In a published place
 -- only one of the two entry scripts exists, so this always passes there.
-if not Places.shouldBoot("Lobby", RunService:IsStudio()) then
+if not Places.shouldBoot("Lobby", RunService:IsStudio(), game.PlaceId) then
 	return
 end
 
 local lobby = LobbyBuilder.build()
-LobbyBuilder.buildMapPlinths(MapRegistry.IDS, MapRegistry.MAPS, lobby.folder)
+local zoneBoards = LobbyBuilder.buildZones(lobby.folder)
 
 local controller = LobbyController.new()
+
+-- The world's vote boards repaint on every tally change. Wired here rather
+-- than inside the controller, which stays ignorant of geometry.
+controller.tallyChanged = function()
+	LobbyBuilder.updateZoneBoards(zoneBoards, controller.mapPoll:tally(), controller.mapPoll:winner())
+end
 
 -- ---------------------------------------------------------------------------
 -- Player lifecycle

@@ -29,11 +29,58 @@ describe("DataSchema", function()
 
 	it("refuses to guess when a migration step is missing", function()
 		local data = table.clone(DataSchema.TEMPLATE)
-		data.Version = DataSchema.CURRENT_VERSION - 1
+		-- Version 0 has never existed and can never gain a ladder rung, so
+		-- this stays a missing-step probe no matter how long the real ladder
+		-- grows. The original form used CURRENT_VERSION - 1, which stopped
+		-- being a missing step the day rung 1 was added.
+		data.Version = 0
 
 		expect(function()
 			DataSchema.migrate(data)
 		end).toThrow()
+	end)
+
+	it("walks v1 data the whole ladder to the current version", function()
+		local data = table.clone(DataSchema.TEMPLATE)
+		data.Version = 1
+		-- What a real v1 profile holds: the original two starters, plus one
+		-- extra to prove the union keeps unknown entries and cannot
+		-- duplicate an existing one.
+		data.UnlockedTowers = { "Rifleman", "Ranger", "Mortar" }
+
+		-- One step per rung, all the way up - the count grows with the
+		-- ladder, which is the point: a v1 profile can never get stranded.
+		expect(DataSchema.migrate(data)).toBe(DataSchema.CURRENT_VERSION - 1)
+		expect(data.Version).toBe(DataSchema.CURRENT_VERSION)
+
+		-- v3's additions arrive on the way through.
+		expect(type(data.Traits)).toBe("table")
+		expect(data.RerollTokens).toBe(0)
+
+		for _, id in { "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator" } do
+			expect(table.find(data.UnlockedTowers, id) ~= nil).toBe(true)
+		end
+
+		-- Union, not append: Mortar was already owned and must appear once.
+		local mortars = 0
+		for _, id in data.UnlockedTowers do
+			if id == "Mortar" then
+				mortars += 1
+			end
+		end
+		expect(mortars).toBe(1)
+	end)
+
+	it("gives a v2 profile its trait storage without touching its towers", function()
+		local data = table.clone(DataSchema.TEMPLATE)
+		data.Version = 2
+		data.UnlockedTowers = { "Rifleman", "Flak" }
+
+		expect(DataSchema.migrate(data)).toBe(1)
+		expect(data.Version).toBe(3)
+		expect(type(data.Traits)).toBe("table")
+		expect(data.RerollTokens).toBe(0)
+		expect(#data.UnlockedTowers).toBe(2)
 	end)
 
 	it("never leaves data below the current version", function()

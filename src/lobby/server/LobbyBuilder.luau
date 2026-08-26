@@ -10,9 +10,17 @@
 	placeholder and appears in the asset manifest.
 ]]
 
-local Types = require(game:GetService("ReplicatedStorage").Shared.Types)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
+local LobbyZones = require(ReplicatedStorage.Shared.LobbyZones)
+local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
+local Poll = require(ReplicatedStorage.Shared.Poll)
 
 local LobbyBuilder = {}
+
+--- Vote boards by map id, for updateZoneBoards.
+export type ZoneBoards = { [string]: TextLabel }
 
 export type BuiltLobby = {
 	folder: Folder,
@@ -85,39 +93,117 @@ function LobbyBuilder.build(): BuiltLobby
 	}
 end
 
---- A plinth per map, so the lobby shows what is being voted on in the world
---- as well as in the UI. Cosmetic only - the vote lives in LobbyController.
-function LobbyBuilder.buildMapPlinths(mapIds: { string }, registry: { [string]: Types.MapConfig }, parent: Instance)
+--- Colour per difficulty pad. Indexed by id with a grey fallback so an
+--- unknown difficulty still renders rather than erroring the build.
+local PAD_COLORS: { [string]: Color3 } = {
+	Casual = Color3.fromRGB(96, 190, 120),
+	Normal = Color3.fromRGB(222, 198, 100),
+	Nightmare = Color3.fromRGB(205, 88, 88),
+}
+
+local PAD_FALLBACK = Color3.fromRGB(140, 144, 152)
+
+--- The walk-in vote zones, from the shared layout the resolver uses - build
+--- and resolution reading the SAME data is what makes "the floor you stand
+--- on is your vote" true rather than approximately true.
+---
+--- Each zone: a raised pad in the map's ground colour, a billboard naming
+--- the map and counting its votes (the returned labels; LobbyController
+--- updates them through updateZoneBoards), and one small pad per
+--- difficulty along the near edge.
+function LobbyBuilder.buildZones(parent: Instance): ZoneBoards
 	local folder = Instance.new("Folder")
-	folder.Name = "MapPlinths"
+	folder.Name = "Zones"
 	folder.Parent = parent
 
-	local spacing = 22
-	local startX = -((#mapIds - 1) * spacing) / 2
+	local boards: ZoneBoards = {}
 
-	for index, id in mapIds do
-		local map = registry[id]
+	for _, zone in LobbyZones.zones() do
+		local map = MapRegistry.find(zone.mapId)
+		local color = if map ~= nil then map.groundColor else PAD_FALLBACK
 
-		if map == nil then
-			continue
-		end
+		-- Slightly proud of the floor so the zone reads as a place, and thin
+		-- enough that walking on feels flat.
+		local pad = newPart(
+			`Zone_{zone.mapId}`,
+			Vector3.new(zone.size.X, 0.4, zone.size.Z),
+			CFrame.new(zone.center.X, 0.2, zone.center.Z),
+			color,
+			folder
+		)
+		pad.CanQuery = false
 
-		local x = startX + (index - 1) * spacing
-		local plinth = newPart(`Plinth_{id}`, Vector3.new(16, 6, 16), CFrame.new(x, 3, -30), map.groundColor, folder)
-
-		local sign = Instance.new("SurfaceGui")
-		sign.Face = Enum.NormalId.Top
-		sign.CanvasSize = Vector2.new(200, 200)
-		sign.Parent = plinth
+		local sign = Instance.new("BillboardGui")
+		sign.Name = "Board"
+		sign.Size = UDim2.fromScale(14, 4)
+		sign.StudsOffsetWorldSpace = Vector3.new(0, 9, 0)
+		sign.AlwaysOnTop = false
+		sign.MaxDistance = 220
+		sign.Adornee = pad
+		sign.Parent = pad
 
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.fromScale(1, 1)
 		label.BackgroundTransparency = 1
-		label.Text = map.displayName
+		label.Text = if map ~= nil then map.displayName else zone.mapId
 		label.TextScaled = true
 		label.TextColor3 = Color3.fromRGB(240, 240, 240)
 		label.Font = Enum.Font.GothamBold
+		label.TextStrokeTransparency = 0.6
 		label.Parent = sign
+
+		boards[zone.mapId] = label
+
+		for _, zonePad in zone.pads do
+			local difficultyPad = newPart(
+				`Pad_{zone.mapId}_{zonePad.difficultyId}`,
+				Vector3.new(zonePad.size.X, 0.5, zonePad.size.Z),
+				CFrame.new(zonePad.center.X, 0.45, zonePad.center.Z),
+				PAD_COLORS[zonePad.difficultyId] or PAD_FALLBACK,
+				folder
+			)
+			difficultyPad.CanQuery = false
+
+			local preset = Difficulty.find(zonePad.difficultyId)
+
+			local padSign = Instance.new("BillboardGui")
+			padSign.Size = UDim2.fromScale(6, 1.6)
+			padSign.StudsOffsetWorldSpace = Vector3.new(0, 2.6, 0)
+			padSign.MaxDistance = 120
+			padSign.Adornee = difficultyPad
+			padSign.Parent = difficultyPad
+
+			local padLabel = Instance.new("TextLabel")
+			padLabel.Size = UDim2.fromScale(1, 1)
+			padLabel.BackgroundTransparency = 1
+			padLabel.Text = if preset ~= nil then preset.displayName else zonePad.difficultyId
+			padLabel.TextScaled = true
+			padLabel.TextColor3 = Color3.fromRGB(235, 235, 235)
+			padLabel.Font = Enum.Font.GothamMedium
+			padLabel.TextStrokeTransparency = 0.6
+			padLabel.Parent = padSign
+		end
+	end
+
+	return boards
+end
+
+--- Repaints every zone board with its live vote count, marking the winner.
+--- Server-side text on server-built boards: it replicates for free, and the
+--- client needs no vote UI at all.
+function LobbyBuilder.updateZoneBoards(boards: ZoneBoards, tallies: { Poll.Tally }, winningId: string)
+	for _, tally in tallies do
+		-- Annotated optional: indexing a map type yields the value type, not
+		-- an optional, so the nil guard below needs the honest annotation.
+		local label: TextLabel? = boards[tally.option]
+
+		if label ~= nil then
+			local map = MapRegistry.find(tally.option)
+			local name = if map ~= nil then map.displayName else tally.option
+			local crown = if tally.option == winningId then " \u{2605}" else ""
+
+			label.Text = `{name}{crown}\n{tally.votes} vote{if tally.votes == 1 then "" else "s"}`
+		end
 	end
 end
 

@@ -26,6 +26,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
 local EnemySimulation = require(script.Parent.EnemySimulation)
 local PartPool = require(script.Parent.PartPool)
+local Rigs = require(script.Parent.Parent.Systems.Rigs)
 
 local EnemyView = {}
 EnemyView.__index = EnemyView
@@ -39,6 +40,15 @@ export type View = typeof(setmetatable(
 		--- Last health value written per enemy. Attribute writes replicate,
 		--- so writing an unchanged value every frame would be pure waste.
 		lastHealth: { [Types.EnemyId]: number? },
+		--- Last effect-id string written per enemy, for the same reason.
+		lastEffects: { [Types.EnemyId]: string? },
+		--- Last enrage flag written per enemy. Same reason again.
+		lastEnraged: { [Types.EnemyId]: boolean? },
+		--- Enemies currently wearing a rig, and each rig's root - driven with
+		--- a DIRECT CFrame write per frame, because a direct write carries the
+		--- whole jointed assembly and BulkMoveTo does not. Both measured.
+		riggedCount: number,
+		rigRoots: { [Part]: Rigs.MovingRig? },
 		unsubscribeRemoved: EnemySimulation.Unsubscribe?,
 	},
 	EnemyView
@@ -47,6 +57,19 @@ export type View = typeof(setmetatable(
 --- FireCFrameChanged rather than FireAllEvents: the cheaper of the two modes
 --- the enum offers, and nothing here depends on the full event set.
 local MOVE_MODE = Enum.BulkMoveMode.FireCFrameChanged
+
+--- Hard ceiling on enemies wearing a rig at once. Beyond it new spawns fall
+--- back to the coloured box - degradation, never breakage.
+---
+--- A single blunt cap rather than the per-type budgets a concurrency sweep
+--- proposed, because that sweep was refuted on review: it omitted the Runner
+--- sprint, ignored the shipped Slow effect inflating time-on-path, and its
+--- headline cost model had the axis backwards - measured cost tracks PART
+--- count, not root count. 64 rigs at ~17 visible parts each is roughly
+--- 1,100 extra parts, which is conservative on the numbers that DID hold up.
+--- The honest way to raise this is profiling a real wave in Studio, not a
+--- bigger estimate.
+local MAX_RIGGED = 64
 
 function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance): View
 	local container = Instance.new("Folder")
@@ -62,6 +85,10 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 		pool = PartPool.new(container),
 		parts = {},
 		lastHealth = {},
+		lastEffects = {},
+		lastEnraged = {},
+		riggedCount = 0,
+		rigRoots = {},
 		unsubscribeRemoved = nil,
 	}, EnemyView)
 
@@ -70,6 +97,35 @@ function EnemyView.new(simulation: EnemySimulation.Simulation, parent: Instance)
 	end)
 
 	return view
+end
+
+--- Stable description of which effects are live on an enemy, for the
+--- attribute below.
+---
+--- Sorted deliberately, and not for tidiness: `enemy.effects` is a hash map
+--- and Luau does not promise a stable iteration order, so an unsorted join
+--- could produce a different string frame to frame for an UNCHANGED set of
+--- effects - and the change check below would then replicate on every one of
+--- them. Sorting makes the value a pure function of the set.
+---
+--- The empty-list guard matters because an id whose instances have all
+--- expired may still be present as a key.
+local function describeEffects(enemy: BaseEnemy.Enemy): string
+	local ids: { string } = {}
+
+	for effectId, instances in enemy.effects do
+		if #instances > 0 then
+			table.insert(ids, effectId)
+		end
+	end
+
+	if #ids == 0 then
+		return ""
+	end
+
+	table.sort(ids)
+
+	return table.concat(ids, ",")
 end
 
 --- Returns this enemy's part, creating and configuring it on first sight.
@@ -88,13 +144,36 @@ local function acquireFor(self: View, enemy: BaseEnemy.Enemy): Part
 	fresh.Name = definition.id
 	fresh.Size = definition.hitboxSize
 	fresh.Color = definition.color
-	fresh.Transparency = 0
+
+	-- Rig or box. Attach reuses a matching rig a pooled part came back with,
+	-- and refuses a template with no visible geometry, so a non-nil result
+	-- genuinely means "there is something to look at" before the host goes
+	-- invisible.
+	local movingRig: Rigs.MovingRig? = nil
+
+	if definition.rig ~= nil and self.riggedCount < MAX_RIGGED then
+		movingRig = Rigs.attachMoving(fresh, definition.rig, definition.baseSpeed)
+	end
+
+	if movingRig ~= nil then
+		self.riggedCount += 1
+		self.rigRoots[fresh] = movingRig
+	else
+		-- A pooled part can come back wearing the previous occupant's rig.
+		Rigs.clear(fresh)
+	end
+
+	fresh.Transparency = if movingRig ~= nil then 1 else 0
 	fresh:SetAttribute(Constants.ATTR_ENEMY_ID, enemy.id)
 	fresh:SetAttribute(Constants.ATTR_MAX_HEALTH, enemy.maxHealth)
 	fresh:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
+	fresh:SetAttribute(Constants.ATTR_STATUS_EFFECTS, "")
+	fresh:SetAttribute(Constants.ATTR_ENRAGED, false)
 
 	self.parts[enemy.id] = fresh
 	self.lastHealth[enemy.id] = enemy.health
+	self.lastEffects[enemy.id] = ""
+	self.lastEnraged[enemy.id] = false
 
 	return fresh
 end
@@ -108,6 +187,18 @@ function EnemyView.releaseEnemy(self: View, id: Types.EnemyId)
 
 	self.parts[id] = nil
 	self.lastHealth[id] = nil
+	self.lastEffects[id] = nil
+	self.lastEnraged[id] = nil
+
+	-- The rig stays on the pooled part - recycling it is the cheap path - but
+	-- it stops counting toward the cap, which bounds what is on the FIELD.
+	-- The handle goes: a re-acquire recomputes it, and a part the pool
+	-- destroys must not be pinned by this table.
+	if self.rigRoots[part] ~= nil then
+		self.rigRoots[part] = nil
+		self.riggedCount -= 1
+	end
+
 	self.pool:release(part)
 end
 
@@ -127,11 +218,42 @@ function EnemyView.sync(self: View)
 			part:SetAttribute(Constants.ATTR_HEALTH, enemy.health)
 		end
 
+		local effects = describeEffects(enemy)
+
+		if self.lastEffects[enemy.id] ~= effects then
+			self.lastEffects[enemy.id] = effects
+			part:SetAttribute(Constants.ATTR_STATUS_EFFECTS, effects)
+		end
+
+		local enraged = false
+		local isEnraged = enemy.behavior.enraged
+
+		if isEnraged ~= nil then
+			enraged = isEnraged(enemy)
+		end
+
+		if self.lastEnraged[enemy.id] ~= enraged then
+			self.lastEnraged[enemy.id] = enraged
+			part:SetAttribute(Constants.ATTR_ENRAGED, enraged)
+		end
+
 		local position = simulation:positionOf(enemy)
 		local facing = simulation:directionOf(enemy)
+		local target = CFrame.lookAt(position, position + facing)
 
 		table.insert(movingParts, part)
-		table.insert(targetFrames, CFrame.lookAt(position, position + facing))
+		table.insert(targetFrames, target)
+
+		-- The rig root gets a DIRECT write, not a bulk entry: a direct
+		-- CFrame write carries the whole jointed assembly - limbs, walk
+		-- animation and all - where BulkMoveTo moves only the parts it is
+		-- handed. Both halves measured live. One write per rigged enemy,
+		-- bounded by MAX_RIGGED.
+		local movingRig = self.rigRoots[part]
+
+		if movingRig ~= nil then
+			movingRig.root.CFrame = target * movingRig.offset
+		end
 	end
 
 	if #movingParts > 0 then

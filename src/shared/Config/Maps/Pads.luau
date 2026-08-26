@@ -26,6 +26,16 @@ Pads.THICKNESS = 4
 --- step the eye has to account for.
 Pads.GROUND_TOP = 1
 
+--- Top surface of the visible walkway: a hair above the apron so it cannot
+--- z-fight it. This is where anything WALKING should plant its feet.
+---
+--- One constant shared by the walkway that draws at this height and the rig
+--- fitting that stands enemies on it, because the two drifting apart is
+--- exactly how the zombies ended up buried to the waist: the sim's path
+--- plane is y = 0, the walkway surface is here, and feet aligned to the
+--- hitbox bottom sat 1.15 studs under the boards.
+Pads.WALKWAY_TOP = Pads.GROUND_TOP + 0.15
+
 --- Walkable height of an elevated plateau. Far enough above the ground that
 --- it is unmistakable at a glance, which matters because it is the only
 --- visual cue for where Hillside towers are legal.

@@ -36,6 +36,7 @@ local function definition(): Types.TowerDefinition
 	return {
 		id = "Fixture",
 		displayName = "Fixture",
+		rarity = "Common",
 		description = "",
 		category = "Hybrid" :: Types.TowerCategory,
 		targets = "Both" :: Types.TargetClass,

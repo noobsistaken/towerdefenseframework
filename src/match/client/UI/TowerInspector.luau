@@ -14,9 +14,11 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
+local Motion = require(script.Parent.Motion)
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
@@ -29,6 +31,13 @@ local useAtom = require(ReplicatedStorage.Shared.useAtom)
 local e = React.createElement
 
 local localPlayer = Players.LocalPlayer
+
+--- Whether this device can hover at all.
+---
+--- Read once: a session does not gain or lose a mouse. On a device without
+--- one there is nothing to hover, so gating the upgrade preview behind hover
+--- would make it permanently unreachable - it stays visible there instead.
+local HOVER_AVAILABLE = UserInputService.MouseEnabled
 
 type TowerInfo = {
 	towerId: number,
@@ -96,6 +105,10 @@ type InfoState = {
 
 local NO_OP: () -> () = function() end
 
+--- How far the panel rises into place when a tower is selected. Small on
+--- purpose: this is a confirmation the click landed, not an entrance.
+local PANEL_RISE = 14
+
 --- Tracks one tower's attributes, re-reading whenever any of them changes and
 --- clearing the selection if the tower is sold out from under the panel.
 local function useTowerInfo(towerId: number?): TowerInfo?
@@ -159,10 +172,14 @@ type ActionProps = {
 	textColor: Color3,
 	layoutOrder: number,
 	onActivated: () -> (),
+	--- Both present only on the button that reveals the preview panel. The
+	--- other buttons render exactly as before.
+	onHover: ((hovering: boolean) -> ())?,
+	glowRef: { current: UIStroke? }?,
 }
 
 local function ActionButton(props: ActionProps)
-	return e("TextButton", {
+	local attributes: { [any]: any } = {
 		Size = UDim2.new(1, 0, 0, 30),
 		BackgroundColor3 = props.color,
 		BorderSizePixel = 0,
@@ -172,9 +189,295 @@ local function ActionButton(props: ActionProps)
 		TextSize = 13,
 		LayoutOrder = props.layoutOrder,
 		[React.Event.Activated] = props.onActivated,
+	}
+
+	local children: { [string]: any } = {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+	}
+
+	local onHover = props.onHover
+
+	if onHover ~= nil then
+		attributes[React.Event.MouseEnter] = function()
+			onHover(true)
+		end
+
+		attributes[React.Event.MouseLeave] = function()
+			onHover(false)
+		end
+
+		-- AutoButtonColor is deliberately left at its default. The engine tint
+		-- is the only press feedback this button has, and it is the one button
+		-- here that spends money; the stroke is added to it, not swapped for it.
+		--
+		-- Off-white rather than the accent, because the button's own fill IS
+		-- the accent when the upgrade is affordable - an accent stroke would be
+		-- brightest on the state where the button cannot be pressed.
+		--
+		-- Every prop here is constant, so React writes them once at mount and
+		-- never again, leaving Transparency ours to animate. See Motion.luau.
+		children.glow = e("UIStroke", {
+			ref = props.glowRef,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = Theme.TEXT,
+			Thickness = 1.5,
+			Transparency = 1,
+		})
+	end
+
+	return e("TextButton", attributes, children)
+end
+
+--- Draws a flat disc showing the selected tower's range.
+---
+--- Lives here rather than in a module of its own because the lifetime it
+--- follows is exactly this panel's: the disc is visible when the panel is.
+--- Sized and tipped the way the placement preview does it - cylinders extrude
+--- along local X, so a disc has to be rolled onto its side to lie flat.
+---
+--- Sits just above whatever the tower is standing on, derived from the part
+--- rather than assumed, so a Hillside tower on a 12-stud plateau gets its ring
+--- on the plateau instead of buried under it.
+local function useRangeDisc(towerId: number?, range: number?)
+	React.useEffect(function(): () -> ()
+		if towerId == nil or range == nil or range <= 0 then
+			return NO_OP
+		end
+
+		local part = findTowerPart(towerId)
+
+		if part == nil then
+			return NO_OP
+		end
+
+		local disc = Instance.new("Part")
+		disc.Name = "TDSelectionRange"
+		disc.Shape = Enum.PartType.Cylinder
+		disc.Size = Vector3.new(0.2, range * 2, range * 2)
+		disc.Anchored = true
+		disc.CanCollide = false
+		disc.CanQuery = false
+		disc.CanTouch = false
+		disc.CastShadow = false
+		disc.Transparency = 0.88
+		disc.Material = Enum.Material.Neon
+		disc.Color = Theme.ACCENT
+
+		local base = part.Position.Y - part.Size.Y / 2 + 0.3
+		disc.CFrame = CFrame.new(part.Position.X, base, part.Position.Z) * CFrame.Angles(0, 0, math.rad(90))
+		disc.Parent = workspace
+
+		return function()
+			disc:Destroy()
+		end
+	end, { towerId or 0, range or 0 })
+end
+
+type StatProps = {
+	label: string,
+	value: string,
+	layoutOrder: number,
+}
+
+--- One stat cell. Three sit in a row: what the tower hits for, how far it
+--- reaches, how often it fires.
+local function Stat(props: StatProps)
+	return e("Frame", {
+		Size = UDim2.new(1 / 3, -4, 0, 34),
+		BackgroundColor3 = Theme.RAISED,
+		BorderSizePixel = 0,
+		LayoutOrder = props.layoutOrder,
 	}, {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+
+		label = e("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 12),
+			Position = UDim2.fromOffset(0, 4),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT_BODY,
+			Text = props.label,
+			TextColor3 = Theme.MUTED,
+			TextSize = 10,
+		}),
+
+		value = e("TextLabel", {
+			Size = UDim2.new(1, 0, 0, 16),
+			Position = UDim2.fromOffset(0, 15),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT,
+			Text = props.value,
+			TextColor3 = Theme.TEXT,
+			TextSize = 13,
+		}),
 	})
+end
+
+type DeltaProps = {
+	label: string,
+	from: string,
+	to: string,
+	layoutOrder: number,
+}
+
+--- One "this stat becomes that" row in the upgrade panel.
+local function DeltaRow(props: DeltaProps)
+	return e("Frame", {
+		Size = UDim2.new(1, 0, 0, 18),
+		BackgroundTransparency = 1,
+		LayoutOrder = props.layoutOrder,
+	}, {
+		label = e("TextLabel", {
+			Size = UDim2.fromScale(0.42, 1),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT_BODY,
+			Text = props.label,
+			TextColor3 = Theme.MUTED,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+
+		value = e("TextLabel", {
+			Position = UDim2.fromScale(0.42, 0),
+			Size = UDim2.fromScale(0.58, 1),
+			BackgroundTransparency = 1,
+			Font = Theme.FONT,
+			Text = `{props.from}  →  {props.to}`,
+			TextColor3 = Theme.POSITIVE,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Right,
+		}),
+	})
+end
+
+--- Shots per second to two places. Rounding to whole numbers would collapse
+--- 1.10 and 1.35 into the same figure and make an upgrade look like it did
+--- nothing.
+local function rateText(fireRate: number): string
+	return string.format("%.2f/s", fireRate)
+end
+
+--- Fades the upgrade preview in while the UPGRADE button is hovered.
+---
+--- FADE, not a height wipe. The panel keeps its full layout footprint whether
+--- shown or hidden, so the shell's height never changes and the UPGRADE button
+--- cannot move out from under the cursor. A wipe would shorten the shell,
+--- shift the button down, fire MouseLeave, hide the panel, move the button
+--- back under the cursor - a flicker loop, at whatever rate the tween runs.
+---
+--- GroupTransparency is declared as a CONSTANT 1 on the CanvasGroup, so React
+--- writes it once at mount and never again. That gives the correct hidden
+--- initial state without an imperative first paint, and leaves the property
+--- free to animate. See the rule in Motion.luau.
+--- Fades and lifts the whole inspector into place when a tower is selected.
+---
+--- Keyed on the tower, so clicking a DIFFERENT tower replays it - which is the
+--- point. Without that, selecting another tower silently swaps the contents of
+--- a panel already on screen and the click has no visible result at all.
+---
+--- GroupTransparency and Position are both declared as CONSTANTS on the shell,
+--- so React writes each once at mount and never again, leaving them free to
+--- animate. See the rule in Motion.luau.
+local function useSelectionEntrance(towerId: number?): { current: CanvasGroup? }
+	local shellRef = React.useRef(nil :: CanvasGroup?)
+	local tween = React.useRef(nil :: Motion.Handle)
+
+	React.useLayoutEffect(function(): () -> ()
+		local shell = shellRef.current
+
+		if shell == nil then
+			return NO_OP
+		end
+
+		Motion.stop(tween.current)
+
+		-- Snap to the start of the animation, then play it. Snapping first
+		-- matters on a re-selection, where the shell is still sitting at its
+		-- resting values from the previous tower.
+		shell.GroupTransparency = 1
+		shell.Position = UDim2.new(1, -16, 1, -16 + PANEL_RISE)
+
+		tween.current = Motion.retarget(nil, shell, Theme.MOTION_REVEAL, {
+			GroupTransparency = 0,
+			Position = UDim2.new(1, -16, 1, -16),
+		})
+
+		return function()
+			Motion.stop(tween.current)
+			tween.current = nil
+		end
+	end, { towerId or 0 })
+
+	return shellRef
+end
+
+local function useHoverReveal(
+	towerId: number?,
+	hasPreview: boolean
+): ({ current: CanvasGroup? }, { current: UIStroke? }, (boolean) -> ())
+	local previewRef = React.useRef(nil :: CanvasGroup?)
+	local glowRef = React.useRef(nil :: UIStroke?)
+	local previewTween = React.useRef(nil :: Motion.Handle)
+	local glowTween = React.useRef(nil :: Motion.Handle)
+
+	local setHovered = React.useCallback(function(hovering: boolean)
+		local preview = previewRef.current
+		local glow = glowRef.current
+
+		if preview ~= nil then
+			previewTween.current = Motion.retarget(
+				previewTween.current,
+				preview,
+				Theme.MOTION_REVEAL,
+				{ GroupTransparency = if hovering then 0 else 1 }
+			)
+		end
+
+		if glow ~= nil then
+			glowTween.current = Motion.retarget(
+				glowTween.current,
+				glow,
+				Theme.MOTION_QUICK,
+				{ Transparency = if hovering then 0.25 else 1 }
+			)
+		end
+	end, {})
+
+	-- Keyed on hasPreview as well as the tower, and that second key is not
+	-- decoration. Upgrading to max level unmounts BOTH animated instances
+	-- while towerId stays the same, so a tower-only key would never re-run and
+	-- would leave live tweens writing to destroyed instances.
+	--
+	-- Selecting a different tower is the other case: React reuses the same
+	-- button and CanvasGroup, so MouseLeave never fires and the panel would
+	-- stay visible on a tower the cursor is nowhere near.
+	React.useEffect(function(): () -> ()
+		local preview = previewRef.current
+		local glow = glowRef.current
+
+		Motion.stop(previewTween.current)
+		Motion.stop(glowTween.current)
+		previewTween.current = nil
+		glowTween.current = nil
+
+		if preview ~= nil then
+			preview.GroupTransparency = if HOVER_AVAILABLE then 1 else 0
+		end
+
+		if glow ~= nil then
+			glow.Transparency = 1
+		end
+
+		return function()
+			Motion.stop(previewTween.current)
+			Motion.stop(glowTween.current)
+			previewTween.current = nil
+			glowTween.current = nil
+		end
+		-- Numbers only: the dependency array is homogeneous, so the boolean
+		-- is carried as 1/0 rather than as itself.
+	end, { towerId or 0, if hasPreview then 1 else 0 })
+
+	return previewRef, glowRef, setHovered
 end
 
 local function TowerInspector()
@@ -182,19 +485,31 @@ local function TowerInspector()
 	local cash = useAtom(atoms.cash)
 	local info = useTowerInfo(selectedId)
 
-	if info == nil then
-		return nil
-	end
+	-- Resolved BEFORE the early return below. useRangeDisc is a hook, and a
+	-- hook that only runs on some renders desynchronises React's hook order.
+	local definition = if info ~= nil then Towers.find(info.defId) else nil
+	local level = if definition ~= nil and info ~= nil then Towers.levelAt(definition, info.level) else nil
 
-	local definition = Towers.find(info.defId)
+	useRangeDisc(if info ~= nil then info.towerId else nil, if level ~= nil then level.range else nil)
 
-	if definition == nil then
+	-- Whether a preview will render at all, computed here because the hook
+	-- below has to be called before any early return.
+	local hasPreview = info ~= nil
+		and definition ~= nil
+		and info.ownerUserId == localPlayer.UserId
+		and Towers.levelAt(definition, info.level + 1) ~= nil
+
+	local previewRef, glowRef, setHovered = useHoverReveal(if info ~= nil then info.towerId else nil, hasPreview)
+	local shellRef = useSelectionEntrance(if info ~= nil then info.towerId else nil)
+
+	if info == nil or definition == nil or level == nil then
 		return nil
 	end
 
 	local isOwner = info.ownerUserId == localPlayer.UserId
 	local upgradeCost = Economy.upgradeCost(definition, info.level)
 	local maxLevel = #definition.levels
+	local nextLevel = Towers.levelAt(definition, info.level + 1)
 
 	local children: { [string]: any } = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
@@ -231,6 +546,23 @@ local function TowerInspector()
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = 2,
 		}),
+
+		-- Damage, reach and rate. Shown for every tower, owned or not: they
+		-- describe the tower, and reading someone else's is not an action.
+		stats = e("Frame", {
+			Size = UDim2.new(1, 0, 0, 34),
+			BackgroundTransparency = 1,
+			LayoutOrder = 3,
+		}, {
+			layout = e("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 6),
+			}),
+			damage = e(Stat, { label = "DAMAGE", value = tostring(level.damage), layoutOrder = 1 }),
+			range = e(Stat, { label = "RANGE", value = tostring(level.range), layoutOrder = 2 }),
+			speed = e(Stat, { label = "SPEED", value = rateText(level.fireRate), layoutOrder = 3 }),
+		}),
 	}
 
 	if not isOwner then
@@ -242,15 +574,17 @@ local function TowerInspector()
 			TextColor3 = Theme.MUTED,
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			LayoutOrder = 3,
+			LayoutOrder = 4,
 		})
 	else
 		if upgradeCost ~= nil then
 			children.upgrade = e(ActionButton, {
-				text = `UPGRADE  ${upgradeCost}`,
+				text = `UPGRADE  $${upgradeCost}`,
 				color = if cash >= upgradeCost then Theme.ACCENT else Theme.DISABLED,
 				textColor = if cash >= upgradeCost then Theme.INVERSE else Theme.MUTED,
 				layoutOrder = 4,
+				onHover = if HOVER_AVAILABLE then setHovered else nil,
+				glowRef = if HOVER_AVAILABLE then glowRef else nil,
 				onActivated = function()
 					-- Fired regardless of the local affordability read. The
 					-- server is the authority; this button being dark is a
@@ -285,7 +619,7 @@ local function TowerInspector()
 		})
 
 		children.sell = e(ActionButton, {
-			text = `SELL  +${info.sellValue}`,
+			text = `SELL  +$${info.sellValue}`,
 			color = Theme.RAISED,
 			textColor = Theme.CASH,
 			layoutOrder = 6,
@@ -295,14 +629,116 @@ local function TowerInspector()
 		})
 	end
 
-	return e("Frame", {
+	-- Second panel: what the money actually buys. Owner only, and only when
+	-- there IS a next level - at max there is nothing to preview.
+	local upgradePanel = nil
+
+	if isOwner and nextLevel ~= nil then
+		local rows: { [string]: any } = {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+			padding = e("UIPadding", {
+				PaddingTop = UDim.new(0, 10),
+				PaddingBottom = UDim.new(0, 10),
+				PaddingLeft = UDim.new(0, 12),
+				PaddingRight = UDim.new(0, 12),
+			}),
+			layout = e("UIListLayout", {
+				FillDirection = Enum.FillDirection.Vertical,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 4),
+			}),
+
+			header = e("TextLabel", {
+				Size = UDim2.new(1, 0, 0, 16),
+				BackgroundTransparency = 1,
+				Font = Theme.FONT,
+				Text = `NEXT  ·  LEVEL {info.level + 1}`,
+				TextColor3 = Theme.ACCENT,
+				TextSize = 12,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				LayoutOrder = 1,
+			}),
+
+			damage = e(DeltaRow, {
+				label = "Damage",
+				from = tostring(level.damage),
+				to = tostring(nextLevel.damage),
+				layoutOrder = 2,
+			}),
+			range = e(DeltaRow, {
+				label = "Range",
+				from = tostring(level.range),
+				to = tostring(nextLevel.range),
+				layoutOrder = 3,
+			}),
+			speed = e(DeltaRow, {
+				label = "Speed",
+				from = rateText(level.fireRate),
+				to = rateText(nextLevel.fireRate),
+				layoutOrder = 4,
+			}),
+		}
+
+		-- Splash only when it actually moves. For Mortar and Flak it is the
+		-- headline of the upgrade; everywhere else it is a constant zero and a
+		-- row reading "0 to 0" is noise.
+		if nextLevel.splashRadius ~= level.splashRadius then
+			rows.splash = e(DeltaRow, {
+				label = "Splash",
+				from = tostring(level.splashRadius),
+				to = tostring(nextLevel.splashRadius),
+				layoutOrder = 5,
+			})
+		end
+
+		-- A CanvasGroup rather than a Frame purely for GroupTransparency: it
+		-- fades the panel and everything in it as one surface, where fading a
+		-- Frame would leave every label inside it at full opacity.
+		--
+		-- Same size, same children, same layout slot as the Frame it replaces,
+		-- so the reveal costs no reflow.
+		upgradePanel = e("CanvasGroup", {
+			ref = previewRef,
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+			BorderSizePixel = 0,
+			GroupTransparency = if HOVER_AVAILABLE then 1 else 0,
+			LayoutOrder = 1,
+		}, rows)
+	end
+
+	-- Transparent shell so the two panels stack with a real gap rather than
+	-- reading as one box with a line through it. AutomaticSize means neither
+	-- carries a hand-counted pixel height that goes stale when a row is added.
+	return e("CanvasGroup", {
+		ref = shellRef,
 		AnchorPoint = Vector2.new(1, 1),
 		Position = UDim2.new(1, -16, 1, -16),
-		Size = UDim2.fromOffset(220, 190),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		Size = UDim2.fromOffset(240, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-	}, children)
+		GroupTransparency = 1,
+	}, {
+		layout = e("UIListLayout", {
+			FillDirection = Enum.FillDirection.Vertical,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 8),
+		}),
+
+		upgradePanel = upgradePanel,
+
+		mainPanel = e("Frame", {
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+			BorderSizePixel = 0,
+			LayoutOrder = 2,
+		}, children),
+	})
 end
 
 return TowerInspector

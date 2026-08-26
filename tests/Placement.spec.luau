@@ -33,6 +33,7 @@ local function towerDef(
 	return {
 		id = id,
 		displayName = id,
+		rarity = "Common",
 		description = "",
 		category = category,
 		targets = "Both" :: Types.TargetClass,

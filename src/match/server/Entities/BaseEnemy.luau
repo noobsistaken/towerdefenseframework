@@ -38,6 +38,14 @@ export type EnemyBehavior = {
 	--- so keep it cheap - this is where an accelerating or stuttering enemy
 	--- would be implemented.
 	speedMultiplier: ((enemy: Enemy) -> number)?,
+	--- Whether the enemy is currently in a heightened state the player is
+	--- meant to be able to SEE. Published as an attribute by EnemyView, so a
+	--- behaviour that returns true here gets a visual tell for free.
+	---
+	--- Separate from speedMultiplier on purpose: Runner also returns more
+	--- than 1 for most of its life, so "moving faster than baseline" does not
+	--- mean "enraged" and cannot be used to infer it.
+	enraged: ((enemy: Enemy) -> boolean)?,
 }
 
 export type Enemy = typeof(setmetatable(

@@ -68,15 +68,21 @@ centre above the path line — it is what makes Drifter read as flying.
 | **Runner** | Ground | 1.6 × 3.4 × 1.6 | 1.7 | accelerates toward the base — wants a run cycle |
 | **Tank** | Ground | 3.4 × 4.6 × 3.4 | 2.3 | slow, heavy |
 | **Drifter** | **Air** | 2.6 × 2.6 × 2.6 | **14** | must read as airborne from directly above |
-| **Titan** | Ground (boss) | 7 × 11 × 7 | 5.5 | enrages below 35% health — wants a visible tell |
+| **Titan** | Ground (boss) | 7 × 11 × 7 | 5.5 | enrages below 35% health — pulsing Highlight marks it |
 
 **Hard constraint:** enemies are moved with `WorldRoot:BulkMoveTo` in one call
 per frame. A replacement must be a **single anchored part or a model with one
 anchored PrimaryPart**. A rigged, animated model with loose parts will not move
 — it must be welded to the primary part.
 
-**Titan's enrage** currently has no visual at all. It is the boss's whole
-mechanic and deserves one.
+**Titan's enrage** is marked by a pulsing `Highlight` on the enemy part, driven
+by an `Enraged` attribute the server publishes from the behaviour's own
+predicate — so the speed bonus and the glow cannot disagree. A `Highlight`
+rather than a colour change because `Color` belongs to the status tint, and a
+Titan that is both bleeding and enraged has to show both.
+
+Any behaviour returning `true` from the optional `enraged` hook on
+`BaseEnemy.EnemyBehavior` gets the same tell with no extra code.
 
 ---
 
@@ -85,6 +91,27 @@ mechanic and deserves one.
 All geometry is built at runtime from config by
 [`MapBuilder.luau`](../src/match/server/Match/MapBuilder.luau). Maps are Luau
 modules, not `.rbxmx` files, so they stay diffable.
+
+**You can still author them in Studio.** The loop is build -> drag -> extract:
+
+1. Build the map into the Edit session:
+   `MapBuilder.build(MapRegistry.get("Crossroads"))`. It emits a `Lanes` folder
+   of draggable waypoint markers alongside the geometry - visible in Studio,
+   invisible in a live server.
+2. Move things. Drag waypoints, resize the ground, add decor, add buildable
+   pads (tag them `TDBuildable` and give them a `SurfaceType` attribute).
+3. Extract: `MapExtract.fromFolder(workspace.TDMap, id, displayName)` returns
+   the config plus a list of problems, and `MapExtract.toSource(config)`
+   renders the module to drop into `Config/Maps/`.
+
+The runtime still consumes plain data, which is why the placement and pathing
+specs keep working. Extraction reports rather than guesses: an untagged pad, a
+waypoint with no order, or a missing ground part comes back as a named problem
+instead of a silently wrong map.
+
+Re-extraction overwrites the module, so a generated map loses hand-written
+comments. Crossroads, Switchback and Fork stay hand-authored for that reason -
+their comments carry design intent worth keeping.
 
 | Map | Lanes | Lane lengths | Plateaus | Ground plane | Decor |
 |---|---|---|---|---|---|
@@ -146,9 +173,33 @@ plays. No code change.
 sixty can be on the field, so a fire cue with a long tail or no pitch variance
 turns into noise. `pitchVariance` exists for exactly this.
 
-**Two keys are defined but not yet fired:** `BossDeath` and `Splash` — the
-client plays `EnemyDeath` for every kill and does not distinguish splash hits.
-Wiring them is a client-side change, not an asset one.
+**Four keys still have no call site:** `PlacementRejected`, `ButtonClick`,
+`VoteCast` and `MatchLaunching`. Filling their asset ids changes nothing until
+something fires them. (An earlier revision of this file claimed only one key
+was unfired. It was wrong — these four were already dead then.)
+
+`VoteCast` and `MatchLaunching` are the awkward pair: they are lobby cues, but
+`SoundController` lives under `src/match/client/` and nothing anywhere in
+`src/lobby/` mentions sound. They are **unfireable**, not merely unfired —
+wiring them means giving the lobby an audio path first.
+
+`BossDeath` is fired by `EnemyVisuals.luau` in place of `EnemyDeath` when the
+dying enemy's definition has `isBoss = true`, and falls back to `EnemyDeath`
+while it has no audio behind it — so recording `EnemyDeath` alone cannot make
+the Titan the one enemy that dies silently. Derived from the part's name
+rather than sent, so like `Splash` it costs no network message.
+
+**Neither death cue fires for a kill by a damage-over-time tick.** Both are
+inferred client-side from the enemy's last replicated health, and
+`EnemySimulation.step` calls `collectDead` at the end of the same step a bleed
+tick kills in — the part is released, its attributes wiped, before any
+`view:sync()` writes `Health = 0`. A bullet kill escapes this only because
+`towers:update` runs between `simulation:update` and `view:sync()`. Read out of
+the call order in `EnemySimulation.luau` and `MatchController.luau`, not
+observed in Studio. Pre-existing; the fix is server-side ordering.
+
+`Splash` is fired by `Tracers.luau`, derived from the firing tower's level
+rather than sent, so it costs no network message.
 
 **No music slot exists.** `PlayerData.Settings.MusicEnabled` is persisted and
 unused. Music is a deliberate gap, not an oversight — it needs a track list and
@@ -187,12 +238,20 @@ player-facing copy in the codebase, and where localisation would start.
 | Shot tracer | thin cylinder, 0.09s fade | [`Tracers.luau`](../src/match/client/Effects/Tracers.luau) — beam, projectile, or muzzle flash |
 | Damage number | white text rising 6 studs over 0.8s | [`EnemyVisuals.luau`](../src/match/client/Effects/EnemyVisuals.luau) |
 | Health bar | 4 × 0.5 stud billboard, culled past 260 studs | same file |
-| Splash | **none** | no visual at all for Mortar or Flak area damage |
-| Status effect | **none** | Bleed and Slow are invisible on the enemy |
+| Splash | neon sphere expanding to the real `splashRadius`, 0.18s fade | [`Tracers.luau`](../src/match/client/Effects/Tracers.luau) — particles or a shockwave |
+| Status effect | enemy tinted to the effect's `color` | [`EnemyVisuals.luau`](../src/match/client/Effects/EnemyVisuals.luau) — particles, or an icon on the bar |
 
-The last two are gaps, not placeholders. `StatusEffectDefinition` already
-carries a `color` field that nothing renders — tinting an affected enemy is the
-cheapest possible fix and the config is already there.
+Both were gaps rather than placeholders until recently. Both are now filled at
+the cheapest level that reads correctly in play, and neither needed a network
+message:
+
+- The splash sphere is sized off `splashRadius`, read from the firing tower's
+  `TowerDefId` and `Level` attributes, so the player sees the area that was
+  actually damaged. A sphere and not a ground ring because the server's test
+  is a true 3D distance.
+- The status tint reads a `StatusEffects` attribute carrying the live effect
+  ids, and resolves the colour from shared config — so a new effect tints with
+  no code change on either realm.
 
 ---
 
@@ -212,9 +271,10 @@ Five functions create every Part in the game. Nothing else needs to change.
 
 1. Enemy models need **one anchored PrimaryPart**, everything else welded —
    `BulkMoveTo` moves one part per enemy.
-2. Enemy parts must keep the `Health`, `MaxHealth` and `EnemyId` **attributes**.
-   Health bars and damage numbers read them, and no network message carries
-   that data (ARCHITECTURE.md D5).
+2. Enemy parts must keep the `Health`, `MaxHealth`, `EnemyId`,
+   `StatusEffects` and `Enraged` **attributes**. Health bars, damage numbers,
+   the status tint and the enrage tell all read them, and no network message
+   carries any of it (ARCHITECTURE.md D5).
 3. Tower parts must keep `TowerId`, `TowerDefId`, `Level`, `OwnerUserId`,
    `TargetingMode`, `Range`, `SellValue`. The inspector and the fire-sound
    lookup read them off the part.

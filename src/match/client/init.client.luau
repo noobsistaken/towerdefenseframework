@@ -15,6 +15,17 @@
 	anything the server has not already decided.
 ]]
 
+local RunService = game:GetService("RunService")
+
+local Places = require(game:GetService("ReplicatedStorage").Shared.Config.Places)
+
+-- The same gate the lobby entries carry, for the same reason: the dev window
+-- syncs the full test superset, so BOTH entries exist in one tree and only
+-- the role - or in production, the place id - may decide which one runs.
+if not Places.shouldBoot("Match", RunService:IsStudio(), game.PlaceId) then
+	return
+end
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -24,6 +35,7 @@ local React = require(ReplicatedStorage.Packages.React)
 local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
+local Bursts = require(script.Effects.Bursts)
 local EnemyVisuals = require(script.Effects.EnemyVisuals)
 local Hud = require(script.UI.Hud)
 local PlacementController = require(script.Placement.PlacementController)
@@ -167,6 +179,7 @@ janitor:Add(PlacementController.stop, true)
 -- Health bars and damage numbers. Driven entirely by the Health attribute on
 -- each enemy part, so this needs no network messages of its own (D5).
 janitor:Add(EnemyVisuals.start(), true)
+janitor:Add(Bursts.start(), true)
 
 -- ---------------------------------------------------------------------------
 -- UI

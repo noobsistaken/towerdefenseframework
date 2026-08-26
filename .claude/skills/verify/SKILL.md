@@ -86,7 +86,18 @@ game works.
 
 ```bash
 rojo build test.project.json --output build/test.rbxl
-# open build/test.rbxl in Studio -> Run -> read Output
+```
+
+Then run Jest from a **plugin context** - the Studio MCP server, or the command
+bar. Pressing Play fails every suite with `cannot read 'Source'`, because a
+playtest thread lacks the `PluginOrOpenCloud` capability that jest-runtime
+needs to load a module:
+
+```lua
+local Jest = require(game.ReplicatedStorage.DevPackages.Jest)
+local root = game.ServerScriptService.Tests
+local status, result = Jest.runCLI(root, { ci = false }, { root }):awaitStatus()
+print(status, result.results.numPassedTests, "passed", result.results.numFailedTests, "failed")
 ```
 
 Jest-Lua needs a Roblox VM, so it does not run on a GitHub-hosted runner and
