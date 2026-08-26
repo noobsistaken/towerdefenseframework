@@ -23,11 +23,12 @@ local it = JestGlobals.it
 
 local function freshData(coins: number, tokens: number): Types.PlayerData
 	return {
-		Version = 3,
+		Version = 4,
 		Coins = coins,
 		XP = 0,
 		Level = 1,
 		UnlockedTowers = { "Rifleman", "Ranger" },
+		Loadout = { "Rifleman", "Ranger" },
 		Traits = {},
 		RerollTokens = tokens,
 		Stats = { MatchesPlayed = 0, MatchesWon = 0, HighestWave = 0, EnemiesKilled = 0 },

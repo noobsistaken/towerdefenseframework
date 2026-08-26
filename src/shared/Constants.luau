@@ -60,18 +60,9 @@ Constants.BUILDABLE_TAG = "TDBuildable"
 -- Lobby
 -- ===========================================================================
 
---- Players needed before the launch countdown starts. One, deliberately: a
---- tower defense has to be soloable, and a minimum above one means an empty
---- server is a dead end rather than a single-player game.
-Constants.LOBBY_MIN_PLAYERS = 1
-
---- Countdown from the moment the minimum is met.
-Constants.LOBBY_COUNTDOWN_SECONDS = 30
-
---- What the countdown collapses to once everyone has readied up. Not zero:
---- a moment to see the winning map, and room to un-ready if someone readied
---- by accident.
-Constants.LOBBY_READY_SECONDS = 5
+-- No countdown constants, deliberately: the hub launches nothing on a
+-- timer. A match starts when someone in the GAME area presses START, and
+-- everyone standing there goes along - see LobbyController.
 
 --- How long the lobby sits in Launching before returning to Gathering when
 --- the teleport was only simulated, as it always is in Studio. Without this

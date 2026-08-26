@@ -2,10 +2,12 @@
 --[[
 	Lobby client state.
 
-	Charm atoms are the single source of truth on the client; React reads them
-	and stores no second copy. Everything above the divider is a REPLICA of
-	server state and is written only by the net handlers in init.client.luau.
-	Everything below it describes this player's local intent and never leaves
+	Charm atoms are the single source of truth on the client; React reads
+	them and stores no second copy. Everything above the divider is a
+	REPLICA of server state, written by the net handlers in
+	init.client.luau - plus the gacha panels, which patch the profile atoms
+	with balances the server just RETURNED from a funct call. Everything
+	below the divider describes this player's local intent and never leaves
 	the client except as a request.
 ]]
 
@@ -22,16 +24,14 @@ export type Tally = {
 local atoms = {}
 
 -- ---------------------------------------------------------------------------
--- Replicas. Written only by the net handlers.
+-- Replicas.
 -- ---------------------------------------------------------------------------
 
 --- Annotated at the call site so the atom accepts any LobbyState rather than
 --- narrowing to the literal it was initialised with.
 atoms.lobbyState = Charm.atom("Gathering" :: Types.LobbyState)
 
-atoms.secondsRemaining = Charm.atom(0)
 atoms.playerCount = Charm.atom(0)
-atoms.readyCount = Charm.atom(0)
 
 atoms.mapTallies = Charm.atom({} :: { Tally })
 atoms.difficultyTallies = Charm.atom({} :: { Tally })
@@ -46,30 +46,35 @@ atoms.winningDifficultyId = Charm.atom("")
 --- the display never has to derive money locally).
 atoms.coins = Charm.atom(0)
 atoms.rerollTokens = Charm.atom(0)
+atoms.level = Charm.atom(1)
+atoms.xp = Charm.atom(0)
 atoms.unlockedTowers = Charm.atom({} :: { string })
+--- The deck: at most Loadouts.MAX ids, always a subset of unlockedTowers.
+atoms.loadout = Charm.atom({} :: { string })
 --- towerId -> traitId. Flat pairs on the wire, a map here.
 atoms.traits = Charm.atom({} :: { [string]: string })
---- False until the first GetLobbyProfile answer, so the UI can tell "no
---- coins" from "not loaded yet" instead of flashing a zero balance.
+--- False until the first REAL GetLobbyProfile answer (loaded=true), so the
+--- UI can tell "no coins" from "not loaded yet".
 atoms.profileLoaded = Charm.atom(false)
 
 -- ---------------------------------------------------------------------------
 -- Local intent. Never authoritative.
---
--- These exist so a button can highlight the instant it is pressed rather than
--- waiting for the round trip. The server's tally is what actually counts, and
--- it overwrites the display above regardless of what is stored here.
 -- ---------------------------------------------------------------------------
 
-atoms.isReady = Charm.atom(false)
+--- This player's own picks in the game-area chooser, so the buttons can
+--- highlight instantly. The server's tally is what actually counts.
 atoms.myMapVote = Charm.atom(nil :: string?)
 atoms.myDifficultyVote = Charm.atom(nil :: string?)
 
 --- Why matchmaking failed, if it did. Cleared on the next state change.
 atoms.failureReason = Charm.atom(nil :: string?)
 
---- Which service station the local character stands in, from the shared
+--- Which walk-in area the local character stands in, from the shared
 --- layout. Drives which panel is open; walking away closes it.
-atoms.activeStation = Charm.atom(nil :: string?)
+atoms.activeArea = Charm.atom(nil :: string?)
+
+--- Whether the loadout editor is open. UI-only, but shared between the HUD
+--- button that opens it and the panel that closes itself.
+atoms.loadoutOpen = Charm.atom(false)
 
 return atoms

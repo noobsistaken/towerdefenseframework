@@ -86,6 +86,11 @@ export type SettingsResolver = (player: Player) -> boolean
 --- rather than mutating towers already standing.
 export type TraitsResolver = (player: Player, towerDefId: string) -> { string }
 
+--- The towers this player BROUGHT - at most Loadouts.MAX of what they own.
+--- The shop renders this and placement enforces it; owning a tower that
+--- stayed home places nothing.
+export type LoadoutResolver = (player: Player) -> { string }
+
 export type Controller = typeof(setmetatable(
 	{} :: {
 		state: Types.MatchState,
@@ -104,6 +109,7 @@ export type Controller = typeof(setmetatable(
 		awardRewards: RewardAwarder,
 		sfxEnabledFor: SettingsResolver,
 		traitsOf: TraitsResolver,
+		loadoutOf: LoadoutResolver,
 		--- Highest wave already paid for. Settlement is INCREMENTAL - every
 		--- intermission pays the waves cleared since the last one - and this
 		--- ledger is what makes each wave payable exactly once across that.
@@ -321,7 +327,8 @@ function MatchController.new(
 	isUnlocked: UnlockedResolver,
 	awardRewards: RewardAwarder,
 	sfxEnabledFor: SettingsResolver,
-	traitsOf: TraitsResolver
+	traitsOf: TraitsResolver,
+	loadoutOf: LoadoutResolver
 ): Controller
 	local mapConfig, difficulty = resolveMatchConfig()
 	local map = MapBuilder.build(mapConfig)
@@ -344,6 +351,7 @@ function MatchController.new(
 		awardRewards = awardRewards,
 		sfxEnabledFor = sfxEnabledFor,
 		traitsOf = traitsOf,
+		loadoutOf = loadoutOf,
 		paidThroughWave = 0,
 		paidCoins = 0,
 		paidXp = 0,
@@ -409,6 +417,7 @@ function MatchController.snapshot(self: Controller, player: Player): Types.Match
 		endless = self.campaignCleared,
 		sfxEnabled = self.sfxEnabledFor(player),
 		unlockedTowers = self.isUnlocked(player),
+		loadout = self.loadoutOf(player),
 	}
 end
 
@@ -461,6 +470,7 @@ function MatchController.placeTower(
 		map = self.map.config,
 		existing = existingTowers(self),
 		unlocked = table.find(self.isUnlocked(player), towerDefId) ~= nil,
+		inLoadout = table.find(self.loadoutOf(player), towerDefId) ~= nil,
 		cash = self.economy:balance(player),
 		ownedOfType = self.towers:countFor(player, towerDefId),
 		canBuildNow = self:canBuildNow(),

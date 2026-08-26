@@ -2,13 +2,14 @@
 --[[
 	Tower shop, along the bottom of the screen.
 
-	One button per tower in the roster, in the stable sorted order from
-	Config/Towers.luau, so the shop never reorders itself between servers or
-	between sessions - muscle memory is worth more than any clever sorting.
+	One button per tower in the LOADOUT - the deck this player brought, at
+	most six - in the deck's own order. The collection stays in the lobby:
+	twenty-six buttons was a shop nobody could read, and the loadout is
+	where the choosing already happened.
 
-	A button the player cannot use is greyed rather than removed. Removing it
-	would reflow the whole bar every time cash crosses a price, which makes
-	the row jump under the cursor mid-click.
+	A button the player cannot afford is greyed rather than removed. Removing
+	it would reflow the whole bar every time cash crosses a price, which
+	makes the row jump under the cursor mid-click.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -125,7 +126,7 @@ end
 
 local function ShopBar()
 	local cash = useAtom(atoms.cash)
-	local unlocked = useAtom(atoms.unlockedTowers)
+	local loadout = useAtom(atoms.loadout)
 	local selected = useAtom(atoms.selectedTowerDefId)
 	local state = useAtom(atoms.matchState)
 
@@ -144,20 +145,26 @@ local function ShopBar()
 		}),
 	}
 
-	for index, id in Towers.IDS do
-		children[id] = e(TowerButton, {
-			definition = Towers.get(id),
-			cash = cash,
-			unlocked = table.find(unlocked, id) ~= nil,
-			selected = selected == id,
-			layoutOrder = index,
-		})
+	for index, id in loadout do
+		local definition = Towers.find(id)
+
+		-- A deck id the registry no longer knows renders nothing rather than
+		-- erroring the whole bar; the server's resolver filters these too.
+		if definition ~= nil then
+			children[id] = e(TowerButton, {
+				definition = definition,
+				cash = cash,
+				unlocked = true,
+				selected = selected == id,
+				layoutOrder = index,
+			})
+		end
 	end
 
 	return e("Frame", {
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -16),
-		Size = UDim2.fromOffset(#Towers.IDS * (BUTTON_WIDTH + 8) + 16, BUTTON_HEIGHT + 16),
+		Size = UDim2.fromOffset(math.max(#loadout, 1) * (BUTTON_WIDTH + 8) + 16, BUTTON_HEIGHT + 16),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		BorderSizePixel = 0,

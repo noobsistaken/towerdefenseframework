@@ -167,6 +167,7 @@ task.spawn(function()
 	atoms.baseHealthMax(snapshot.baseHealthMax)
 	atoms.cash(snapshot.cash)
 	atoms.unlockedTowers(snapshot.unlockedTowers)
+	atoms.loadout(snapshot.loadout)
 	SoundController.setEnabled(snapshot.sfxEnabled)
 end)
 

@@ -43,6 +43,10 @@ export type Request = {
 	existing: { ExistingTower },
 	--- Whether this player has unlocked the tower.
 	unlocked: boolean,
+	--- Whether the tower is in this player's LOADOUT - owning it is not
+	--- bringing it. The server resolves this; the client mirrors it for the
+	--- ghost, whose shop only offers the loadout anyway.
+	inLoadout: boolean,
 	cash: number,
 	--- How many of this definition the player already owns, for the cap.
 	ownedOfType: number,
@@ -111,6 +115,10 @@ function Placement.validate(request: Request): Result
 
 	if not request.unlocked then
 		return reject("NotUnlocked")
+	end
+
+	if not request.inLoadout then
+		return reject("NotInLoadout")
 	end
 
 	local cost = definition.levels[1].cost

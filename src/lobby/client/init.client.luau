@@ -44,9 +44,7 @@ local janitor = Janitor.new()
 janitor:Add(
 	Net.LobbyStateChanged.On(function(value)
 		atoms.lobbyState(value.state)
-		atoms.secondsRemaining(value.secondsRemaining)
 		atoms.playerCount(value.playerCount)
-		atoms.readyCount(value.readyCount)
 
 		-- A fresh state change means the lobby recovered, so a stale failure
 		-- message would be actively misleading.
@@ -70,10 +68,6 @@ janitor:Add(
 janitor:Add(
 	Net.MatchmakingFailed.On(function(value)
 		atoms.failureReason(value.reason)
-
-		-- The lobby is going back to Gathering, so this player is no longer
-		-- ready. Leaving the button lit would misrepresent the server.
-		atoms.isReady(false)
 	end),
 	true
 )
@@ -90,7 +84,10 @@ task.spawn(function()
 		if profile.loaded then
 			atoms.coins(profile.coins)
 			atoms.rerollTokens(profile.rerollTokens)
+			atoms.level(profile.level)
+			atoms.xp(profile.xp)
 			atoms.unlockedTowers(profile.unlockedTowers)
+			atoms.loadout(profile.loadout)
 
 			local map: { [string]: string } = {}
 
@@ -111,12 +108,12 @@ task.spawn(function()
 end)
 
 -- ---------------------------------------------------------------------------
--- Stations
+-- Areas
 --
--- The client tracks which service pad its OWN character stands on, from the
--- same shared layout the server built the pads from. Purely presentational:
--- the panel it opens sends requests the server re-validates, so lying about
--- position here earns nothing.
+-- The client tracks which walk-in area its OWN character stands in, from
+-- the same shared layout the server built the pads from. Purely
+-- presentational: the panels it opens send requests the server
+-- re-validates against positions IT owns, so lying here earns nothing.
 -- ---------------------------------------------------------------------------
 
 local SCAN_INTERVAL = 0.15
@@ -134,10 +131,17 @@ janitor:Add(
 
 		local character = localPlayer.Character
 		local root = if character ~= nil then character.PrimaryPart else nil
-		local station = if root ~= nil then LobbyZones.resolveStation(root.Position) else nil
+		local area = if root ~= nil then LobbyZones.resolveArea(root.Position) else nil
 
-		if station ~= atoms.activeStation() then
-			atoms.activeStation(station)
+		if area ~= atoms.activeArea() then
+			atoms.activeArea(area)
+
+			-- Walking out of the game area withdraws your votes server-side;
+			-- the local highlights must not outlive them.
+			if area ~= "Game" then
+				atoms.myMapVote(nil)
+				atoms.myDifficultyVote(nil)
+			end
 		end
 	end),
 	"Disconnect"

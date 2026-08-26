@@ -29,6 +29,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
+local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ServerScriptService.Net)
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
@@ -145,7 +146,20 @@ local function traitsOf(player: Player, towerDefId: string): { string }
 	return table.clone(rolled)
 end
 
-local match = MatchController.new(unlockedTowersOf, awardRewards, sfxEnabledFor, traitsOf)
+--- The deck this player brought. Loadouts.resolve degrades rather than
+--- validates - persisted decks outlive rosters - and the empty answer for a
+--- missing profile matches unlockedTowersOf's contract.
+local function loadoutOf(player: Player): { string }
+	local profile = profiles[player]
+
+	if profile == nil then
+		return {}
+	end
+
+	return Loadouts.resolve(profile.Data)
+end
+
+local match = MatchController.new(unlockedTowersOf, awardRewards, sfxEnabledFor, traitsOf, loadoutOf)
 match:start()
 
 -- ---------------------------------------------------------------------------

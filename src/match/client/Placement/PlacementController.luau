@@ -270,6 +270,7 @@ local function updateGhost()
 		map = map,
 		existing = existingTowers(),
 		unlocked = table.find(atoms.unlockedTowers(), defId) ~= nil,
+		inLoadout = table.find(atoms.loadout(), defId) ~= nil,
 		cash = atoms.cash(),
 		-- Not tracked client-side. The server owns the cap; showing the ghost
 		-- as valid and letting the request be refused is better than keeping

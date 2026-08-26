@@ -51,6 +51,7 @@ Theme.MOTION_REVEAL = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDire
 Theme.REJECTION_TEXT = {
 	UnknownTower = "Unknown tower",
 	NotUnlocked = "You have not unlocked that tower",
+	NotInLoadout = "That tower is not in your loadout",
 	CannotAfford = "Not enough cash",
 	OutOfBounds = "Outside the map",
 	NotBuildable = "You cannot build there",

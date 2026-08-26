@@ -19,7 +19,7 @@ local Types = require(script.Parent.Types)
 
 local DataSchema = {}
 
-DataSchema.CURRENT_VERSION = 3
+DataSchema.CURRENT_VERSION = 4
 
 --- Towers every account owns from the start. Currently ALL of them, by
 --- request - the Coins sink this leaves behind is a design decision waiting
@@ -32,6 +32,8 @@ DataSchema.TEMPLATE = {
 	XP = 0,
 	Level = 1,
 	UnlockedTowers = STARTING_TOWERS,
+	-- The whole starting roster happens to be exactly one loadout's worth.
+	Loadout = STARTING_TOWERS,
 	Traits = {},
 	RerollTokens = 0,
 	Stats = {
@@ -73,6 +75,20 @@ local MIGRATIONS: { [number]: (Types.PlayerData) -> () } = {
 		data.Traits = {}
 		data.RerollTokens = 0
 		data.Version = 3
+	end,
+
+	-- v3 -> v4: the loadout. A v3 account owned everything it could place,
+	-- so its first deck is simply the first six things it owns - stable
+	-- order, no judgement call baked into a migration.
+	[3] = function(data)
+		local loadout: { string } = {}
+
+		for index = 1, math.min(6, #data.UnlockedTowers) do
+			loadout[index] = data.UnlockedTowers[index]
+		end
+
+		data.Loadout = loadout
+		data.Version = 4
 	end,
 }
 

@@ -97,6 +97,7 @@ local function request(
 		map = MAP,
 		existing = {},
 		unlocked = true,
+		inLoadout = true,
 		cash = COST * 10,
 		ownedOfType = 0,
 		canBuildNow = true,
@@ -220,6 +221,15 @@ end)
 describe("Placement: permission rules", function()
 	-- Zap proves the SHAPE of a request. It cannot prove permission, so every
 	-- one of these is checked by hand on the server and must hold here.
+	it("refuses an owned tower that was not brought", function()
+		-- Owning is not bringing: the loadout is the deck, and the server
+		-- refuses what stayed home even though the account owns it.
+		local result = Placement.validate(request(GROUND_TOWER, ON_APRON, { inLoadout = false }))
+
+		expect(result.ok).toBe(false)
+		expect(result.reason).toBe("NotInLoadout")
+	end)
+
 	it("refuses a tower the player has not unlocked", function()
 		local result = Placement.validate(request(GROUND_TOWER, ON_APRON, { unlocked = false }))
 

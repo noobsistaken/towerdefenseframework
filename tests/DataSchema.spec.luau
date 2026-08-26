@@ -53,9 +53,11 @@ describe("DataSchema", function()
 		expect(DataSchema.migrate(data)).toBe(DataSchema.CURRENT_VERSION - 1)
 		expect(data.Version).toBe(DataSchema.CURRENT_VERSION)
 
-		-- v3's additions arrive on the way through.
+		-- v3's and v4's additions arrive on the way through.
 		expect(type(data.Traits)).toBe("table")
 		expect(data.RerollTokens).toBe(0)
+		expect(#data.Loadout > 0).toBe(true)
+		expect(#data.Loadout <= 6).toBe(true)
 
 		for _, id in { "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator" } do
 			expect(table.find(data.UnlockedTowers, id) ~= nil).toBe(true)
@@ -76,11 +78,27 @@ describe("DataSchema", function()
 		data.Version = 2
 		data.UnlockedTowers = { "Rifleman", "Flak" }
 
-		expect(DataSchema.migrate(data)).toBe(1)
-		expect(data.Version).toBe(3)
+		expect(DataSchema.migrate(data)).toBe(DataSchema.CURRENT_VERSION - 2)
+		expect(data.Version).toBe(DataSchema.CURRENT_VERSION)
 		expect(type(data.Traits)).toBe("table")
 		expect(data.RerollTokens).toBe(0)
 		expect(#data.UnlockedTowers).toBe(2)
+	end)
+
+	it("deals a v3 profile its first deck from what it owns, in order", function()
+		local data = table.clone(DataSchema.TEMPLATE)
+		data.Version = 3
+		-- Nine owned: the deck takes the first six exactly.
+		data.UnlockedTowers =
+			{ "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator", "Scout", "Gunner", "Hexer" }
+
+		expect(DataSchema.migrate(data)).toBe(1)
+		expect(data.Version).toBe(4)
+		expect(#data.Loadout).toBe(6)
+		expect(data.Loadout[1]).toBe("Rifleman")
+		expect(data.Loadout[6]).toBe("Lacerator")
+		-- The collection itself is untouched.
+		expect(#data.UnlockedTowers).toBe(9)
 	end)
 
 	it("never leaves data below the current version", function()

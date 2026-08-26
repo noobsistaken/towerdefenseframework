@@ -1,26 +1,28 @@
 --!strict
 --[[
-	Lobby UI.
+	Lobby hub UI.
 
-	Placeholder visuals from the shared Theme, same as the match HUD. What is
-	not placeholder is the information architecture: which vote is winning,
-	how long is left, how many players have readied, and what your collection
-	holds - because those are the things a player in a lobby actually needs,
-	and an art pass should not have to redesign them.
+	A HUD and four walk-in panels. The HUD is always up: who you are (level,
+	coins, tokens), how many are here, and the LOADOUT button. The panels
+	appear by WALKING - atoms.activeArea follows the character across the
+	area pads, so the UI appears where the world says it should, the same
+	one-layout rule the server's occupancy scan uses.
+
+	Nothing here launches anything on a timer. The GAME panel's START button
+	is the only path to a match, and it is a request the server re-validates
+	against the character position it owns.
 
 	Reads atoms, fires requests. The gacha panels are the one place outside
-	init.client that writes replicated atoms, and only with values the SERVER
-	just returned: every roll reply carries the post-transaction balances
-	precisely so this layer never derives money on its own.
-
-	The panels open by WALKING, not by hotkey: atoms.activeStation follows
-	the character across the station pads, so the UI appears where the world
-	says it should - same one-layout rule as the vote zones.
+	init.client that writes replicated atoms, and only with values the
+	SERVER just returned in a funct reply.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
+local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
+local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ReplicatedStorage.Net)
 local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
 local React = require(ReplicatedStorage.Packages.React)
@@ -32,6 +34,14 @@ local useAtom = require(ReplicatedStorage.Shared.useAtom)
 local atoms = require(script.Parent.Parent.State.atoms)
 
 local e = React.createElement
+
+local REROLL_COLOR = Color3.fromRGB(158, 110, 208)
+
+local DIFFICULTY_COLORS: { [string]: Color3 } = {
+	Casual = Color3.fromRGB(96, 190, 120),
+	Normal = Color3.fromRGB(222, 198, 100),
+	Nightmare = Color3.fromRGB(205, 88, 88),
+}
 
 local function label(props: { [string]: any })
 	local merged: { [string]: any } = {
@@ -56,58 +66,96 @@ local function rarityColor(rarityId: string): Color3
 	return if tier ~= nil then tier.color else Theme.MUTED
 end
 
-local function Header()
-	local state = useAtom(atoms.lobbyState)
-	local seconds = useAtom(atoms.secondsRemaining)
-	local players = useAtom(atoms.playerCount)
-	local ready = useAtom(atoms.readyCount)
+-- ---------------------------------------------------------------------------
+-- Reveal animation
+--
+-- Both roll buttons share one shape: the reply is already in hand, and the
+-- suspense is manufactured on top of it - a fast cycle of names in their
+-- rarity colours that slows nothing down server-side and cannot desync,
+-- because the outcome was decided before the first flicker.
+-- ---------------------------------------------------------------------------
 
-	local headline: string
+export type Reveal = {
+	text: string,
+	color: Color3,
+}
 
-	if state == "Gathering" then
-		headline = "WAITING FOR PLAYERS"
-	elseif state == "Voting" then
-		headline = `LAUNCHING IN {seconds}s`
-	else
-		headline = "LAUNCHING"
+local REVEAL_TICKS = 14
+local REVEAL_TICK_SECONDS = 0.07
+
+--- Runs the cycling reveal, then clears itself. Call from inside the roll
+--- task, AFTER the reply arrives; `pick` supplies one random name+colour per
+--- flicker frame.
+local function runReveal(setReveal: (Reveal?) -> (), pick: () -> Reveal)
+	for _ = 1, REVEAL_TICKS do
+		setReveal(pick())
+		task.wait(REVEAL_TICK_SECONDS)
 	end
 
+	setReveal(nil)
+end
+
+local towerRng = Random.new()
+
+local function randomTowerReveal(): Reveal
+	local id = Towers.IDS[towerRng:NextInteger(1, #Towers.IDS)]
+	local definition = Towers.get(id)
+
+	return { text = definition.displayName, color = rarityColor(definition.rarity) }
+end
+
+local function randomTraitReveal(): Reveal
+	local id = Traits.IDS[towerRng:NextInteger(1, #Traits.IDS)]
+	local definition = Traits.get(id)
+
+	return { text = definition.displayName, color = rarityColor(definition.rarity) }
+end
+
+-- ---------------------------------------------------------------------------
+-- HUD
+-- ---------------------------------------------------------------------------
+
+local function HudIdentity()
+	local players = useAtom(atoms.playerCount)
+	local state = useAtom(atoms.lobbyState)
+
 	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 24),
-		-- Scale-with-cap rather than fixed 420: at fixed width the header's
-		-- right edge crossed the coin strip's left edge on viewports under
-		-- ~840px, and the two panels share a y band.
-		Size = UDim2.new(0.42, 0, 0, 76),
+		Position = UDim2.fromOffset(16, 16),
+		Size = UDim2.fromOffset(250, 62),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		BorderSizePixel = 0,
 	}, {
-		limit = e("UISizeConstraint", { MaxSize = Vector2.new(420, 76) }),
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
-		headline = label({
-			Position = UDim2.fromOffset(0, 14),
-			Size = UDim2.new(1, 0, 0, 26),
-			Text = headline,
+		title = label({
+			Position = UDim2.fromOffset(14, 8),
+			Size = UDim2.new(1, -28, 0, 24),
+			Text = "LOBBY",
 			TextColor3 = Theme.ACCENT,
-			TextSize = 22,
+			TextSize = 20,
+			TextXAlignment = Enum.TextXAlignment.Left,
 		}),
 		counts = label({
-			Position = UDim2.fromOffset(0, 44),
-			Size = UDim2.new(1, 0, 0, 18),
-			Text = `{players} in lobby  ·  {ready} ready`,
+			Position = UDim2.fromOffset(14, 34),
+			Size = UDim2.new(1, -28, 0, 16),
+			Font = Theme.FONT_BODY,
+			Text = if state == "Launching"
+				then "launching a match..."
+				else `{players} online  ·  walk into an area to play`,
 			TextColor3 = Theme.MUTED,
-			TextSize = 13,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Left,
 		}),
 	})
 end
 
---- Coins and reroll tokens, top-right. Unmounted until the first profile
---- answer so it cannot flash a zero balance at a player who owns thousands.
-local function ProfileStrip()
+--- Level, coins and tokens, top-right. Unmounted until the first real
+--- profile answer so it cannot flash a zero balance.
+local function HudWallet()
 	local loaded = useAtom(atoms.profileLoaded)
 	local coins = useAtom(atoms.coins)
 	local tokens = useAtom(atoms.rerollTokens)
+	local level = useAtom(atoms.level)
 
 	if not loaded then
 		return nil
@@ -115,55 +163,60 @@ local function ProfileStrip()
 
 	return e("Frame", {
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, 24),
-		Size = UDim2.fromOffset(170, 58),
+		Position = UDim2.new(1, -16, 0, 16),
+		Size = UDim2.fromOffset(180, 62),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		BorderSizePixel = 0,
 	}, {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		level = label({
+			Position = UDim2.fromOffset(0, 6),
+			Size = UDim2.new(1, 0, 0, 18),
+			Text = `LEVEL {level}`,
+			TextColor3 = Theme.ACCENT,
+			TextSize = 13,
+		}),
 		coins = label({
-			Position = UDim2.fromOffset(0, 8),
-			Size = UDim2.new(1, 0, 0, 22),
+			Position = UDim2.fromOffset(0, 24),
+			Size = UDim2.new(1, 0, 0, 18),
 			Text = `{coins} coins`,
 			TextColor3 = Theme.CASH,
-			TextSize = 17,
+			TextSize = 15,
 		}),
 		tokens = label({
-			Position = UDim2.fromOffset(0, 32),
-			Size = UDim2.new(1, 0, 0, 16),
+			Position = UDim2.fromOffset(0, 42),
+			Size = UDim2.new(1, 0, 0, 14),
+			Font = Theme.FONT_BODY,
 			Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}`,
-			TextColor3 = Theme.MUTED,
-			TextSize = 12,
+			TextColor3 = REROLL_COLOR,
+			TextSize = 11,
 		}),
 	})
 end
 
-local function ReadyButton()
-	local isReady = useAtom(atoms.isReady)
-	local state = useAtom(atoms.lobbyState)
+local function LoadoutButton()
+	local loaded = useAtom(atoms.profileLoaded)
+	local loadout = useAtom(atoms.loadout)
+	local open = useAtom(atoms.loadoutOpen)
 
-	-- Unmounted rather than greyed out once the teleport is in flight: there
-	-- is nothing left to decide, so a disabled button is just noise.
-	if state == "Launching" then
+	if not loaded then
 		return nil
 	end
 
 	return e("TextButton", {
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -40),
-		Size = UDim2.fromOffset(220, 48),
-		BackgroundColor3 = if isReady then Theme.POSITIVE else Theme.RAISED,
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 16, 1, -16),
+		Size = UDim2.fromOffset(180, 44),
+		BackgroundColor3 = if open then Theme.ACCENT else Theme.RAISED,
 		BorderSizePixel = 0,
 		AutoButtonColor = true,
 		Font = Theme.FONT,
-		Text = if isReady then "READY" else "READY UP",
-		TextColor3 = if isReady then Theme.INVERSE else Theme.TEXT,
-		TextSize = 18,
+		Text = `LOADOUT  {#loadout}/{Loadouts.MAX}`,
+		TextColor3 = if open then Theme.INVERSE else Theme.TEXT,
+		TextSize = 15,
 		[React.Event.Activated] = function()
-			local next = not atoms.isReady()
-			atoms.isReady(next)
-			Net.SetReady.Fire({ ready = next })
+			atoms.loadoutOpen(not atoms.loadoutOpen())
 		end,
 	}, {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
@@ -179,7 +232,7 @@ local function FailureToast()
 
 	return e("TextLabel", {
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -100),
+		Position = UDim2.new(0.5, 0, 1, -72),
 		Size = UDim2.fromOffset(520, 32),
 		BackgroundColor3 = Theme.NEGATIVE,
 		BackgroundTransparency = 0.1,
@@ -193,20 +246,447 @@ local function FailureToast()
 	})
 end
 
---- One line of instruction where two rows of buttons used to be. The vote
---- moved into the WORLD: stand in a map's zone, step onto a difficulty pad.
-local function ZoneHint()
-	return e("TextLabel", {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 124),
-		Size = UDim2.fromOffset(480, 22),
-		BackgroundTransparency = 1,
-		Font = Theme.FONT_BODY,
-		Text = "Stand in a map's zone to vote for it - step onto a pad to pick the difficulty",
-		TextColor3 = Theme.MUTED,
-		TextSize = 14,
+-- ---------------------------------------------------------------------------
+-- Game panel: the chooser
+-- ---------------------------------------------------------------------------
+
+local function votesFor(tallies: { atoms.Tally }, option: string): number
+	for _, tally in tallies do
+		if tally.option == option then
+			return tally.votes
+		end
+	end
+
+	return 0
+end
+
+type MapButtonProps = {
+	mapId: string,
+	order: number,
+}
+
+local function MapButton(props: MapButtonProps)
+	local tallies = useAtom(atoms.mapTallies)
+	local winning = useAtom(atoms.winningMapId)
+	local mine = useAtom(atoms.myMapVote)
+
+	local map = MapRegistry.find(props.mapId)
+
+	if map == nil then
+		return nil
+	end
+
+	local votes = votesFor(tallies, props.mapId)
+	local isMine = mine == props.mapId
+	local crown = if winning == props.mapId then " \u{2605}" else ""
+
+	return e("TextButton", {
+		Size = UDim2.fromOffset(98, 54),
+		BackgroundColor3 = if isMine then Theme.ACCENT else Theme.RAISED,
+		BorderSizePixel = 0,
+		AutoButtonColor = true,
+		Text = "",
+		LayoutOrder = props.order,
+		[React.Event.Activated] = function()
+			atoms.myMapVote(props.mapId)
+			Net.CastVote.Fire({ poll = "Map", option = props.mapId })
+		end,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		name = label({
+			Position = UDim2.fromOffset(0, 8),
+			Size = UDim2.new(1, 0, 0, 18),
+			Text = `{map.displayName}{crown}`,
+			TextColor3 = if isMine then Theme.INVERSE else Theme.TEXT,
+			TextSize = 13,
+		}),
+		votes = label({
+			Position = UDim2.fromOffset(0, 28),
+			Size = UDim2.new(1, 0, 0, 14),
+			Font = Theme.FONT_BODY,
+			Text = `{votes} vote{if votes == 1 then "" else "s"}`,
+			TextColor3 = if isMine then Theme.INVERSE else Theme.MUTED,
+			TextSize = 11,
+		}),
 	})
 end
+
+type DifficultyButtonProps = {
+	difficultyId: string,
+	order: number,
+}
+
+local function DifficultyButton(props: DifficultyButtonProps)
+	local tallies = useAtom(atoms.difficultyTallies)
+	local winning = useAtom(atoms.winningDifficultyId)
+	local mine = useAtom(atoms.myDifficultyVote)
+
+	local preset = Difficulty.find(props.difficultyId)
+
+	if preset == nil then
+		return nil
+	end
+
+	local votes = votesFor(tallies, props.difficultyId)
+	local isMine = mine == props.difficultyId
+	local color = DIFFICULTY_COLORS[props.difficultyId] or Theme.MUTED
+	local crown = if winning == props.difficultyId then " \u{2605}" else ""
+
+	return e("TextButton", {
+		Size = UDim2.fromOffset(130, 40),
+		BackgroundColor3 = if isMine then color else Theme.RAISED,
+		BorderSizePixel = 0,
+		AutoButtonColor = true,
+		Font = Theme.FONT,
+		Text = `{preset.displayName}{crown}  ·  {votes}`,
+		TextColor3 = if isMine then Theme.INVERSE else color,
+		TextSize = 13,
+		LayoutOrder = props.order,
+		[React.Event.Activated] = function()
+			atoms.myDifficultyVote(props.difficultyId)
+			Net.CastVote.Fire({ poll = "Difficulty", option = props.difficultyId })
+		end,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+	})
+end
+
+--- The chooser. Opens by standing in the GAME area; START is the only
+--- launch path in the whole game, and it takes everyone in the area.
+local function GamePanel()
+	local area = useAtom(atoms.activeArea)
+	local state = useAtom(atoms.lobbyState)
+	local winningMap = useAtom(atoms.winningMapId)
+	local winningDifficulty = useAtom(atoms.winningDifficultyId)
+
+	if area ~= "Game" then
+		return nil
+	end
+
+	local launching = state == "Launching"
+	local winnerName = winningMap
+	local map = MapRegistry.find(winningMap)
+
+	if map ~= nil then
+		winnerName = map.displayName
+	end
+
+	local mapButtons: { [string]: any } = {
+		layout = e("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 8),
+		}),
+	}
+
+	for order, mapId in MapRegistry.IDS do
+		mapButtons[mapId] = e(MapButton, { mapId = mapId, order = order })
+	end
+
+	local difficultyButtons: { [string]: any } = {
+		layout = e("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 8),
+		}),
+	}
+
+	for order, difficultyId in Difficulty.IDS do
+		difficultyButtons[difficultyId] = e(DifficultyButton, { difficultyId = difficultyId, order = order })
+	end
+
+	return e("Frame", {
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -110),
+		Size = UDim2.fromOffset(580, 290),
+		BackgroundColor3 = Theme.PANEL,
+		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		BorderSizePixel = 0,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		title = label({
+			Position = UDim2.fromOffset(0, 12),
+			Size = UDim2.new(1, 0, 0, 24),
+			Text = "CHOOSE YOUR BATTLE",
+			TextColor3 = Theme.ACCENT,
+			TextSize = 19,
+		}),
+		hint = label({
+			Position = UDim2.fromOffset(0, 38),
+			Size = UDim2.new(1, 0, 0, 16),
+			Font = Theme.FONT_BODY,
+			Text = "Everyone standing in the GAME area comes along when START is pressed",
+			TextColor3 = Theme.MUTED,
+			TextSize = 12,
+		}),
+		mapHeader = label({
+			Position = UDim2.fromOffset(0, 62),
+			Size = UDim2.new(1, 0, 0, 14),
+			Text = "MAP",
+			TextColor3 = Theme.MUTED,
+			TextSize = 11,
+		}),
+		maps = e("Frame", {
+			Position = UDim2.fromOffset(0, 80),
+			Size = UDim2.new(1, 0, 0, 54),
+			BackgroundTransparency = 1,
+		}, mapButtons),
+		difficultyHeader = label({
+			Position = UDim2.fromOffset(0, 142),
+			Size = UDim2.new(1, 0, 0, 14),
+			Text = "DIFFICULTY",
+			TextColor3 = Theme.MUTED,
+			TextSize = 11,
+		}),
+		difficulties = e("Frame", {
+			Position = UDim2.fromOffset(0, 160),
+			Size = UDim2.new(1, 0, 0, 40),
+			BackgroundTransparency = 1,
+		}, difficultyButtons),
+		start = e("TextButton", {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -14),
+			Size = UDim2.fromOffset(280, 48),
+			BackgroundColor3 = if launching then Theme.DISABLED else Theme.POSITIVE,
+			BorderSizePixel = 0,
+			AutoButtonColor = not launching,
+			Font = Theme.FONT,
+			Text = if launching then "LAUNCHING..." else `START  -  {winnerName} · {winningDifficulty}`,
+			TextColor3 = if launching then Theme.MUTED else Theme.INVERSE,
+			TextSize = 16,
+			[React.Event.Activated] = function()
+				if not launching then
+					Net.RequestLaunch.Fire()
+				end
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		}),
+	})
+end
+
+-- ---------------------------------------------------------------------------
+-- Loadout editor
+-- ---------------------------------------------------------------------------
+
+type LoadoutRowProps = {
+	towerId: string,
+	equipped: boolean,
+	full: boolean,
+	onToggle: (towerId: string) -> (),
+	order: number,
+}
+
+local function LoadoutRow(props: LoadoutRowProps)
+	local definition = Towers.find(props.towerId)
+
+	if definition == nil then
+		return nil
+	end
+
+	local blocked = not props.equipped and props.full
+
+	return e("TextButton", {
+		Size = UDim2.fromOffset(136, 44),
+		BackgroundColor3 = if props.equipped then Theme.ACCENT elseif blocked then Theme.DISABLED else Theme.RAISED,
+		BorderSizePixel = 0,
+		AutoButtonColor = not blocked,
+		Text = "",
+		LayoutOrder = props.order,
+		[React.Event.Activated] = function()
+			if not blocked then
+				props.onToggle(props.towerId)
+			end
+		end,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		name = label({
+			Position = UDim2.fromOffset(0, 5),
+			Size = UDim2.new(1, 0, 0, 18),
+			Text = definition.displayName,
+			TextColor3 = if props.equipped then Theme.INVERSE else rarityColor(definition.rarity),
+			TextSize = 13,
+		}),
+		tag = label({
+			Position = UDim2.fromOffset(0, 24),
+			Size = UDim2.new(1, 0, 0, 14),
+			Font = Theme.FONT_BODY,
+			Text = if props.equipped then "EQUIPPED" else definition.rarity,
+			TextColor3 = if props.equipped then Theme.INVERSE else Theme.MUTED,
+			TextSize = 10,
+		}),
+	})
+end
+
+--- Pick the six you bring. A DRAFT edited locally and saved whole through
+--- SetLoadout - the server applies it all or not at all, and echoes the
+--- deck as it stands either way.
+local function LoadoutPanel()
+	local open = useAtom(atoms.loadoutOpen)
+	local owned = useAtom(atoms.unlockedTowers)
+	local saved = useAtom(atoms.loadout)
+	local draft, setDraft = React.useState({} :: { string })
+	local status, setStatus = React.useState("")
+	local saving = React.useRef(false)
+
+	-- Re-seed the draft from the saved deck each time the panel opens. The
+	-- boolean dep is deliberate: open/close is exactly when to reset.
+	React.useEffect(function()
+		if open then
+			setDraft(table.clone(atoms.loadout()))
+			setStatus("")
+		end
+	end, { open })
+
+	if not open then
+		return nil
+	end
+
+	local full = #draft >= Loadouts.MAX
+
+	local onToggle = function(towerId: string)
+		local next = table.clone(draft)
+		local index = table.find(next, towerId)
+
+		if index ~= nil then
+			table.remove(next, index)
+		elseif #next < Loadouts.MAX then
+			table.insert(next, towerId)
+		end
+
+		setDraft(next)
+		setStatus("")
+	end
+
+	local rows: { [string]: any } = {
+		layout = e("UIGridLayout", {
+			CellSize = UDim2.fromOffset(136, 44),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		}),
+	}
+
+	for order, towerId in owned do
+		rows[towerId] = e(LoadoutRow, {
+			towerId = towerId,
+			equipped = table.find(draft, towerId) ~= nil,
+			full = full,
+			onToggle = onToggle,
+			order = order,
+		})
+	end
+
+	local dirty = #draft ~= #saved
+
+	if not dirty then
+		for index, id in draft do
+			if saved[index] ~= id then
+				dirty = true
+				break
+			end
+		end
+	end
+
+	return e("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(480, 380),
+		BackgroundColor3 = Theme.PANEL,
+		BackgroundTransparency = 0.05,
+		BorderSizePixel = 0,
+	}, {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		title = label({
+			Position = UDim2.fromOffset(0, 12),
+			Size = UDim2.new(1, 0, 0, 22),
+			Text = `LOADOUT  {#draft}/{Loadouts.MAX}`,
+			TextColor3 = Theme.ACCENT,
+			TextSize = 18,
+		}),
+		hint = label({
+			Position = UDim2.fromOffset(0, 36),
+			Size = UDim2.new(1, 0, 0, 16),
+			Font = Theme.FONT_BODY,
+			Text = if status ~= "" then status else "The six you bring to every match. Tap to equip.",
+			TextColor3 = if status ~= "" then Theme.NEGATIVE else Theme.MUTED,
+			TextSize = 12,
+		}),
+		grid = e("ScrollingFrame", {
+			Position = UDim2.fromOffset(12, 58),
+			Size = UDim2.new(1, -24, 1, -122),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ScrollBarThickness = 4,
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+		}, rows),
+		save = e("TextButton", {
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(0.5, -6, 1, -14),
+			Size = UDim2.fromOffset(150, 40),
+			BackgroundColor3 = if dirty and #draft > 0 then Theme.POSITIVE else Theme.DISABLED,
+			BorderSizePixel = 0,
+			AutoButtonColor = dirty and #draft > 0,
+			Font = Theme.FONT,
+			Text = "SAVE",
+			TextColor3 = if dirty and #draft > 0 then Theme.INVERSE else Theme.MUTED,
+			TextSize = 15,
+			[React.Event.Activated] = function()
+				if saving.current or not dirty or #draft == 0 then
+					return
+				end
+
+				saving.current = true
+
+				task.spawn(function()
+					local ok, reply = pcall(function()
+						return Net.SetLoadout.Call({ towerIds = draft })
+					end)
+
+					if ok then
+						-- The echo is the deck as the server now holds it,
+						-- accepted or refused - never guess from `ok` alone.
+						atoms.loadout(reply.loadout)
+
+						if reply.ok then
+							atoms.loadoutOpen(false)
+						else
+							setStatus("That loadout was refused - it may hold towers you no longer own.")
+						end
+					end
+
+					saving.current = false
+				end)
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		}),
+		cancel = e("TextButton", {
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.new(0.5, 6, 1, -14),
+			Size = UDim2.fromOffset(150, 40),
+			BackgroundColor3 = Theme.RAISED,
+			BorderSizePixel = 0,
+			AutoButtonColor = true,
+			Font = Theme.FONT,
+			Text = "CLOSE",
+			TextColor3 = Theme.TEXT,
+			TextSize = 15,
+			[React.Event.Activated] = function()
+				atoms.loadoutOpen(false)
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		}),
+	})
+end
+
+-- ---------------------------------------------------------------------------
+-- Gacha panel
+-- ---------------------------------------------------------------------------
 
 --- The odds line, straight from the ladder the roll actually uses. One
 --- source for the number shown and the number rolled is what keeps the
@@ -229,18 +709,24 @@ type RollReply = {
 	refunded: number,
 }
 
---- The gacha station panel. Open while the character stands on the pad.
 local function GachaPanel()
-	local station = useAtom(atoms.activeStation)
+	local area = useAtom(atoms.activeArea)
 	local coins = useAtom(atoms.coins)
 	local busy, setBusy = React.useState(false)
-	local lastRoll, setLastRoll = React.useState(nil :: RollReply?)
+	local lastRoll, setLastRollRaw = React.useState(nil :: RollReply?)
+	local reveal, setRevealRaw = React.useState(nil :: Reveal?)
+	-- useState's inference over an optional initial is unreliable in the old
+	-- solver - it lands on `nil` or on the non-optional half depending on
+	-- the call site (TowerInspector's InfoState note documents the same
+	-- gotcha). One cast per setter, and nothing else widens.
+	local setLastRoll = setLastRollRaw :: (RollReply?) -> ()
+	local setReveal = setRevealRaw :: (Reveal?) -> ()
 	-- The real double-fire guard. `busy` is a render-closure value: a second
 	-- click landing before the re-render commits still sees busy=false, and
 	-- two Calls means paying twice. A ref reads and writes synchronously.
 	local rolling = React.useRef(false)
 
-	if station ~= "Gacha" then
+	if area ~= "Gacha" then
 		return nil
 	end
 
@@ -250,7 +736,10 @@ local function GachaPanel()
 	local resultText = "Walk up, pay, pray."
 	local resultColor = Theme.MUTED
 
-	if lastRoll ~= nil then
+	if reveal ~= nil then
+		resultText = reveal.text
+		resultColor = reveal.color
+	elseif lastRoll ~= nil then
 		local definition = Towers.find(lastRoll.towerId)
 		local name = if definition ~= nil then definition.displayName else lastRoll.towerId
 
@@ -286,9 +775,8 @@ local function GachaPanel()
 			TextSize = 18,
 		}),
 		odds = label({
-			Position = UDim2.fromOffset(0, 38),
+			Position = UDim2.fromOffset(8, 38),
 			Size = UDim2.new(1, -16, 0, 26),
-			AnchorPoint = Vector2.new(0, 0),
 			Font = Theme.FONT_BODY,
 			Text = oddsText(),
 			TextColor3 = Theme.MUTED,
@@ -327,6 +815,13 @@ local function GachaPanel()
 					end)
 
 					if ok then
+						-- The outcome is already decided; the flicker is
+						-- theatre, run only for a roll that actually rolled.
+						if reply.outcome == "Rolled" or reply.outcome == "Duplicate" then
+							setLastRoll(nil)
+							runReveal(setReveal, randomTowerReveal)
+						end
+
 						-- Server-returned balances, never derived locally -
 						-- and never from an Unavailable reply, whose zeros
 						-- describe a missing session, not this player.
@@ -352,6 +847,10 @@ local function GachaPanel()
 		}),
 	})
 end
+
+-- ---------------------------------------------------------------------------
+-- Reroll panel
+-- ---------------------------------------------------------------------------
 
 type RerollReply = {
 	outcome: "Rolled" | "CannotAfford" | "UnknownTower" | "Unavailable",
@@ -418,16 +917,21 @@ end
 --- The reroll station panel: every owned tower, click one to reroll its
 --- trait for one token.
 local function RerollPanel()
-	local station = useAtom(atoms.activeStation)
+	local area = useAtom(atoms.activeArea)
 	local tokens = useAtom(atoms.rerollTokens)
 	local unlocked = useAtom(atoms.unlockedTowers)
 	local busy, setBusy = React.useState(false)
-	local lastReroll, setLastReroll = React.useState(nil :: RerollReply?)
+	local lastReroll, setLastRerollRaw = React.useState(nil :: RerollReply?)
+	local reveal, setRevealRaw = React.useState(nil :: Reveal?)
+	-- Same optional-initial inference gotcha as GachaPanel; same one cast
+	-- per setter.
+	local setLastReroll = setLastRerollRaw :: (RerollReply?) -> ()
+	local setReveal = setRevealRaw :: (Reveal?) -> ()
 	-- Same synchronous double-fire guard as the gacha's roll button: `busy`
 	-- alone is a render-closure value and two fast clicks spend two tokens.
 	local rolling = React.useRef(false)
 
-	if station ~= "Reroll" then
+	if area ~= "Reroll" then
 		return nil
 	end
 
@@ -445,6 +949,11 @@ local function RerollPanel()
 			end)
 
 			if ok then
+				if reply.outcome == "Rolled" then
+					setLastReroll(nil)
+					runReveal(setReveal, randomTraitReveal)
+				end
+
 				if reply.outcome ~= "Unavailable" then
 					atoms.rerollTokens(reply.tokens)
 				end
@@ -466,7 +975,10 @@ local function RerollPanel()
 	local resultText = `1 token per reroll  ·  {tokens} available`
 	local resultColor = Theme.MUTED
 
-	if lastReroll ~= nil then
+	if reveal ~= nil then
+		resultText = reveal.text
+		resultColor = reveal.color
+	elseif lastReroll ~= nil then
 		if lastReroll.outcome == "Rolled" then
 			local trait = Traits.find(lastReroll.traitId)
 			local name = if trait ~= nil then trait.displayName else lastReroll.traitId
@@ -516,7 +1028,7 @@ local function RerollPanel()
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 22),
 			Text = "TRAIT REROLL",
-			TextColor3 = Color3.fromRGB(158, 110, 208),
+			TextColor3 = REROLL_COLOR,
 			TextSize = 18,
 		}),
 		result = label({
@@ -544,11 +1056,12 @@ local function LobbyUI()
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 	}, {
-		header = e(Header),
-		profile = e(ProfileStrip),
-		hint = e(ZoneHint),
-		ready = e(ReadyButton),
+		identity = e(HudIdentity),
+		wallet = e(HudWallet),
+		loadoutButton = e(LoadoutButton),
 		failure = e(FailureToast),
+		game = e(GamePanel),
+		loadout = e(LoadoutPanel),
 		gacha = e(GachaPanel),
 		reroll = e(RerollPanel),
 	})

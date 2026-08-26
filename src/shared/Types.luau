@@ -51,6 +51,9 @@ export type PlayerData = {
 	Traits: { [string]: { string } },
 	--- Spent by trait rerolls. Earned at match end alongside Coins.
 	RerollTokens: number,
+	--- The towers BROUGHT to a match - at most Loadouts.MAX of the owned
+	--- roster. The collection is UnlockedTowers; this is the deck.
+	Loadout: { string },
 	Stats: PlayerStats,
 	Settings: PlayerSettings,
 }
@@ -188,6 +191,8 @@ export type MatchSnapshot = {
 	--- Tower ids this player owns. Advisory only - it drives which shop
 	--- buttons are enabled, and the server re-checks on every placement.
 	unlockedTowers: { string },
+	--- The deck this player brought - what the shop actually renders.
+	loadout: { string },
 }
 
 -- ===========================================================================
@@ -281,6 +286,7 @@ export type TargetingMode = "First" | "Last" | "Strongest" | "Closest"
 export type PlacementRejectReason =
 	"UnknownTower"
 	| "NotUnlocked"
+	| "NotInLoadout"
 	| "CannotAfford"
 	| "OutOfBounds"
 	| "NotBuildable"
@@ -338,10 +344,10 @@ export type TowerDefinition = {
 --- The lobby lifecycle. Must stay in lockstep with the LobbyState enum in
 --- net/schema.zap.
 ---
----   Gathering  waiting for enough players; no countdown running
----   Voting     countdown to launch; votes are open the whole time
----   Launching  votes closed, teleport in flight
-export type LobbyState = "Gathering" | "Voting" | "Launching"
+---   Gathering  the hub at rest. No countdown, ever: the lobby launches
+---              nothing until someone in the game area presses START.
+---   Launching  a teleport in flight for the game area's occupants.
+export type LobbyState = "Gathering" | "Launching"
 
 --- What the match place expects to find in TeleportData.
 ---

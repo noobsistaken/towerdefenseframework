@@ -1,25 +1,25 @@
 --!strict
 --[[
-	Lobby state machine.
+	Lobby hub state machine.
 
-	    Gathering  --(enough players)-->  Voting
-	    Voting     --(countdown hits 0)-->  Launching
-	    Launching  --(teleport sent)-->  players leave the server
+	    Gathering  --(a player in the GAME area presses START)-->  Launching
+	    Launching  --(teleport sent)-->  the area's occupants leave
 	               --(teleport simulated or failed)-->  Gathering
 
-	The last transition is what keeps the lobby usable in Studio. A real
-	teleport ends with everyone gone and the server empty, so there is nothing
-	to return to; a simulated one leaves everybody standing here, and without
-	a way back the lobby would wedge in Launching forever.
+	There is NO countdown and NO minimum-players trigger, on purpose: the
+	lobby launches nothing until somebody standing in the GAME area presses
+	START. Until then it is a place - gacha, rerolls, loadouts, standing
+	around - and a player who never touches the GAME area is never teleported
+	anywhere.
 
-	Votes stay open for the whole of Voting and close on entering Launching.
-	Closing them earlier would mean a player who joined late could not vote at
-	all, and the countdown is short enough that a last-second switch is a
-	legitimate move rather than an exploit.
+	Votes are scoped to the GAME area: only its occupants may cast, and
+	walking out withdraws yours. The launch takes everyone standing in the
+	area at that moment, with the area's winning map and difficulty.
 
-	Everything a client sends is a REQUEST. Vote options are checked against
-	the server's own allowlists - Zap proves `option` is a short string, it
-	cannot prove it names a real map.
+	Everything a client sends is a REQUEST. Votes are checked against the
+	server's allowlists, and the launch checks the sender's CHARACTER
+	POSITION - which the server owns - rather than anything the client
+	claims. Zap proves shapes; standing somewhere is proved by standing there.
 ]]
 
 local Players = game:GetService("Players")
@@ -42,46 +42,57 @@ LobbyController.__index = LobbyController
 export type Controller = typeof(setmetatable(
 	{} :: {
 		state: Types.LobbyState,
-		--- os.time() at which the current phase ends. 0 when untimed.
-		phaseEndsAt: number,
 		mapPoll: Poll.Poll,
 		difficultyPoll: Poll.Poll,
-		ready: { [Player]: boolean },
-		--- Which map zone each player stood in at the last scan. The change
-		--- detection: casting only on a CHANGE keeps the tally broadcast
-		--- quiet, and leaving your zone is what un-readies you.
-		lastZone: { [Player]: string? },
-		lastPad: { [Player]: string? },
-		--- Fires after every tally broadcast, so the world's zone boards can
-		--- repaint without this module knowing geometry exists.
-		tallyChanged: (() -> ())?,
+		--- Which players stood in the GAME area at the last scan. Change
+		--- detection only: entering does nothing (you vote through the
+		--- chooser, not by standing), leaving withdraws your votes.
+		inGameArea: { [Player]: boolean },
 		heartbeat: thread?,
 	},
 	LobbyController
 ))
 
 -- ---------------------------------------------------------------------------
+-- Position checks
+--
+-- Always resolved FRESH from the character the server owns, never from the
+-- scan cache: a player can enter the area and press START inside the same
+-- second, and refusing them over a stale cache reads as a broken button.
+-- ---------------------------------------------------------------------------
+
+local function isInGameArea(player: Player): boolean
+	local character = player.Character
+	local root = if character ~= nil then character.PrimaryPart else nil
+
+	if root == nil then
+		return false
+	end
+
+	return LobbyZones.resolveArea(root.Position) == "Game"
+end
+
+--- Everyone currently standing in the GAME area. The launch list.
+local function gameAreaOccupants(): { Player }
+	local occupants: { Player } = {}
+
+	for _, player in Players:GetPlayers() do
+		if isInGameArea(player) then
+			table.insert(occupants, player)
+		end
+	end
+
+	return occupants
+end
+
+-- ---------------------------------------------------------------------------
 -- Replication
 -- ---------------------------------------------------------------------------
 
-local function readyCount(self: Controller): number
-	local count = 0
-
-	for _ in self.ready do
-		count += 1
-	end
-
-	return count
-end
-
 local function broadcastState(self: Controller)
-	local remaining = if self.phaseEndsAt > 0 then math.max(0, self.phaseEndsAt - os.time()) else 0
-
 	Net.LobbyStateChanged.FireAll({
 		state = self.state,
-		secondsRemaining = math.floor(remaining),
 		playerCount = #Players:GetPlayers(),
-		readyCount = readyCount(self),
 	})
 end
 
@@ -90,68 +101,10 @@ local function broadcastTally(self: Controller)
 		mapTallies = self.mapPoll:tally(),
 		difficultyTallies = self.difficultyPoll:tally(),
 		-- Computed once on the server so every client agrees. Recomputing it
-		-- per client would mean reimplementing the tie-break rule, twice.
+		-- per client would mean reimplementing the tie-break, twice.
 		winningMapId = self.mapPoll:winner(),
 		winningDifficultyId = self.difficultyPoll:winner(),
 	})
-
-	local tallyChanged = self.tallyChanged
-
-	if tallyChanged ~= nil then
-		tallyChanged()
-	end
-end
-
---- Single entry point for state changes, so a transition can never forget to
---- tell the clients about itself.
-local function setState(self: Controller, state: Types.LobbyState, duration: number)
-	self.state = state
-	self.phaseEndsAt = if duration > 0 then os.time() + duration else 0
-	broadcastState(self)
-end
-
--- ---------------------------------------------------------------------------
--- Phases
--- ---------------------------------------------------------------------------
-
-local function beginGathering(self: Controller)
-	self.ready = {}
-	setState(self, "Gathering", 0)
-end
-
-local function beginVoting(self: Controller)
-	setState(self, "Voting", Constants.LOBBY_COUNTDOWN_SECONDS)
-end
-
---- Closes voting and hands off to the teleport.
-local function beginLaunching(self: Controller)
-	setState(self, "Launching", 0)
-
-	local launch: Types.MatchLaunchData = {
-		mapId = self.mapPoll:winner(),
-		difficultyId = self.difficultyPoll:winner(),
-	}
-
-	-- Snapshotted before yielding: TeleportGate.send yields, and the player
-	-- list can change underneath it.
-	local players = Players:GetPlayers()
-
-	task.spawn(function()
-		local outcome = TeleportGate.send(players, launch)
-
-		if not outcome.ok then
-			Net.MatchmakingFailed.FireAll({ reason = outcome.reason or "Unknown teleport failure." })
-			beginGathering(self)
-			return
-		end
-
-		if outcome.simulated then
-			-- Studio. Nobody actually went anywhere, so give the lobby a way
-			-- back rather than wedging in Launching.
-			task.wait(Constants.LOBBY_RELAUNCH_SECONDS)
-			beginGathering(self)
-		end
-	end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -161,14 +114,10 @@ end
 function LobbyController.new(): Controller
 	local self = setmetatable({
 		state = "Gathering" :: Types.LobbyState,
-		phaseEndsAt = 0,
 		-- The allowlists. A vote for anything not in these is dropped.
 		mapPoll = Poll.new(MapRegistry.IDS, MapRegistry.DEFAULT_ID),
 		difficultyPoll = Poll.new(Difficulty.IDS, Difficulty.DEFAULT_ID),
-		ready = {},
-		lastZone = {},
-		lastPad = {},
-		tallyChanged = nil,
+		inGameArea = {},
 		heartbeat = nil,
 	}, LobbyController)
 
@@ -185,13 +134,11 @@ function LobbyController.addPlayer(self: Controller, _player: Player)
 end
 
 function LobbyController.removePlayer(self: Controller, player: Player)
-	-- A departed player's vote and ready flag must stop counting, or a lobby
-	-- can sit waiting on someone who left.
+	-- A departed player's vote must stop counting, or an empty GAME area
+	-- can keep voting for a map nobody is standing for.
 	self.mapPoll:remove(player.UserId)
 	self.difficultyPoll:remove(player.UserId)
-	self.ready[player] = nil
-	self.lastZone[player] = nil
-	self.lastPad[player] = nil
+	self.inGameArea[player] = nil
 
 	broadcastState(self)
 	broadcastTally(self)
@@ -206,6 +153,12 @@ function LobbyController.castVote(self: Controller, player: Player, kind: string
 		return
 	end
 
+	-- Votes belong to the GAME area. A well-formed vote from the gacha pad
+	-- is a forged message, not a UI state that exists.
+	if not isInGameArea(player) then
+		return
+	end
+
 	local poll = if kind == "Map" then self.mapPoll else self.difficultyPoll
 
 	-- Poll.cast is the allowlist check. It returns false for anything not in
@@ -217,97 +170,53 @@ function LobbyController.castVote(self: Controller, player: Player, kind: string
 	broadcastTally(self)
 end
 
--- ---------------------------------------------------------------------------
--- Zones
---
--- Standing in a zone IS the map vote; standing on a pad inside it is the
--- difficulty vote. Scanned on the same heartbeat as the state machine, from
--- character positions the server already owns - never from anything the
--- client sends, which is what makes walking unforgeable where a message is
--- merely validated.
--- ---------------------------------------------------------------------------
-
-local function scanZones(self: Controller)
-	local changed = false
-
-	for _, player in Players:GetPlayers() do
-		local character = player.Character
-		local root = if character ~= nil then character.PrimaryPart else nil
-
-		local mapId: string? = nil
-		local difficultyId: string? = nil
-
-		if root ~= nil then
-			mapId, difficultyId = LobbyZones.resolve(root.Position)
-		end
-
-		if mapId ~= self.lastZone[player] then
-			-- Leaving your zone withdraws the vote AND the ready flag: a
-			-- player wandering off must not hold "everyone is ready" true,
-			-- and must not keep voting for a zone they left.
-			if mapId == nil then
-				self.mapPoll:remove(player.UserId)
-			else
-				self.mapPoll:cast(player.UserId, mapId)
-			end
-
-			if self.ready[player] then
-				self.ready[player] = nil
-				broadcastState(self)
-			end
-
-			self.lastZone[player] = mapId
-			changed = true
-		end
-
-		if difficultyId ~= self.lastPad[player] then
-			if difficultyId == nil then
-				self.difficultyPoll:remove(player.UserId)
-			else
-				self.difficultyPoll:cast(player.UserId, difficultyId)
-			end
-
-			self.lastPad[player] = difficultyId
-			changed = true
-		end
-	end
-
-	if changed then
-		broadcastTally(self)
-	end
-end
-
-function LobbyController.setReady(self: Controller, player: Player, ready: boolean)
+--- The only path to a teleport. Takes everyone standing in the GAME area,
+--- with the area's winning votes; players elsewhere in the hub stay.
+function LobbyController.requestLaunch(self: Controller, player: Player): boolean
 	if self.state == "Launching" then
-		return
-	end
-
-	-- Written as a branch rather than `if ready then true else nil`, which
-	-- types as `boolean?` and will not assign into `{ [Player]: boolean }`.
-	if ready then
-		self.ready[player] = true
-	else
-		self.ready[player] = nil
-	end
-
-	broadcastState(self)
-end
-
---- True when everyone present has readied up, and there is at least one of
---- them. The emptiness guard matters: without it an empty lobby is trivially
---- "all ready" and launches into nothing.
-local function everyoneReady(self: Controller): boolean
-	local present = Players:GetPlayers()
-
-	if #present < Constants.LOBBY_MIN_PLAYERS then
 		return false
 	end
 
-	for _, player in present do
-		if not self.ready[player] then
-			return false
-		end
+	if not isInGameArea(player) then
+		return false
 	end
+
+	local occupants = gameAreaOccupants()
+
+	if #occupants == 0 then
+		return false
+	end
+
+	self.state = "Launching"
+	broadcastState(self)
+
+	local launch: Types.MatchLaunchData = {
+		mapId = self.mapPoll:winner(),
+		difficultyId = self.difficultyPoll:winner(),
+	}
+
+	task.spawn(function()
+		local outcome = TeleportGate.send(occupants, launch)
+
+		if not outcome.ok then
+			Net.MatchmakingFailed.FireAll({ reason = outcome.reason or "Unknown teleport failure." })
+			self.state = "Gathering"
+			broadcastState(self)
+			return
+		end
+
+		if outcome.simulated then
+			-- Studio. Nobody actually went anywhere, so reopen the hub
+			-- rather than wedging in Launching.
+			task.wait(Constants.LOBBY_RELAUNCH_SECONDS)
+			self.state = "Gathering"
+			broadcastState(self)
+		else
+			-- The occupants are gone; whoever stayed gets their hub back.
+			self.state = "Gathering"
+			broadcastState(self)
+		end
+	end)
 
 	return true
 end
@@ -316,48 +225,33 @@ end
 -- Tick
 -- ---------------------------------------------------------------------------
 
-local function tick(self: Controller)
-	local present = #Players:GetPlayers()
+local function scanGameArea(self: Controller)
+	local changed = false
 
-	-- Zones vote in Gathering AND Voting - a player already standing in a
-	-- zone when the countdown starts is a vote, not a race. Launching is
-	-- frozen exactly as castVote is.
-	if self.state ~= "Launching" then
-		scanZones(self)
-	end
+	for _, player in Players:GetPlayers() do
+		local inside = isInGameArea(player)
 
-	if self.state == "Gathering" then
-		if present >= Constants.LOBBY_MIN_PLAYERS then
-			beginVoting(self)
-		end
+		if inside ~= (self.inGameArea[player] == true) then
+			if not inside then
+				-- Walking out withdraws your votes. Walking IN grants only
+				-- the right to cast; the chooser is where you actually do.
+				self.mapPoll:remove(player.UserId)
+				self.difficultyPoll:remove(player.UserId)
+				changed = true
+			end
 
-		return
-	end
-
-	if self.state == "Voting" then
-		if present < Constants.LOBBY_MIN_PLAYERS then
-			beginGathering(self)
-			return
-		end
-
-		-- Readying up shortens the wait rather than skipping it, so there is
-		-- still a moment to see the winning map and to un-ready.
-		if everyoneReady(self) then
-			local shortened = os.time() + Constants.LOBBY_READY_SECONDS
-
-			if shortened < self.phaseEndsAt then
-				self.phaseEndsAt = shortened
+			-- Branch rather than `inside or nil`: booleans widen to
+			-- `boolean?` and refuse the `{ [Player]: boolean }` index.
+			if inside then
+				self.inGameArea[player] = true
+			else
+				self.inGameArea[player] = nil
 			end
 		end
+	end
 
-		if os.time() >= self.phaseEndsAt then
-			beginLaunching(self)
-			return
-		end
-
-		-- Cheap enough to send every second, and it keeps the countdown on
-		-- every client honest without a second clock to drift.
-		broadcastState(self)
+	if changed then
+		broadcastTally(self)
 	end
 end
 
@@ -369,7 +263,10 @@ function LobbyController.start(self: Controller)
 	self.heartbeat = task.spawn(function()
 		while true do
 			task.wait(1)
-			tick(self)
+
+			if self.state ~= "Launching" then
+				scanGameArea(self)
+			end
 		end
 	end)
 end

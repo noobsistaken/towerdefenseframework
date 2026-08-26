@@ -68,6 +68,10 @@ atoms.mapId = Charm.atom("")
 --- server re-checks unlock on every placement request.
 atoms.unlockedTowers = Charm.atom({} :: { string })
 
+--- The deck this player brought - at most six ids. The shop renders THIS;
+--- unlockedTowers is the whole collection and is kept for grey-out logic.
+atoms.loadout = Charm.atom({} :: { string })
+
 -- ---------------------------------------------------------------------------
 -- Local UI state
 --

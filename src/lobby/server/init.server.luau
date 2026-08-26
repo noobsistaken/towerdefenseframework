@@ -26,6 +26,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local GachaFlow = require(ReplicatedStorage.Shared.GachaFlow)
+local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ServerScriptService.Net)
 local Places = require(ReplicatedStorage.Shared.Config.Places)
@@ -158,17 +159,10 @@ end
 -- ---------------------------------------------------------------------------
 
 local lobby = LobbyBuilder.build()
-local zoneBoards = LobbyBuilder.buildZones(lobby.folder)
 
-LobbyBuilder.buildStations(lobby.folder)
+LobbyBuilder.buildAreas(lobby.folder)
 
 local controller = LobbyController.new()
-
--- The world's vote boards repaint on every tally change. Wired here rather
--- than inside the controller, which stays ignorant of geometry.
-controller.tallyChanged = function()
-	LobbyBuilder.updateZoneBoards(zoneBoards, controller.mapPoll:tally(), controller.mapPoll:winner())
-end
 
 -- ---------------------------------------------------------------------------
 -- Player lifecycle
@@ -201,8 +195,26 @@ Net.CastVote.On(function(player: Player, value: { poll: "Map" | "Difficulty", op
 	controller:castVote(player, value.poll, value.option)
 end)
 
-Net.SetReady.On(function(player: Player, value: { ready: boolean })
-	controller:setReady(player, value.ready)
+Net.RequestLaunch.On(function(player: Player)
+	-- The ONLY path to a teleport. The controller re-resolves the sender's
+	-- position from the character the server owns; a refused launch is
+	-- silent, because the button only shows inside the area anyway.
+	controller:requestLaunch(player)
+end)
+
+Net.SetLoadout.SetCallback(function(player: Player, value: { towerIds: { string } })
+	local profile = profiles[player]
+
+	if profile == nil then
+		return { ok = false, loadout = {} }
+	end
+
+	-- Loadouts.apply is the whole rulebook: size, ownership, reality,
+	-- duplicates. A refusal writes nothing, and either way the reply
+	-- carries the deck as it now stands.
+	local ok = Loadouts.apply(profile.Data, value.towerIds)
+
+	return { ok = ok, loadout = Loadouts.resolve(profile.Data) }
 end)
 
 Net.RollTower.SetCallback(function(player: Player, _value: {})
@@ -254,7 +266,16 @@ Net.GetLobbyProfile.SetCallback(function(player: Player, _value: {})
 		-- reply was byte-identical to a fresh account, and the client latched
 		-- an empty collection for the whole session whenever the session
 		-- handoff outran the wait above.
-		return { loaded = false, coins = 0, rerollTokens = 0, unlockedTowers = {}, traits = {} }
+		return {
+			loaded = false,
+			coins = 0,
+			level = 0,
+			xp = 0,
+			rerollTokens = 0,
+			unlockedTowers = {},
+			loadout = {},
+			traits = {},
+		}
 	end
 
 	local data = profile.Data
@@ -270,8 +291,11 @@ Net.GetLobbyProfile.SetCallback(function(player: Player, _value: {})
 	return {
 		loaded = true,
 		coins = data.Coins,
+		level = data.Level,
+		xp = data.XP,
 		rerollTokens = data.RerollTokens,
 		unlockedTowers = table.clone(data.UnlockedTowers),
+		loadout = Loadouts.resolve(data),
 		traits = traits,
 	}
 end)

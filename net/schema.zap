@@ -48,8 +48,10 @@ opt call_default = "ManyAsync"
 -- Must stay in lockstep with Types.MatchState in src/shared/Types.luau.
 type MatchState = enum { Loading, Preparing, WaveActive, Intermission, Victory, Defeat }
 
--- Must stay in lockstep with Types.LobbyState.
-type LobbyState = enum { Gathering, Voting, Launching }
+-- Must stay in lockstep with Types.LobbyState. Two states only: the hub
+-- never counts down - a launch happens when someone in the game area
+-- presses START, and until then the lobby is just a place.
+type LobbyState = enum { Gathering, Launching }
 
 -- Which of the lobby's two votes a message refers to. One event covers both,
 -- because the tally logic is identical and a second near-identical event is
@@ -69,6 +71,9 @@ type PlacementRejectReason = enum {
 	WrongSurface,
 	OverlapsTower,
 	BlocksPath,
+	-- Owned but not brought: the loadout is the deck, and the server
+	-- refuses what you left at home.
+	NotInLoadout,
 	TowerCapReached,
 	WrongMatchState,
 }
@@ -250,6 +255,10 @@ funct GetMatchSnapshot = {
 		-- Advisory: the server re-checks unlock on every placement request,
 		-- so a client that ignores this gains nothing.
 		unlockedTowers: string.utf8(..24)[0..64],
+		-- The deck this player brought. THIS is what the shop shows -
+		-- unlockedTowers is the collection, and twenty-six buttons was a
+		-- shop nobody could read.
+		loadout: string.utf8(..24)[0..6],
 	},
 }
 
@@ -277,12 +286,28 @@ event CastVote = {
 	},
 }
 
-event SetReady = {
+-- Launches a match for everyone standing in the GAME area, using the
+-- area's votes. A request like every other: the server checks the sender
+-- is actually in the area, from positions it already owns.
+event RequestLaunch = {
 	from: Client,
 	type: Reliable,
 	call: ManyAsync,
-	data: struct {
-		ready: boolean,
+}
+
+-- Replaces the whole loadout - the deck of towers brought to a match.
+-- Validated by Loadouts.apply: 1..6 entries, owned, real, no duplicates;
+-- an invalid request changes nothing and echoes the standing deck.
+funct SetLoadout = {
+	call: Async,
+	args: struct {
+		towerIds: string.utf8(..24)[0..6],
+	},
+	rets: struct {
+		ok: boolean,
+		-- The deck as the server now holds it, accepted or not, so the
+		-- client never has to guess what a refusal left behind.
+		loadout: string.utf8(..24)[0..6],
 	},
 }
 
@@ -292,10 +317,7 @@ event LobbyStateChanged = {
 	call: ManyAsync,
 	data: struct {
 		state: LobbyState,
-		-- Whole seconds left in the current phase. 0 when untimed.
-		secondsRemaining: u16,
 		playerCount: u8,
-		readyCount: u8,
 	},
 }
 
@@ -379,6 +401,11 @@ funct GetLobbyProfile = {
 		-- session whenever the handoff outran the 10s wait.
 		loaded: boolean,
 		coins: u32,
+		-- For the lobby HUD: account level and the XP inside it, so the
+		-- hub can show progression without a second fetch.
+		level: u16,
+		xp: u32,
+		loadout: string.utf8(..24)[0..6],
 		rerollTokens: u16,
 		unlockedTowers: string.utf8(..24)[0..64],
 		-- Flattened { towerId, traitId } pairs: zap structs cannot carry a
