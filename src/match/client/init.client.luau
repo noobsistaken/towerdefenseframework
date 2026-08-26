@@ -38,6 +38,7 @@ local Wire = require(ReplicatedStorage.Shared.Wire)
 local Bursts = require(script.Effects.Bursts)
 local EnemyVisuals = require(script.Effects.EnemyVisuals)
 local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local Hud = require(script.UI.Hud)
 local PlacementController = require(script.Placement.PlacementController)
 local SoundController = require(script.Audio.SoundController)
@@ -178,6 +179,11 @@ end)
 
 PlacementController.start()
 janitor:Add(PlacementController.stop, true)
+
+-- The battle soundtrack, quiet and looping. Not gated by the SFX setting:
+-- that setting is named Sfx, and muting the soundtrack under it would be
+-- the setting lying about its own name.
+SoundController.playMusic(Sounds.MATCH_MUSIC)
 
 -- Health bars and damage numbers. Driven entirely by the Health attribute on
 -- each enemy part, so this needs no network messages of its own (D5).

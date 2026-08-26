@@ -24,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local React = require(ReplicatedStorage.Packages.React)
+local SoundKit = require(script.Parent.SoundKit)
 
 local UiFx = {}
 
@@ -162,6 +163,8 @@ end
 --- Squash-and-spring on a UIScale, for a button press. Imperative on
 --- purpose: it fires from an Activated handler, not from a render.
 function UiFx.pressPop(scale: UIScale?)
+	SoundKit.play("ButtonClick")
+
 	if scale == nil then
 		return
 	end

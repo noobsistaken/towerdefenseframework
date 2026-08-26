@@ -23,6 +23,8 @@ local Net = require(ReplicatedStorage.Net)
 local Places = require(ReplicatedStorage.Shared.Config.Places)
 local React = require(ReplicatedStorage.Packages.React)
 local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
+local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 
 local LobbyUI = require(script.UI.LobbyUI)
 local atoms = require(script.State.atoms)
@@ -36,6 +38,9 @@ end
 
 local localPlayer = Players.LocalPlayer
 local janitor = Janitor.new()
+
+-- The hub soundtrack, quiet and looping, from the first frame.
+SoundKit.playMusic(Sounds.LOBBY_MUSIC)
 
 -- ---------------------------------------------------------------------------
 -- Networking

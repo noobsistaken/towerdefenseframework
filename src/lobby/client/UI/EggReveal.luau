@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
+local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -236,6 +237,8 @@ function EggReveal.play(request: Request, onDone: () -> ())
 	end
 
 	task.spawn(function()
+		SoundKit.play("GachaRoll")
+
 		-- 1. RISE: from below the screen to centre, with the dim coming up.
 		TweenService:Create(dimmer, TweenInfo.new(RISE_SECONDS), { BackgroundTransparency = 0.35 }):Play()
 		local rise = TweenService:Create(
@@ -269,6 +272,7 @@ function EggReveal.play(request: Request, onDone: () -> ())
 				pulsed += 1
 				flash.BackgroundTransparency = 0.75 - pulsed * 0.15
 				TweenService:Create(flash, TweenInfo.new(0.18), { BackgroundTransparency = 1 }):Play()
+				SoundKit.play("EggShake")
 			end
 
 			task.wait(SHAKE_STEP)
@@ -280,6 +284,7 @@ function EggReveal.play(request: Request, onDone: () -> ())
 
 		-- 3. CRACK: a hard white flash, and the swap happens INSIDE it -
 		-- the egg is gone and the unit is standing there when it fades.
+		SoundKit.play("EggCrack")
 		flash.BackgroundTransparency = 0
 		task.wait(CRACK_FLASH_SECONDS)
 
@@ -294,6 +299,7 @@ function EggReveal.play(request: Request, onDone: () -> ())
 			then `{name}  ({request.rarityId})  -  duplicate, +{request.refunded} coins back`
 			else `{name}  ({request.rarityId})`
 		caption.TextTransparency = 0
+		SoundKit.play("EggReveal")
 
 		TweenService:Create(flash, TweenInfo.new(FLASH_FADE_SECONDS), { BackgroundTransparency = 1 }):Play()
 

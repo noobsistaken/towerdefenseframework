@@ -29,6 +29,7 @@ local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
+local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
@@ -295,6 +296,7 @@ local function MapButton(props: MapButtonProps)
 		Text = "",
 		LayoutOrder = props.order,
 		[React.Event.Activated] = function()
+			SoundKit.play("VoteCast")
 			atoms.myMapVote(props.mapId)
 			Net.CastVote.Fire({ poll = "Map", option = props.mapId })
 		end,
@@ -350,6 +352,7 @@ local function DifficultyButton(props: DifficultyButtonProps)
 		TextSize = 13,
 		LayoutOrder = props.order,
 		[React.Event.Activated] = function()
+			SoundKit.play("VoteCast")
 			atoms.myDifficultyVote(props.difficultyId)
 			Net.CastVote.Fire({ poll = "Difficulty", option = props.difficultyId })
 		end,
