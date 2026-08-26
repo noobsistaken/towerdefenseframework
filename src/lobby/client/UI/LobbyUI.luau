@@ -426,7 +426,7 @@ local function GamePanel()
 		},
 		exit = exiting,
 		children = {
-			art = UiArt.frameUnderlay(),
+			art = UiArt.frameUnderlay("Brushed"),
 			title = label({
 				Position = UDim2.fromOffset(0, 12),
 				Size = UDim2.new(1, 0, 0, 24),
@@ -625,7 +625,7 @@ local function LoadoutPanel()
 		},
 		exit = exiting,
 		children = {
-			art = UiArt.frameUnderlay(),
+			art = UiArt.frameUnderlay("Brushed"),
 			title = label({
 				Position = UDim2.fromOffset(0, 12),
 				Size = UDim2.new(1, 0, 0, 22),
@@ -796,7 +796,7 @@ local function GachaPanel()
 		},
 		exit = exiting,
 		children = {
-			art = UiArt.frameUnderlay(),
+			art = UiArt.frameUnderlay("Carbon"),
 			title = label({
 				Position = UDim2.fromOffset(0, 12),
 				Size = UDim2.new(1, 0, 0, 22),
@@ -1002,6 +1002,10 @@ local function overlay(onClose: () -> (), size: UDim2, exiting: boolean, childre
 		ZIndex = 11,
 		[React.Event.Activated] = function() end,
 	})
+	-- Content sits at ZIndex 12, the shield at 11: 10 keeps the weave
+	-- behind both, and the corner rounds the whole composite.
+	children.texture = UiArt.texture("Hexmesh", 0.5, 0, 10)
+	children.corner = e("UICorner", { CornerRadius = Theme.CORNER })
 
 	return e("TextButton", {
 		Size = UDim2.fromScale(1, 1),
@@ -1412,7 +1416,7 @@ local function RerollPanel()
 		},
 		exit = exiting,
 		children = {
-			art = UiArt.frameUnderlay(),
+			art = UiArt.frameUnderlay("Carbon"),
 			title = e("TextLabel", {
 				Position = UDim2.fromOffset(0, 10),
 				Size = UDim2.new(1, 0, 0, 26),

@@ -25,6 +25,7 @@ local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
@@ -205,13 +206,13 @@ type ActionProps = {
 
 local function ActionButton(props: ActionProps)
 	local attributes: { [any]: any } = {
-		Size = UDim2.new(1, 0, 0, 30),
+		Size = UDim2.new(1, 0, 0, 36),
 		BackgroundColor3 = props.color,
 		BorderSizePixel = 0,
 		Font = Theme.FONT,
 		Text = props.text,
 		TextColor3 = props.textColor,
-		TextSize = 13,
+		TextSize = 14,
 		LayoutOrder = props.layoutOrder,
 		[React.Event.Activated] = props.onActivated,
 	}
@@ -477,7 +478,7 @@ type StatProps = {
 --- reaches, how often it fires.
 local function Stat(props: StatProps)
 	return e("Frame", {
-		Size = UDim2.new(1 / 3, -4, 0, 34),
+		Size = UDim2.new(1 / 3, -4, 0, 40),
 		BackgroundColor3 = Theme.RAISED,
 		BorderSizePixel = 0,
 		LayoutOrder = props.layoutOrder,
@@ -486,22 +487,22 @@ local function Stat(props: StatProps)
 
 		label = e("TextLabel", {
 			Size = UDim2.new(1, 0, 0, 12),
-			Position = UDim2.fromOffset(0, 4),
+			Position = UDim2.fromOffset(0, 5),
 			BackgroundTransparency = 1,
 			Font = Theme.FONT_BODY,
 			Text = props.label,
 			TextColor3 = Theme.MUTED,
-			TextSize = 10,
+			TextSize = 11,
 		}),
 
 		value = e("TextLabel", {
-			Size = UDim2.new(1, 0, 0, 16),
-			Position = UDim2.fromOffset(0, 15),
+			Size = UDim2.new(1, 0, 0, 18),
+			Position = UDim2.fromOffset(0, 18),
 			BackgroundTransparency = 1,
 			Font = Theme.FONT,
 			Text = props.value,
 			TextColor3 = Theme.TEXT,
-			TextSize = 13,
+			TextSize = 15,
 		}),
 	})
 end
@@ -516,7 +517,7 @@ type DeltaProps = {
 --- One "this stat becomes that" row in the upgrade panel.
 local function DeltaRow(props: DeltaProps)
 	return e("Frame", {
-		Size = UDim2.new(1, 0, 0, 18),
+		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
 		LayoutOrder = props.layoutOrder,
 	}, {
@@ -526,7 +527,7 @@ local function DeltaRow(props: DeltaProps)
 			Font = Theme.FONT_BODY,
 			Text = props.label,
 			TextColor3 = Theme.MUTED,
-			TextSize = 12,
+			TextSize = 13,
 			TextXAlignment = Enum.TextXAlignment.Left,
 		}),
 
@@ -537,7 +538,7 @@ local function DeltaRow(props: DeltaProps)
 			Font = Theme.FONT,
 			Text = `{props.from}  →  {props.to}`,
 			TextColor3 = Theme.POSITIVE,
-			TextSize = 12,
+			TextSize = 13,
 			TextXAlignment = Enum.TextXAlignment.Right,
 		}),
 	})
@@ -651,12 +652,11 @@ local function TowerInspector()
 	local rateScale = if level ~= nil and level.fireRate > 0 then info.fireRate / level.fireRate else 1
 
 	local children: { [string]: any } = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 		padding = e("UIPadding", {
-			PaddingTop = UDim.new(0, 12),
-			PaddingBottom = UDim.new(0, 12),
-			PaddingLeft = UDim.new(0, 12),
-			PaddingRight = UDim.new(0, 12),
+			PaddingTop = UDim.new(0, 16),
+			PaddingBottom = UDim.new(0, 16),
+			PaddingLeft = UDim.new(0, 16),
+			PaddingRight = UDim.new(0, 16),
 		}),
 		layout = e("UIListLayout", {
 			FillDirection = Enum.FillDirection.Vertical,
@@ -670,7 +670,7 @@ local function TowerInspector()
 			Font = Theme.FONT,
 			Text = definition.displayName,
 			TextColor3 = Theme.TEXT,
-			TextSize = 16,
+			TextSize = 18,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = 1,
 		}),
@@ -689,7 +689,7 @@ local function TowerInspector()
 		-- Damage, reach and rate. Shown for every tower, owned or not: they
 		-- describe the tower, and reading someone else's is not an action.
 		stats = e("Frame", {
-			Size = UDim2.new(1, 0, 0, 34),
+			Size = UDim2.new(1, 0, 0, 40),
 			BackgroundTransparency = 1,
 			LayoutOrder = 3,
 		}, {
@@ -816,7 +816,6 @@ local function TowerInspector()
 
 	if isOwner and nextLevel ~= nil and previewOpen then
 		local rows: { [string]: any } = {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 			padding = e("UIPadding", {
 				PaddingTop = UDim.new(0, 10),
 				PaddingBottom = UDim.new(0, 10),
@@ -878,11 +877,18 @@ local function TowerInspector()
 			frame = {
 				Size = UDim2.fromScale(1, 0),
 				AutomaticSize = Enum.AutomaticSize.Y,
-				BackgroundColor3 = Theme.PANEL,
-				BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+				BackgroundTransparency = 1,
 				LayoutOrder = 1,
 			},
-			children = rows,
+			children = {
+				panel = UiArt.Frame({
+					frame = {
+						Size = UDim2.fromScale(1, 0),
+						AutomaticSize = Enum.AutomaticSize.Y,
+					},
+					children = rows,
+				}),
+			},
 		})
 	end
 
@@ -893,7 +899,7 @@ local function TowerInspector()
 		ref = shellRef,
 		AnchorPoint = Vector2.new(1, 1),
 		Position = UDim2.new(1, -16, 1, -16),
-		Size = UDim2.fromOffset(240, 0),
+		Size = UDim2.fromOffset(280, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -907,14 +913,14 @@ local function TowerInspector()
 
 		upgradePanel = upgradePanel,
 
-		mainPanel = e("Frame", {
-			Size = UDim2.fromScale(1, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-			BorderSizePixel = 0,
-			LayoutOrder = 2,
-		}, children),
+		mainPanel = UiArt.Frame({
+			frame = {
+				Size = UDim2.fromScale(1, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				LayoutOrder = 2,
+			},
+			children = children,
+		}),
 	})
 end
 

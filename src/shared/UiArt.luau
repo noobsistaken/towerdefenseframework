@@ -24,7 +24,7 @@ export type SurfaceProps = {
 	children: { [string]: any }?,
 }
 
-local function surface(art: string, slice: Rect, props: SurfaceProps)
+local function surface(art: string, slice: Rect, props: SurfaceProps, sliceScale: number?)
 	local merged: { [string]: any } = table.clone(props.frame)
 
 	if art ~= "" then
@@ -32,6 +32,10 @@ local function surface(art: string, slice: Rect, props: SurfaceProps)
 		merged.Image = art
 		merged.ScaleType = Enum.ScaleType.Slice
 		merged.SliceCenter = slice
+
+		if sliceScale ~= nil then
+			merged.SliceScale = sliceScale
+		end
 
 		return e("ImageLabel", merged, props.children)
 	end
@@ -63,12 +67,46 @@ function UiArt.Plate(props: SurfaceProps)
 	return surface(HudArt.PLATE, HudArt.PLATE_SLICE, props)
 end
 
+--- The big riveted frame as the panel HOST rather than an underlay - for
+--- AutomaticSize panels, where a scale-sized underlay child inflates the
+--- auto-size into a screen-height void (measured live twice: the roster,
+--- then the inspector). The image IS the panel, so it tracks whatever
+--- height the content resolves. No interior texture for the same reason.
+function UiArt.Frame(props: SurfaceProps)
+	return surface(HudArt.FRAME, HudArt.FRAME_SLICE, props, 0.18)
+end
+
+--- A generated interior weave for a panel's flat centre, or nil when the
+--- texture id is missing. A child of the art element (never a sibling in
+--- a layout - see the rule in PlayerRoster) so it always sits behind the
+--- content and inside the frame's border.
+function UiArt.texture(name: string, transparency: number?, inset: number?, zindex: number?)
+	local id = HudArt.texture(name)
+
+	if id == "" then
+		return nil
+	end
+
+	local pad = inset or 0
+
+	return e("ImageLabel", {
+		Position = UDim2.fromOffset(pad, pad),
+		Size = UDim2.new(1, -pad * 2, 1, -pad * 2),
+		BackgroundTransparency = 1,
+		Image = id,
+		ScaleType = Enum.ScaleType.Crop,
+		ImageTransparency = transparency or 0.45,
+		ZIndex = zindex or 0,
+	})
+end
+
 --- The big panel skin, as a fill-parent underlay: mount FIRST inside any
 --- panel whose background should be the riveted frame, with the panel
 --- itself left transparent. An underlay rather than the host, because
 --- most panels are CanvasGroups (UiFx.PopIn) and a CanvasGroup cannot be
---- an ImageLabel.
-function UiArt.frameUnderlay()
+--- an ImageLabel. `textureName` names a HudArt.TEXTURES weave to lay
+--- into the flat centre.
+function UiArt.frameUnderlay(textureName: string?)
 	if HudArt.FRAME == "" then
 		return e("Frame", {
 			Size = UDim2.fromScale(1, 1),
@@ -89,6 +127,8 @@ function UiArt.frameUnderlay()
 		SliceCenter = HudArt.FRAME_SLICE,
 		SliceScale = 0.18,
 		ZIndex = 0,
+	}, {
+		texture = if textureName ~= nil then UiArt.texture(textureName, 0.45, 14) else nil,
 	})
 end
 
