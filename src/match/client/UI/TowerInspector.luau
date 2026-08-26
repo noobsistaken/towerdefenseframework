@@ -25,6 +25,7 @@ local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local Theme = require(ReplicatedStorage.Shared.Theme)
@@ -196,9 +197,10 @@ type ActionProps = {
 	layoutOrder: number,
 	onActivated: () -> (),
 	--- Both present only on the button that reveals the preview panel. The
-	--- other buttons render exactly as before.
+	--- other buttons render exactly as before. `glow` lights the stroke -
+	--- declared, not tweened: React owns it alone, so it can never linger.
 	onHover: ((hovering: boolean) -> ())?,
-	glowRef: { current: UIStroke? }?,
+	glow: boolean?,
 }
 
 local function ActionButton(props: ActionProps)
@@ -229,22 +231,14 @@ local function ActionButton(props: ActionProps)
 			onHover(false)
 		end
 
-		-- AutoButtonColor is deliberately left at its default. The engine tint
-		-- is the only press feedback this button has, and it is the one button
-		-- here that spends money; the stroke is added to it, not swapped for it.
-		--
 		-- Off-white rather than the accent, because the button's own fill IS
 		-- the accent when the upgrade is affordable - an accent stroke would be
 		-- brightest on the state where the button cannot be pressed.
-		--
-		-- Every prop here is constant, so React writes them once at mount and
-		-- never again, leaving Transparency ours to animate. See Motion.luau.
 		children.glow = e("UIStroke", {
-			ref = props.glowRef,
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = Theme.TEXT,
 			Thickness = 1.5,
-			Transparency = 1,
+			Transparency = if props.glow then 0.25 else 1,
 		})
 	end
 
@@ -562,18 +556,6 @@ local function statText(value: number): string
 	return string.format("%g", math.round(value * 10) / 10)
 end
 
---- Fades the upgrade preview in while the UPGRADE button is hovered.
----
---- FADE, not a height wipe. The panel keeps its full layout footprint whether
---- shown or hidden, so the shell's height never changes and the UPGRADE button
---- cannot move out from under the cursor. A wipe would shorten the shell,
---- shift the button down, fire MouseLeave, hide the panel, move the button
---- back under the cursor - a flicker loop, at whatever rate the tween runs.
----
---- GroupTransparency is declared as a CONSTANT 1 on the CanvasGroup, so React
---- writes it once at mount and never again. That gives the correct hidden
---- initial state without an imperative first paint, and leaves the property
---- free to animate. See the rule in Motion.luau.
 --- Fades and lifts the whole inspector into place when a tower is selected.
 ---
 --- Keyed on the tower, so clicking a DIFFERENT tower replays it - which is the
@@ -616,76 +598,6 @@ local function useSelectionEntrance(towerId: number?): { current: CanvasGroup? }
 	return shellRef
 end
 
-local function useHoverReveal(
-	towerId: number?,
-	hasPreview: boolean
-): ({ current: CanvasGroup? }, { current: UIStroke? }, (boolean) -> ())
-	local previewRef = React.useRef(nil :: CanvasGroup?)
-	local glowRef = React.useRef(nil :: UIStroke?)
-	local previewTween = React.useRef(nil :: Motion.Handle)
-	local glowTween = React.useRef(nil :: Motion.Handle)
-
-	local setHovered = React.useCallback(function(hovering: boolean)
-		local preview = previewRef.current
-		local glow = glowRef.current
-
-		if preview ~= nil then
-			previewTween.current = Motion.retarget(
-				previewTween.current,
-				preview,
-				Theme.MOTION_REVEAL,
-				{ GroupTransparency = if hovering then 0 else 1 }
-			)
-		end
-
-		if glow ~= nil then
-			glowTween.current = Motion.retarget(
-				glowTween.current,
-				glow,
-				Theme.MOTION_QUICK,
-				{ Transparency = if hovering then 0.25 else 1 }
-			)
-		end
-	end, {})
-
-	-- Keyed on hasPreview as well as the tower, and that second key is not
-	-- decoration. Upgrading to max level unmounts BOTH animated instances
-	-- while towerId stays the same, so a tower-only key would never re-run and
-	-- would leave live tweens writing to destroyed instances.
-	--
-	-- Selecting a different tower is the other case: React reuses the same
-	-- button and CanvasGroup, so MouseLeave never fires and the panel would
-	-- stay visible on a tower the cursor is nowhere near.
-	React.useEffect(function(): () -> ()
-		local preview = previewRef.current
-		local glow = glowRef.current
-
-		Motion.stop(previewTween.current)
-		Motion.stop(glowTween.current)
-		previewTween.current = nil
-		glowTween.current = nil
-
-		if preview ~= nil then
-			preview.GroupTransparency = if HOVER_AVAILABLE then 1 else 0
-		end
-
-		if glow ~= nil then
-			glow.Transparency = 1
-		end
-
-		return function()
-			Motion.stop(previewTween.current)
-			Motion.stop(glowTween.current)
-			previewTween.current = nil
-			glowTween.current = nil
-		end
-		-- Numbers only: the dependency array is homogeneous, so the boolean
-		-- is carried as 1/0 rather than as itself.
-	end, { towerId or 0, if hasPreview then 1 else 0 })
-
-	return previewRef, glowRef, setHovered
-end
-
 local function TowerInspector()
 	local selectedId = useAtom(atoms.selectedTowerId)
 	local cash = useAtom(atoms.cash)
@@ -708,14 +620,17 @@ local function TowerInspector()
 		if level ~= nil then level.splashRadius else nil
 	)
 
-	-- Whether a preview will render at all, computed here because the hook
-	-- below has to be called before any early return.
-	local hasPreview = info ~= nil
-		and definition ~= nil
-		and info.ownerUserId == localPlayer.UserId
-		and Towers.levelAt(definition, info.level + 1) ~= nil
+	-- Whether the NEXT-LEVEL preview is showing. Plain state, and the
+	-- preview MOUNTS only while true: an unmounted panel cannot linger,
+	-- which is the whole fix over the old tween-visibility approach.
+	local previewOpen, setPreviewOpen = React.useState(false)
+	local peekThread = React.useRef(nil :: thread?)
 
-	local previewRef, glowRef, setHovered = useHoverReveal(if info ~= nil then info.towerId else nil, hasPreview)
+	-- A fresh selection starts with the preview closed.
+	React.useEffect(function()
+		setPreviewOpen(false)
+	end, { if info ~= nil then info.towerId else 0 })
+
 	local shellRef = useSelectionEntrance(if info ~= nil then info.towerId else nil)
 
 	if info == nil or definition == nil or level == nil then
@@ -807,13 +722,33 @@ local function TowerInspector()
 				color = if cash >= upgradeCost then Theme.ACCENT else Theme.DISABLED,
 				textColor = if cash >= upgradeCost then Theme.INVERSE else Theme.MUTED,
 				layoutOrder = 4,
-				onHover = if HOVER_AVAILABLE then setHovered else nil,
-				glowRef = if HOVER_AVAILABLE then glowRef else nil,
+				onHover = if HOVER_AVAILABLE
+					then function(hovering: boolean)
+						setPreviewOpen(hovering)
+					end
+					else nil,
+				glow = previewOpen,
 				onActivated = function()
 					-- Fired regardless of the local affordability read. The
 					-- server is the authority; this button being dark is a
 					-- hint, not a lock.
 					Net.RequestUpgradeTower.Fire({ towerId = info.towerId })
+
+					-- No hover on touch, so a tap PEEKS the preview for a
+					-- few seconds instead - the "or click" half of the rule.
+					if not HOVER_AVAILABLE then
+						local previous = peekThread.current
+
+						if previous ~= nil then
+							task.cancel(previous)
+						end
+
+						setPreviewOpen(true)
+						peekThread.current = task.delay(3, function()
+							peekThread.current = nil
+							setPreviewOpen(false)
+						end)
+					end
 				end,
 			})
 		else
@@ -872,11 +807,12 @@ local function TowerInspector()
 		})
 	end
 
-	-- Second panel: what the money actually buys. Owner only, and only when
-	-- there IS a next level - at max there is nothing to preview.
+	-- Second panel: what the money actually buys. Owner only, only when
+	-- there IS a next level - and only while hovering (or peeking) the
+	-- UPGRADE button. Mounted on demand: what does not exist cannot stick.
 	local upgradePanel = nil
 
-	if isOwner and nextLevel ~= nil then
+	if isOwner and nextLevel ~= nil and previewOpen then
 		local rows: { [string]: any } = {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER }),
 			padding = e("UIPadding", {
@@ -934,22 +870,18 @@ local function TowerInspector()
 			})
 		end
 
-		-- A CanvasGroup rather than a Frame purely for GroupTransparency: it
-		-- fades the panel and everything in it as one surface, where fading a
-		-- Frame would leave every label inside it at full opacity.
-		--
-		-- Same size, same children, same layout slot as the Frame it replaces,
-		-- so the reveal costs no reflow.
-		upgradePanel = e("CanvasGroup", {
-			ref = previewRef,
-			Size = UDim2.fromScale(1, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.PANEL,
-			BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
-			BorderSizePixel = 0,
-			GroupTransparency = if HOVER_AVAILABLE then 1 else 0,
-			LayoutOrder = 1,
-		}, rows)
+		-- Enters through the shared PopIn, so appearing reads as the same
+		-- motion every other panel uses.
+		upgradePanel = e(UiFx.PopIn, {
+			frame = {
+				Size = UDim2.fromScale(1, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				BackgroundColor3 = Theme.PANEL,
+				BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+				LayoutOrder = 1,
+			},
+			children = rows,
+		})
 	end
 
 	-- Transparent shell so the two panels stack with a real gap rather than

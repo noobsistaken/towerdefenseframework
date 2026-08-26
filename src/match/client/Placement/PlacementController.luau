@@ -418,7 +418,11 @@ function PlacementController.start()
 			then
 				onPrimaryDown()
 			elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-				cancel()
+				-- Right-click is ALSO how the camera rotates, so it must never
+				-- close the inspector - a player orbiting to look at their
+				-- tower kept losing the panel. It only pockets a HELD tower;
+				-- Escape remains the full cancel.
+				atoms.selectedTowerDefId(nil)
 			end
 		end),
 		"Disconnect"
