@@ -113,6 +113,7 @@ janitor:Add(
 			wavesCleared = value.wavesCleared,
 			coinsAwarded = value.coinsAwarded,
 			xpAwarded = value.xpAwarded,
+			tokensAwarded = value.tokensAwarded,
 		})
 
 		SoundController.play(if value.won then "Victory" else "Defeat")

@@ -205,6 +205,62 @@ function LobbyBuilder.buildZones(parent: Instance): ZoneBoards
 	return boards
 end
 
+--- Colour per station, so the two read differently from across the room.
+local STATION_COLORS: { [string]: Color3 } = {
+	Gacha = Color3.fromRGB(214, 172, 84),
+	Reroll = Color3.fromRGB(158, 110, 208),
+}
+
+--- The service stations, from the same shared layout the client's panel
+--- trigger reads - build and detection reading one table, like the zones.
+function LobbyBuilder.buildStations(parent: Instance)
+	local folder = Instance.new("Folder")
+	folder.Name = "Stations"
+	folder.Parent = parent
+
+	for _, station in LobbyZones.stations() do
+		local color = STATION_COLORS[station.id] or PAD_FALLBACK
+
+		local pad = newPart(
+			`Station_{station.id}`,
+			Vector3.new(station.size.X, 0.4, station.size.Z),
+			CFrame.new(station.center.X, 0.2, station.center.Z),
+			color,
+			folder
+		)
+		pad.CanQuery = false
+		pad.Material = Enum.Material.Neon
+
+		-- A plinth behind the pad, so the station exists in silhouette and
+		-- not only as floor paint.
+		newPart(
+			`StationPlinth_{station.id}`,
+			Vector3.new(6, 7, 3),
+			CFrame.new(station.center.X, 3.5, station.center.Z + station.size.Z / 2 + 2.5),
+			color,
+			folder
+		)
+
+		local sign = Instance.new("BillboardGui")
+		sign.Name = "Sign"
+		sign.Size = UDim2.fromScale(12, 3)
+		sign.StudsOffsetWorldSpace = Vector3.new(0, 9, 0)
+		sign.MaxDistance = 200
+		sign.Adornee = pad
+		sign.Parent = pad
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.Text = station.displayName
+		label.TextScaled = true
+		label.TextColor3 = color
+		label.Font = Enum.Font.GothamBold
+		label.TextStrokeTransparency = 0.5
+		label.Parent = sign
+	end
+end
+
 --- Repaints every zone board with its live vote count, marking the winner.
 --- Server-side text on server-built boards: it replicates for free, and the
 --- client needs no vote UI at all.

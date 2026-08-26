@@ -151,6 +151,8 @@ end
 local lobby = LobbyBuilder.build()
 local zoneBoards = LobbyBuilder.buildZones(lobby.folder)
 
+LobbyBuilder.buildStations(lobby.folder)
+
 local controller = LobbyController.new()
 
 -- The world's vote boards repaint on every tally change. Wired here rather

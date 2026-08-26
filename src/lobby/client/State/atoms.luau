@@ -41,6 +41,18 @@ atoms.difficultyTallies = Charm.atom({} :: { Tally })
 atoms.winningMapId = Charm.atom("")
 atoms.winningDifficultyId = Charm.atom("")
 
+--- This player's collection, fetched via GetLobbyProfile and PATCHED by
+--- the roll replies (which carry the post-transaction balances precisely so
+--- the display never has to derive money locally).
+atoms.coins = Charm.atom(0)
+atoms.rerollTokens = Charm.atom(0)
+atoms.unlockedTowers = Charm.atom({} :: { string })
+--- towerId -> traitId. Flat pairs on the wire, a map here.
+atoms.traits = Charm.atom({} :: { [string]: string })
+--- False until the first GetLobbyProfile answer, so the UI can tell "no
+--- coins" from "not loaded yet" instead of flashing a zero balance.
+atoms.profileLoaded = Charm.atom(false)
+
 -- ---------------------------------------------------------------------------
 -- Local intent. Never authoritative.
 --
@@ -55,5 +67,9 @@ atoms.myDifficultyVote = Charm.atom(nil :: string?)
 
 --- Why matchmaking failed, if it did. Cleared on the next state change.
 atoms.failureReason = Charm.atom(nil :: string?)
+
+--- Which service station the local character stands in, from the shared
+--- layout. Drives which panel is open; walking away closes it.
+atoms.activeStation = Charm.atom(nil :: string?)
 
 return atoms

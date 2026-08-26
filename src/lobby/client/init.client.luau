@@ -7,9 +7,10 @@
 	  2. Bind the networking schema's client handlers.
 	  3. Mount the React tree.
 
-	The net handlers below are the ONLY writers to the replicated atoms.
-	Keeping every write in one place is what makes "the client holds a replica"
-	checkable by reading a single file rather than auditing the whole tree.
+	The net handlers below write the replicated atoms; the one sanctioned
+	exception is the gacha panels in LobbyUI, which patch the profile atoms
+	with balances the server just RETURNED from a funct call - still server
+	data, just arriving as a reply rather than an event.
 ]]
 
 local Players = game:GetService("Players")
@@ -17,6 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
+local LobbyZones = require(ReplicatedStorage.Shared.LobbyZones)
 local Net = require(ReplicatedStorage.Net)
 local Places = require(ReplicatedStorage.Shared.Config.Places)
 local React = require(ReplicatedStorage.Packages.React)
@@ -74,6 +76,58 @@ janitor:Add(
 		atoms.isReady(false)
 	end),
 	true
+)
+
+-- One-shot profile fetch. The reply is the whole collection; afterwards the
+-- roll replies keep the hot numbers current (see LobbyUI).
+task.spawn(function()
+	local profile = Net.GetLobbyProfile.Call({})
+
+	atoms.coins(profile.coins)
+	atoms.rerollTokens(profile.rerollTokens)
+	atoms.unlockedTowers(profile.unlockedTowers)
+
+	local map: { [string]: string } = {}
+
+	for _, pair in profile.traits do
+		map[pair.towerId] = pair.traitId
+	end
+
+	atoms.traits(map)
+	atoms.profileLoaded(true)
+end)
+
+-- ---------------------------------------------------------------------------
+-- Stations
+--
+-- The client tracks which service pad its OWN character stands on, from the
+-- same shared layout the server built the pads from. Purely presentational:
+-- the panel it opens sends requests the server re-validates, so lying about
+-- position here earns nothing.
+-- ---------------------------------------------------------------------------
+
+local SCAN_INTERVAL = 0.15
+local scanAccumulator = 0
+
+janitor:Add(
+	RunService.Heartbeat:Connect(function(deltaTime: number)
+		scanAccumulator += deltaTime
+
+		if scanAccumulator < SCAN_INTERVAL then
+			return
+		end
+
+		scanAccumulator = 0
+
+		local character = localPlayer.Character
+		local root = if character ~= nil then character.PrimaryPart else nil
+		local station = if root ~= nil then LobbyZones.resolveStation(root.Position) else nil
+
+		if station ~= atoms.activeStation() then
+			atoms.activeStation(station)
+		end
+	end),
+	"Disconnect"
 )
 
 -- ---------------------------------------------------------------------------

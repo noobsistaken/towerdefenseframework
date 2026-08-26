@@ -43,6 +43,22 @@ LobbyZones.PAD_SIZE = Vector3.new(6, 0, 6)
 local PAD_ROW_LOCAL_Z = 7
 local PAD_GAP = 3
 
+--- The walk-up service stations - gacha and trait reroll - on the SOUTH
+--- half, opposite the vote zones, so rolling and voting never share floor.
+--- Same contract as the zones: this module owns where they ARE, the builder
+--- draws them from this data, and the client opens a panel when the local
+--- character stands inside one - all three reading one layout.
+LobbyZones.STATION_SIZE = Vector3.new(18, 0, 12)
+local STATION_ROW_Z = 46
+local STATION_X = 34
+
+export type Station = {
+	id: string,
+	displayName: string,
+	center: Vector3,
+	size: Vector3,
+}
+
 export type Pad = {
 	difficultyId: string,
 	center: Vector3,
@@ -91,6 +107,26 @@ function LobbyZones.zones(): { Zone }
 	return zones
 end
 
+--- The station layout. Ids are wire-stable: the client shows a panel per
+--- id and the server needs no station validation at all - the functs guard
+--- themselves, and standing here is theatre rather than authority.
+function LobbyZones.stations(): { Station }
+	return {
+		{
+			id = "Gacha",
+			displayName = "TROOP GACHA",
+			center = Vector3.new(-STATION_X, 0, STATION_ROW_Z),
+			size = LobbyZones.STATION_SIZE,
+		},
+		{
+			id = "Reroll",
+			displayName = "TRAIT REROLL",
+			center = Vector3.new(STATION_X, 0, STATION_ROW_Z),
+			size = LobbyZones.STATION_SIZE,
+		},
+	}
+end
+
 local function insideXZ(position: Vector3, center: Vector3, size: Vector3): boolean
 	return math.abs(position.X - center.X) <= size.X / 2 and math.abs(position.Z - center.Z) <= size.Z / 2
 end
@@ -114,6 +150,18 @@ function LobbyZones.resolve(position: Vector3): (string?, string?)
 	end
 
 	return nil, nil
+end
+
+--- Which station `position` stands in, or nil. XZ-only like resolve, for
+--- the same jumping-player reason.
+function LobbyZones.resolveStation(position: Vector3): string?
+	for _, station in LobbyZones.stations() do
+		if insideXZ(position, station.center, station.size) then
+			return station.id
+		end
+	end
+
+	return nil
 end
 
 return LobbyZones

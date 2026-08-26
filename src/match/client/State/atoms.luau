@@ -38,6 +38,7 @@ export type MatchResult = {
 	wavesCleared: number,
 	coinsAwarded: number,
 	xpAwarded: number,
+	tokensAwarded: number,
 }
 
 --- The last MatchEnded payload, or nil while a run is still going.

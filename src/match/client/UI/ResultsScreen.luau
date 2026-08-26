@@ -81,7 +81,7 @@ local function ResultsScreen()
 	return e("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(460, 172),
+		Size = UDim2.fromOffset(560, 172),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = 0.05,
 		BorderSizePixel = 0,
@@ -122,6 +122,14 @@ local function ResultsScreen()
 			value = `+{result.xpAwarded}`,
 			color = Theme.ACCENT,
 			x = 300,
+		}),
+		-- Spent at the lobby's reroll station; earning them HERE is what makes
+		-- the results screen the bridge between the two places.
+		tokens = e(Stat, {
+			caption = "REROLL TOKENS",
+			value = `+{result.tokensAwarded}`,
+			color = Color3.fromRGB(158, 110, 208),
+			x = 420,
 		}),
 		-- Shown so the number means something. Level is derived from total XP
 		-- on the server, so this is only ever a preview of the gain.

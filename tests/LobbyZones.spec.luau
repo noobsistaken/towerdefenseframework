@@ -64,6 +64,45 @@ describe("LobbyZones.zones", function()
 	end)
 end)
 
+describe("LobbyZones.stations", function()
+	it("keeps stations clear of every vote zone and of each other", function()
+		-- A footprint shared with a zone would make walking up to roll also
+		-- cast a map vote, silently.
+		local stations = LobbyZones.stations()
+
+		expect(#stations).toBe(2)
+
+		for i = 1, #stations do
+			for _, zone in LobbyZones.zones() do
+				local a = stations[i]
+				local gapX = math.abs(a.center.X - zone.center.X) - (a.size.X + zone.size.X) / 2
+				local gapZ = math.abs(a.center.Z - zone.center.Z) - (a.size.Z + zone.size.Z) / 2
+
+				expect(gapX > 0 or gapZ > 0).toBe(true)
+			end
+
+			for j = i + 1, #stations do
+				local a, b = stations[i], stations[j]
+				local gapX = math.abs(a.center.X - b.center.X) - (a.size.X + b.size.X) / 2
+				local gapZ = math.abs(a.center.Z - b.center.Z) - (a.size.Z + b.size.Z) / 2
+
+				expect(gapX > 0 or gapZ > 0).toBe(true)
+			end
+		end
+	end)
+
+	it("resolves a station centre to its id and everywhere else to nil", function()
+		for _, station in LobbyZones.stations() do
+			expect(LobbyZones.resolveStation(station.center)).toBe(station.id)
+		end
+
+		expect(LobbyZones.resolveStation(Vector3.new(0, 0, 1000))).toBeNil()
+		-- The spawn pad must never sit inside a station: standing where you
+		-- appear should not open a shop.
+		expect(LobbyZones.resolveStation(Vector3.new(0, 0, 30))).toBeNil()
+	end)
+end)
+
 describe("LobbyZones.resolve", function()
 	it("resolves a zone centre to its map and no difficulty", function()
 		for _, zone in LobbyZones.zones() do
