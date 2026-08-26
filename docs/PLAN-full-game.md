@@ -4,6 +4,15 @@ Written 2026-08-26 night, for the next session. Ordered by dependency, not
 ambition - the bug first, then the systems the content hangs off, then the
 content, because 20 troops rolled through a gacha need the gacha to exist.
 
+**FRAMING, from Alexei: this is a PORTFOLIO PIECE, not a live game.** That
+recolours the priorities: demonstrable systems and clean inspectable code
+over retention tuning; visible variety over meta balance; the rarity ladder
+and gacha exist to SHOW the craft (data-driven content, server authority,
+tested economy) rather than to monetise. Concretely - the paid-odds
+compliance note in section 2 becomes moot, screenshots and a strong README
+become deliverables, and "does this read impressively in 10 minutes of
+play" beats "is wave 60 balanced".
+
 ## 0. BUG: zombies sunk in the ground (diagnosed, not yet fixed)
 
 From the published-game screenshot: rigs buried to the waist in the walkway.
@@ -56,8 +65,15 @@ tests green):
   hooks (damage mult, range mult, fireRate mult, splash bonus, bounty
   mult). Effects apply in BaseTower stat reads - ONE place, like status
   multipliers on enemies.
-- Gacha pool config: rarity weights per tower. Server-rolled ONLY (server
-  authority, D-rules), results through a new zap message pair.
+- **Rarity ladder** (per Alexei): Common, Uncommon, Rare, Epic, Legendary,
+  Mythic, plus one chase tier above - recommend **Secret** (genre-native
+  for Roblox TD; alternatives: Exotic, Celestial). Defined once in
+  Config/Rarity.luau: id, order, display name, colour, gacha weight. The
+  colour becomes a Theme-adjacent token the shop, gacha UI and inspector
+  all read, so a rarity is one config row and every surface follows -
+  which is exactly the data-driven story the portfolio wants to tell.
+- Gacha pool config: weight = the tower's rarity's weight. Server-rolled
+  ONLY (server authority, D-rules), results through a new zap message pair.
 - Rates/pity: pick sane defaults (advertise odds - Roblox requires
   disclosed paid-random odds if Robux ever touches it; free-currency-only
   for now keeps that moot, note it).
@@ -70,7 +86,9 @@ strip scripts, arm, muzzle tag). Balance: extend Scaling.spec-style
 assertions - every tower's DPS-per-cost inside a band, so 26 towers stay
 comparable by test rather than by feel. Realistic sequencing: 5 archetypes
 x variants (sniper/splash/DoT/support/economy), not 20 bespoke mechanics -
-behaviour modules only where config cannot express (D4). Rigs: batch-audit
+behaviour modules only where config cannot express (D4). Distribute the 26
+across the rarity ladder pyramid-style (many commons, one or two Secrets);
+a variant's tier tracks its power so rarity reads as meaningful. Rigs: batch-audit
 20 store rigs in one quarantine pass; expect ~1/3 rejects.
 
 ## 4. Maps x2-3
