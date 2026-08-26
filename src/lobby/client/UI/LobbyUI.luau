@@ -23,6 +23,7 @@ local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
 local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
+local PlayerRoster = require(ReplicatedStorage.Shared.PlayerRoster)
 local Net = require(ReplicatedStorage.Net)
 local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
 local React = require(ReplicatedStorage.Packages.React)
@@ -113,6 +114,10 @@ end
 -- ---------------------------------------------------------------------------
 -- HUD
 -- ---------------------------------------------------------------------------
+
+local function Roster()
+	return e(PlayerRoster.Panel, { roster = useAtom(atoms.roster) })
+end
 
 local function HudIdentity()
 	local players = useAtom(atoms.playerCount)
@@ -1516,6 +1521,7 @@ local function LobbyUI()
 	}, {
 		identity = e(HudIdentity),
 		wallet = e(HudWallet),
+		rosterPanel = e(Roster),
 		loadoutButton = e(LoadoutButton),
 		failure = e(FailureToast),
 		game = e(GamePanel),

@@ -61,6 +61,24 @@ type JanitorInstance = typeof(Janitor.new())
 local profiles: { [Player]: Profile } = {}
 local janitors: { [Player]: JanitorInstance? } = {}
 
+--- Everyone here, with the level their profile carries (0 while loading -
+--- the next broadcast corrects it). Fired on join, leave, and profile load.
+local function broadcastRoster()
+	local entries = {}
+
+	for _, player in Players:GetPlayers() do
+		local profile = profiles[player]
+
+		table.insert(entries, {
+			userId = player.UserId,
+			name = player.DisplayName,
+			level = if profile ~= nil then profile.Data.Level else 0,
+		})
+	end
+
+	Net.RosterChanged.FireAll({ entries = entries })
+end
+
 -- ---------------------------------------------------------------------------
 -- Match
 --
@@ -213,6 +231,7 @@ local function onPlayerAdded(player: Player)
 	janitors[player] = janitor
 
 	match:addPlayer(player)
+	broadcastRoster()
 end
 
 --- How long the snapshot will wait for a profile before answering anyway.
@@ -265,6 +284,8 @@ local function onPlayerRemoving(player: Player)
 		profile:EndSession()
 		profiles[player] = nil
 	end
+
+	broadcastRoster()
 end
 
 for _, player in Players:GetPlayers() do

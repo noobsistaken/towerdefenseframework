@@ -461,6 +461,23 @@ funct AdminGrant = {
 	},
 }
 
+-- Everyone on this server, for the custom player list. Fired by BOTH
+-- places on join, leave, and when a late-loading profile brings its level.
+-- Whole-list rather than deltas, same reasoning as the vote tallies: a
+-- server holds at most a handful of players and this fires rarely.
+event RosterChanged = {
+	from: Server,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		entries: struct {
+			userId: f64,
+			name: string.utf8(..32),
+			level: u16,
+		}[0..16],
+	},
+}
+
 -- The teleport failed, or was never attempted because Config/Places.luau
 -- still has placeholder ids. Carries a human-readable reason because there is
 -- nothing an exploiter can do with it and a silent failure here is

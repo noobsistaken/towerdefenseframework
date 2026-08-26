@@ -42,6 +42,12 @@ local janitor = Janitor.new()
 -- The hub soundtrack, quiet and looping, from the first frame.
 SoundKit.playMusic(Sounds.LOBBY_MUSIC)
 
+-- The custom player list replaces the Roblox one. pcall because the core
+-- gui registry can refuse very early in a session's life.
+pcall(function()
+	game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+end)
+
 -- ---------------------------------------------------------------------------
 -- Networking
 -- ---------------------------------------------------------------------------
@@ -66,6 +72,13 @@ janitor:Add(
 		atoms.difficultyTallies(value.difficultyTallies)
 		atoms.winningMapId(value.winningMapId)
 		atoms.winningDifficultyId(value.winningDifficultyId)
+	end),
+	true
+)
+
+janitor:Add(
+	Net.RosterChanged.On(function(value)
+		atoms.roster(value.entries)
 	end),
 	true
 )

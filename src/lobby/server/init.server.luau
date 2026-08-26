@@ -65,6 +65,24 @@ local janitors: { [Player]: JanitorInstance? } = {}
 --- field to tamper with.
 local rollRng = Random.new()
 
+--- Everyone here, with the level their profile carries (0 while loading -
+--- the next broadcast corrects it). Fired on join, leave, and profile load.
+local function broadcastRoster()
+	local entries = {}
+
+	for _, player in Players:GetPlayers() do
+		local profile = profiles[player]
+
+		table.insert(entries, {
+			userId = player.UserId,
+			name = player.DisplayName,
+			level = if profile ~= nil then profile.Data.Level else 0,
+		})
+	end
+
+	Net.RosterChanged.FireAll({ entries = entries })
+end
+
 -- ---------------------------------------------------------------------------
 -- Data sessions
 --
@@ -122,6 +140,9 @@ local function onPlayerAdded(player: Player)
 
 	profiles[player] = profile
 	janitors[player] = janitor
+
+	-- The roster showed level 0 for this player until now.
+	broadcastRoster()
 end
 
 local function onPlayerRemoving(player: Player)
@@ -176,11 +197,13 @@ end
 Players.PlayerAdded:Connect(onPlayerAdded)
 Players.PlayerAdded:Connect(function(player: Player)
 	controller:addPlayer(player)
+	broadcastRoster()
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
 	controller:removePlayer(player)
 	onPlayerRemoving(player)
+	broadcastRoster()
 end)
 
 -- ---------------------------------------------------------------------------

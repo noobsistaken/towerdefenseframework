@@ -57,6 +57,9 @@ atoms.traits = Charm.atom({} :: { [string]: string })
 --- UI can tell "no coins" from "not loaded yet".
 atoms.profileLoaded = Charm.atom(false)
 
+--- Everyone on this server, for the custom player list.
+atoms.roster = Charm.atom({} :: { { userId: number, name: string, level: number } })
+
 -- ---------------------------------------------------------------------------
 -- Local intent. Never authoritative.
 -- ---------------------------------------------------------------------------

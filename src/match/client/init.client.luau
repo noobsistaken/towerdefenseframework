@@ -39,7 +39,9 @@ local Wire = require(ReplicatedStorage.Shared.Wire)
 local Bursts = require(script.Effects.Bursts)
 local EnemyVisuals = require(script.Effects.EnemyVisuals)
 local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
+local PlayerRoster = require(ReplicatedStorage.Shared.PlayerRoster)
 local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local useAtom = require(ReplicatedStorage.Shared.useAtom)
 local Hud = require(script.UI.Hud)
 local PlacementController = require(script.Placement.PlacementController)
 local SoundController = require(script.Audio.SoundController)
@@ -120,6 +122,13 @@ janitor:Add(
 		})
 
 		SoundController.play(if value.won then "Victory" else "Defeat")
+	end),
+	true
+)
+
+janitor:Add(
+	Net.RosterChanged.On(function(value)
+		atoms.roster(value.entries)
 	end),
 	true
 )
@@ -223,6 +232,16 @@ janitor:Add(PlacementController.stop, true)
 -- the setting lying about its own name.
 SoundController.playMusic(Sounds.MATCH_MUSIC)
 
+-- The custom player list replaces the Roblox one. pcall because the core
+-- gui registry can refuse very early in a session's life.
+pcall(function()
+	game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+end)
+
+local function RosterMount()
+	return React.createElement(PlayerRoster.Panel, { roster = useAtom(atoms.roster) })
+end
+
 -- Health bars and damage numbers. Driven entirely by the Health attribute on
 -- each enemy part, so this needs no network messages of its own (D5).
 janitor:Add(EnemyVisuals.start(), true)
@@ -245,6 +264,7 @@ local root = ReactRoblox.createRoot(Instance.new("Folder"))
 root:render(ReactRoblox.createPortal(
 	React.createElement(React.Fragment, nil, {
 		hud = React.createElement(Hud),
+		roster = React.createElement(RosterMount),
 		-- F2. Renders only for Config/Admins.luau accounts; the server
 		-- re-checks regardless. Cash exists only here, so it is offered.
 		admin = React.createElement(AdminConsole, { showCash = true, onGranted = nil }),
