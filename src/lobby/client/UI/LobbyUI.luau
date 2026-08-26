@@ -30,6 +30,7 @@ local React = require(ReplicatedStorage.Packages.React)
 local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local TraitArt = require(ReplicatedStorage.Shared.Config.TraitArt)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
 local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
@@ -76,41 +77,176 @@ local function rarityColor(rarityId: string): Color3
 end
 
 -- ---------------------------------------------------------------------------
--- Reveal animation
+-- Trait spinner
 --
--- Both roll buttons share one shape: the reply is already in hand, and the
--- suspense is manufactured on top of it - a fast cycle of names in their
--- rarity colours that slows nothing down server-side and cannot desync,
--- because the outcome was decided before the first flicker.
+-- The reroll's slot reel: the reply is already in hand, and the suspense
+-- is manufactured on top of it - a column of trait icons streams past a
+-- window and decelerates onto the trait the server already rolled, so
+-- nothing can desync. Built imperatively inside an effect (the same
+-- pattern as the viewport portraits): every instance is created and
+-- destroyed by the effect, so React and the reel never share a pen.
 -- ---------------------------------------------------------------------------
 
-export type Reveal = {
-	text: string,
-	color: Color3,
+local spinnerRng = Random.new()
+
+local SPIN_ENTRY = 72
+local SPIN_WINDOW = 96
+local SPIN_FILLER = 14
+local SPIN_SECONDS = 1.7
+
+export type SpinRequest = {
+	resultTraitId: string,
+	--- Changes every request, so back-to-back rerolls of the same trait
+	--- still restart the reel.
+	nonce: number,
 }
 
-local REVEAL_TICKS = 14
-local REVEAL_TICK_SECONDS = 0.07
+type SpinnerProps = {
+	spin: SpinRequest?,
+	onDone: () -> (),
+}
 
---- Runs the cycling reveal, then clears itself. Call from inside the roll
---- task, AFTER the reply arrives; `pick` supplies one random name+colour per
---- flicker frame.
-local function runReveal(setReveal: (Reveal?) -> (), pick: () -> Reveal)
-	for _ = 1, REVEAL_TICKS do
-		setReveal(pick())
-		task.wait(REVEAL_TICK_SECONDS)
+--- One reel slot: the trait's icon in a rarity-ringed circle.
+local function buildSlot(parent: Instance, traitId: string, order: number)
+	local slot = Instance.new("Frame")
+	slot.Size = UDim2.new(1, 0, 0, SPIN_ENTRY)
+	slot.Position = UDim2.fromOffset(0, (order - 1) * SPIN_ENTRY)
+	slot.BackgroundTransparency = 1
+
+	local definition = Traits.find(traitId)
+
+	local ring = Instance.new("Frame")
+	ring.AnchorPoint = Vector2.new(0.5, 0.5)
+	ring.Position = UDim2.fromScale(0.5, 0.5)
+	ring.Size = UDim2.fromOffset(64, 64)
+	ring.BackgroundTransparency = 1
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = if definition ~= nil then rarityColor(definition.rarity) else Theme.MUTED
+	stroke.Thickness = 2
+	stroke.Transparency = 0.35
+	stroke.Parent = ring
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = ring
+	ring.Parent = slot
+
+	local iconId = TraitArt.icon(traitId)
+
+	if iconId ~= "" then
+		local icon = Instance.new("ImageLabel")
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
+		icon.Size = UDim2.fromOffset(52, 52)
+		icon.BackgroundTransparency = 1
+		icon.Image = iconId
+		icon.Parent = slot
+	else
+		local letter = Instance.new("TextLabel")
+		letter.AnchorPoint = Vector2.new(0.5, 0.5)
+		letter.Position = UDim2.fromScale(0.5, 0.5)
+		letter.Size = UDim2.fromOffset(52, 52)
+		letter.BackgroundTransparency = 1
+		letter.Font = Theme.FONT
+		letter.Text = traitId:sub(1, 1)
+		letter.TextColor3 = if definition ~= nil then rarityColor(definition.rarity) else Theme.MUTED
+		letter.TextSize = 30
+		letter.Parent = slot
 	end
 
-	setReveal(nil)
+	slot.Parent = parent
 end
 
-local towerRng = Random.new()
+--- The reel window. Renders an empty clipping frame; the effect fills and
+--- animates it whenever a new spin request arrives.
+local function TraitSpinner(props: SpinnerProps)
+	local windowRef = React.useRef(nil :: Frame?)
 
-local function randomTraitReveal(): Reveal
-	local id = Traits.IDS[towerRng:NextInteger(1, #Traits.IDS)]
-	local definition = Traits.get(id)
+	React.useEffect(function(): () -> ()
+		local window = windowRef.current
+		local spin = props.spin
 
-	return { text = definition.displayName, color = rarityColor(definition.rarity) }
+		if window == nil or spin == nil then
+			return function() end
+		end
+
+		local TweenService = game:GetService("TweenService")
+
+		local column = Instance.new("Frame")
+		column.Size = UDim2.new(1, 0, 0, (SPIN_FILLER + 1) * SPIN_ENTRY)
+		column.BackgroundTransparency = 1
+
+		for order = 1, SPIN_FILLER do
+			buildSlot(column, Traits.IDS[spinnerRng:NextInteger(1, #Traits.IDS)], order)
+		end
+
+		buildSlot(column, spin.resultTraitId, SPIN_FILLER + 1)
+
+		-- Entry k sits centred in the window at y = -((k-1)*ENTRY + ENTRY/2
+		-- - WINDOW/2). Start on the first, decelerate onto the last.
+		local centreOn = function(k: number): number
+			return -((k - 1) * SPIN_ENTRY + SPIN_ENTRY / 2 - SPIN_WINDOW / 2)
+		end
+
+		column.Position = UDim2.fromOffset(0, centreOn(1))
+		column.Parent = window
+
+		SoundKit.play("Reroll")
+
+		local tween = TweenService:Create(
+			column,
+			TweenInfo.new(SPIN_SECONDS, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+			{ Position = UDim2.fromOffset(0, centreOn(SPIN_FILLER + 1)) }
+		)
+		tween:Play()
+
+		local alive = true
+		local flash = Instance.new("Frame")
+
+		local finish = task.delay(SPIN_SECONDS + 0.05, function()
+			if not alive then
+				return
+			end
+
+			-- The landing flash: a white ring pulse over the settled icon.
+			flash.AnchorPoint = Vector2.new(0.5, 0.5)
+			flash.Position = UDim2.fromScale(0.5, 0.5)
+			flash.Size = UDim2.fromOffset(64, 64)
+			flash.BackgroundColor3 = Color3.new(1, 1, 1)
+			flash.BackgroundTransparency = 0.35
+			flash.Parent = window
+
+			local flashCorner = Instance.new("UICorner")
+			flashCorner.CornerRadius = UDim.new(0.5, 0)
+			flashCorner.Parent = flash
+
+			SoundKit.play("EggReveal")
+			TweenService:Create(flash, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+
+			task.wait(0.4)
+
+			if alive then
+				props.onDone()
+			end
+		end)
+
+		return function()
+			alive = false
+			task.cancel(finish)
+			tween:Cancel()
+			column:Destroy()
+			flash:Destroy()
+		end
+	end, { if props.spin ~= nil then props.spin.nonce else 0 })
+
+	return e("Frame", {
+		ref = windowRef,
+		Position = UDim2.fromOffset(240, 192),
+		Size = UDim2.fromOffset(240, SPIN_WINDOW),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+	})
 end
 
 -- ---------------------------------------------------------------------------
@@ -1159,6 +1295,30 @@ type InventoryCellProps = {
 
 local function InventoryCell(props: InventoryCellProps)
 	local definition = Towers.find(props.towerId)
+	local viewportRef = React.useRef(nil :: ViewportFrame?)
+
+	-- The unit stands in its card - same builder as everywhere else.
+	React.useEffect(function(): () -> ()
+		local viewport = viewportRef.current
+
+		if viewport == nil or definition == nil then
+			return function() end
+		end
+
+		local camera = Instance.new("Camera")
+		camera.Parent = viewport
+		viewport.CurrentCamera = camera
+
+		local unit = UnitPreview.buildUnit(definition)
+		unit:PivotTo(CFrame.Angles(0, math.rad(25), 0))
+		unit.Parent = viewport
+		UnitPreview.frame(camera, unit, true, 0.78)
+
+		return function()
+			unit:Destroy()
+			camera:Destroy()
+		end
+	end, { props.towerId })
 
 	if definition == nil then
 		return nil
@@ -1177,7 +1337,7 @@ local function InventoryCell(props: InventoryCellProps)
 	end
 
 	return e("TextButton", {
-		Size = UDim2.fromOffset(150, 56),
+		Size = UDim2.fromOffset(110, 140),
 		BackgroundColor3 = Theme.RAISED,
 		BorderSizePixel = 0,
 		AutoButtonColor = true,
@@ -1194,17 +1354,28 @@ local function InventoryCell(props: InventoryCellProps)
 			Thickness = if props.picked then 2.5 else 1,
 			Transparency = if props.picked then 0 else 0.55,
 		}),
+		viewport = e("ViewportFrame", {
+			ref = viewportRef,
+			Position = UDim2.fromOffset(6, 6),
+			Size = UDim2.new(1, -12, 0, 84),
+			BackgroundTransparency = 1,
+			Ambient = Color3.fromRGB(185, 185, 195),
+			LightColor = Color3.fromRGB(255, 250, 240),
+			LightDirection = Vector3.new(-0.4, -1, -0.6),
+			ZIndex = 12,
+		}),
 		name = label({
-			Position = UDim2.fromOffset(0, 8),
-			Size = UDim2.new(1, 0, 0, 20),
+			Position = UDim2.fromOffset(2, 94),
+			Size = UDim2.new(1, -4, 0, 18),
 			Text = definition.displayName,
 			TextColor3 = rarityColor(definition.rarity),
-			TextSize = 14,
+			TextSize = 13,
+			TextTruncate = Enum.TextTruncate.AtEnd,
 			ZIndex = 12,
 		}),
 		trait = label({
-			Position = UDim2.fromOffset(0, 30),
-			Size = UDim2.new(1, 0, 0, 16),
+			Position = UDim2.fromOffset(2, 114),
+			Size = UDim2.new(1, -4, 0, 16),
 			Font = Theme.FONT_BODY,
 			Text = traitText,
 			TextColor3 = traitColor,
@@ -1246,8 +1417,8 @@ local function UnitInventoryOverlay()
 
 	local cells: { [string]: any } = {
 		layout = e("UIGridLayout", {
-			CellSize = UDim2.fromOffset(150, 56),
-			CellPadding = UDim2.fromOffset(8, 8),
+			CellSize = UDim2.fromOffset(110, 140),
+			CellPadding = UDim2.fromOffset(10, 10),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		}),
@@ -1265,7 +1436,7 @@ local function UnitInventoryOverlay()
 
 	local canSelect = picked ~= nil
 
-	return overlay(close, UDim2.fromOffset(540, 440), exiting, {
+	return overlay(close, UDim2.fromOffset(540, 480), exiting, {
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 26),
@@ -1320,11 +1491,11 @@ local function RerollPanel()
 	local featured = useAtom(atoms.rerollUnit)
 	local busy, setBusy = React.useState(false)
 	local lastReroll, setLastRerollRaw = React.useState(nil :: RerollReply?)
-	local reveal, setRevealRaw = React.useState(nil :: Reveal?)
+	local spin, setSpinRaw = React.useState(nil :: SpinRequest?)
 	-- Same optional-initial inference gotcha as GachaPanel; same one cast
 	-- per setter.
 	local setLastReroll = setLastRerollRaw :: (RerollReply?) -> ()
-	local setReveal = setRevealRaw :: (Reveal?) -> ()
+	local setSpin = setSpinRaw :: (SpinRequest?) -> ()
 	-- Same synchronous double-fire guard as the gacha's roll button: `busy`
 	-- alone is a render-closure value and two fast clicks spend two tokens.
 	local rolling = React.useRef(false)
@@ -1354,11 +1525,6 @@ local function RerollPanel()
 			end)
 
 			if ok then
-				if reply.outcome == "Rolled" then
-					setLastReroll(nil)
-					runReveal(setReveal, randomTraitReveal)
-				end
-
 				if reply.outcome ~= "Unavailable" then
 					atoms.rerollTokens(reply.tokens)
 				end
@@ -1367,6 +1533,15 @@ local function RerollPanel()
 					local map = table.clone(atoms.traits())
 					map[towerId] = reply.traitId
 					atoms.traits(map)
+
+					-- The reel takes it from here: the guard stays held
+					-- until the spinner lands (its onDone), so two spins
+					-- can never overlap. Suspense only - the atoms above
+					-- already hold the truth.
+					setLastReroll(reply)
+					setSpin({ resultTraitId = reply.traitId, nonce = os.clock() })
+
+					return
 				end
 
 				setLastReroll(reply)
@@ -1392,9 +1567,10 @@ local function RerollPanel()
 		end
 	end
 
-	if reveal ~= nil then
-		traitLine = reveal.text
-		traitColor = reveal.color
+	if spin ~= nil then
+		-- The reel is still turning: the line must not spoil the landing.
+		traitLine = "..."
+		traitColor = Theme.MUTED
 	elseif lastReroll ~= nil and lastReroll.outcome ~= "Rolled" then
 		if lastReroll.outcome == "CannotAfford" then
 			traitLine = "Out of tokens - finish a match to earn more"
@@ -1439,6 +1615,14 @@ local function RerollPanel()
 				TextSize = 12,
 			}),
 			portrait = e(UnitPortrait, { towerId = currentId }),
+			spinner = e(TraitSpinner, {
+				spin = spin,
+				onDone = function()
+					setSpin(nil)
+					rolling.current = false
+					setBusy(false)
+				end,
+			}),
 			unitName = label({
 				Position = UDim2.fromOffset(16, 258),
 				Size = UDim2.fromOffset(190, 22),
