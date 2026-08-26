@@ -47,4 +47,17 @@ function HudArt.icon(name: string): string
 	return HudArt.ICONS[name] or ""
 end
 
+--- Near-uniform dark textures for the flat interiors of panels, applied
+--- as inset Crop ImageLabels so no surface reads as an empty black void.
+--- Different rooms wear different weaves; all read as one material family.
+HudArt.TEXTURES = {
+	Brushed = "rbxassetid://119105817559960",
+	Carbon = "rbxassetid://73947478563284",
+	Hexmesh = "rbxassetid://81371512190088",
+} :: { [string]: string }
+
+function HudArt.texture(name: string): string
+	return HudArt.TEXTURES[name] or ""
+end
+
 return HudArt

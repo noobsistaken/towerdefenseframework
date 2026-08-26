@@ -239,7 +239,9 @@ pcall(function()
 end)
 
 local function RosterMount()
-	return React.createElement(PlayerRoster.Panel, { roster = useAtom(atoms.roster) })
+	-- Top-right slot: the match HUD's chips moved to the middle-left, so
+	-- the roster toggle takes the freed corner.
+	return React.createElement(PlayerRoster.Panel, { roster = useAtom(atoms.roster), topOffset = 16 })
 end
 
 -- Health bars and damage numbers. Driven entirely by the Health attribute on

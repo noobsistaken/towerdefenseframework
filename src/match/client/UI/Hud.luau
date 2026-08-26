@@ -91,8 +91,8 @@ local function BaseHealthPanel()
 	local fraction = if max > 0 then math.clamp(current / max, 0, 1) else 0
 
 	return panel({
-		Position = UDim2.fromOffset(16, 16),
 		Size = UDim2.fromOffset(220, 62),
+		LayoutOrder = 1,
 	}, {
 		icon = UiArt.icon("Heart", UDim2.new(1, -38, 0, 10), 26),
 		title = label({
@@ -180,9 +180,8 @@ local function CashPanel()
 	local cash = math.floor(UiFx.useSmoothedNumber(cashTarget) + 0.5)
 
 	return panel({
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -16, 0, 16),
-		Size = UDim2.fromOffset(160, 62),
+		Size = UDim2.fromOffset(220, 62),
+		LayoutOrder = 2,
 	}, {
 		icon = UiArt.icon("Coin", UDim2.new(1, -38, 0, 10), 26),
 		title = label({
@@ -261,9 +260,23 @@ local function Hud()
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 	}, {
-		health = e(BaseHealthPanel),
+		-- Base health and cash ride together on the middle-left, clear of
+		-- the Roblox topbar buttons that overlapped the old top-left slot.
+		leftStack = e("Frame", {
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 16, 0.5, 0),
+			Size = UDim2.fromOffset(220, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1,
+		}, {
+			layout = e("UIListLayout", {
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, 8),
+			}),
+			health = e(BaseHealthPanel),
+			cash = e(CashPanel),
+		}),
 		wave = e(WavePanel),
-		cash = e(CashPanel),
 		shop = e(ShopBar),
 		inspector = e(TowerInspector),
 		rejection = e(RejectionToast),
