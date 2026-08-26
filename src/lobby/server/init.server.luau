@@ -27,8 +27,8 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Admins = require(ReplicatedStorage.Shared.Config.Admins)
 local DataSchema = require(ReplicatedStorage.Shared.DataSchema)
 local GachaFlow = require(ReplicatedStorage.Shared.GachaFlow)
-local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local Janitor = require(ReplicatedStorage.Packages.Janitor)
+local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local Net = require(ServerScriptService.Net)
 local Places = require(ReplicatedStorage.Shared.Config.Places)
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
@@ -183,6 +183,7 @@ end
 local lobby = LobbyBuilder.build()
 
 LobbyBuilder.buildAreas(lobby.folder)
+LobbyBuilder.setLighting()
 
 local controller = LobbyController.new()
 

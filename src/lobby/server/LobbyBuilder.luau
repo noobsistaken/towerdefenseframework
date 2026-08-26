@@ -31,7 +31,7 @@ export type BuiltLobby = {
 }
 
 local FLOOR_SIZE = Vector3.new(140, 4, 120)
-local FLOOR_COLOR = Color3.fromRGB(64, 70, 82)
+local FLOOR_COLOR = Color3.fromRGB(88, 92, 102)
 local TRIM_COLOR = Color3.fromRGB(96, 104, 120)
 
 --- Colour per area, so the three read differently from across the room and
@@ -95,17 +95,48 @@ function LobbyBuilder.build(): BuiltLobby
 	folder.Parent = workspace
 
 	-- Floor, top surface at y = 0 to match the convention every map uses.
-	newPart("Floor", FLOOR_SIZE, CFrame.new(0, -FLOOR_SIZE.Y / 2, 0), FLOOR_COLOR, folder)
+	local floor = newPart("Floor", FLOOR_SIZE, CFrame.new(0, -FLOOR_SIZE.Y / 2, 0), FLOOR_COLOR, folder)
+	floor.Material = Enum.Material.Concrete
+
+	-- A darker inlaid ring around the spawn, so the centre reads as the
+	-- heart of the hub rather than more of the same slab.
+	local inlay =
+		newPart("FloorInlay", Vector3.new(26, 0.2, 26), CFrame.new(0, 0.1, 0), Color3.fromRGB(54, 60, 74), folder)
+	inlay.Material = Enum.Material.Concrete
+	inlay.CanQuery = false
 
 	-- Low walls, purely so the space reads as a room rather than a slab.
 	local halfX = FLOOR_SIZE.X / 2
 	local halfZ = FLOOR_SIZE.Z / 2
 	local wall = Vector3.new(FLOOR_SIZE.X, 8, 2)
 
-	newPart("WallNorth", wall, CFrame.new(0, 4, -halfZ), TRIM_COLOR, folder)
-	newPart("WallSouth", wall, CFrame.new(0, 4, halfZ), TRIM_COLOR, folder)
-	newPart("WallEast", Vector3.new(2, 8, FLOOR_SIZE.Z), CFrame.new(halfX, 4, 0), TRIM_COLOR, folder)
-	newPart("WallWest", Vector3.new(2, 8, FLOOR_SIZE.Z), CFrame.new(-halfX, 4, 0), TRIM_COLOR, folder)
+	local wallSpecs = {
+		{ name = "WallNorth", size = wall, cframe = CFrame.new(0, 4, -halfZ) },
+		{ name = "WallSouth", size = wall, cframe = CFrame.new(0, 4, halfZ) },
+		{ name = "WallEast", size = Vector3.new(2, 8, FLOOR_SIZE.Z), cframe = CFrame.new(halfX, 4, 0) },
+		{ name = "WallWest", size = Vector3.new(2, 8, FLOOR_SIZE.Z), cframe = CFrame.new(-halfX, 4, 0) },
+	}
+
+	for _, spec in wallSpecs do
+		local built = newPart(spec.name, spec.size, spec.cframe, TRIM_COLOR, folder)
+		built.Material = Enum.Material.Slate
+
+		-- A neon cap strip along the top of each wall: the hub's horizon
+		-- line, and the same blue the Game area wears.
+		local capSize = if spec.size.X > spec.size.Z
+			then Vector3.new(spec.size.X, 0.4, 0.6)
+			else Vector3.new(0.6, 0.4, spec.size.Z)
+		local cap = newPart(
+			spec.name .. "Cap",
+			capSize,
+			spec.cframe * CFrame.new(0, 4.2, 0),
+			Color3.fromRGB(96, 176, 255),
+			folder
+		)
+		cap.Material = Enum.Material.Neon
+		cap.Transparency = 0.25
+		cap.CanQuery = false
+	end
 
 	-- Spawn in the CENTRE, per the sketch: the hub radiates around you and
 	-- every area is a short, visible walk.
@@ -114,6 +145,8 @@ function LobbyBuilder.build(): BuiltLobby
 	spawn.Size = Vector3.new(12, 1, 12)
 	spawn.CFrame = CFrame.new(0, 0.5, 0)
 	spawn.Color = Color3.fromRGB(120, 160, 200)
+	spawn.Material = Enum.Material.Concrete
+	spawn.TopSurface = Enum.SurfaceType.Smooth
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Duration = 0
@@ -167,6 +200,27 @@ function LobbyBuilder.buildAreas(parent: Instance)
 		label.TextStrokeTransparency = 0.5
 		label.Parent = sign
 
+		-- Light pillars flanking the pad, in the area's colour: visible
+		-- across the hub, so each area advertises itself from the spawn.
+		for _, side in { -1, 1 } do
+			local pillar = newPart(
+				`Pillar_{area.id}_{side}`,
+				Vector3.new(1.2, 9, 1.2),
+				CFrame.new(area.center.X + side * (area.size.X / 2 + 1.5), 4.5, area.center.Z + area.size.Z / 2 + 1),
+				color,
+				folder
+			)
+			pillar.Material = Enum.Material.Neon
+			pillar.Transparency = 0.15
+			pillar.CanQuery = false
+
+			local glow = Instance.new("PointLight")
+			glow.Color = color
+			glow.Brightness = 1.4
+			glow.Range = 14
+			glow.Parent = pillar
+		end
+
 		local prop = propFor(area.id)
 
 		if prop ~= nil then
@@ -190,6 +244,40 @@ function LobbyBuilder.buildAreas(parent: Instance)
 				folder
 			)
 		end
+	end
+end
+
+--- The hub's dusk: low sun, cool ambient, a touch of atmosphere and
+--- bloom. Server-side at boot so every client sees the same evening.
+--- Deliberately NOT applied in the match place, where flat neutral light
+--- keeps enemies and ranges readable - the hub can afford a mood.
+function LobbyBuilder.setLighting()
+	local lighting = game:GetService("Lighting")
+
+	lighting.ClockTime = 17.15
+	lighting.Brightness = 3
+	lighting.Ambient = Color3.fromRGB(88, 96, 114)
+	lighting.OutdoorAmbient = Color3.fromRGB(118, 126, 148)
+
+	if lighting:FindFirstChild("HubAtmosphere") == nil then
+		local atmosphere = Instance.new("Atmosphere")
+		atmosphere.Name = "HubAtmosphere"
+		atmosphere.Density = 0.24
+		atmosphere.Offset = 0.4
+		atmosphere.Color = Color3.fromRGB(150, 170, 205)
+		atmosphere.Decay = Color3.fromRGB(60, 70, 95)
+		atmosphere.Glare = 0.2
+		atmosphere.Haze = 1.2
+		atmosphere.Parent = lighting
+	end
+
+	if lighting:FindFirstChild("HubBloom") == nil then
+		local bloom = Instance.new("BloomEffect")
+		bloom.Name = "HubBloom"
+		bloom.Intensity = 0.6
+		bloom.Size = 32
+		bloom.Threshold = 1.1
+		bloom.Parent = lighting
 	end
 end
 
