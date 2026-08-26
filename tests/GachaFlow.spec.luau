@@ -95,11 +95,14 @@ describe("GachaFlow.rollTower", function()
 	end)
 
 	it("conserves coins across many rolls: every delta is a named amount", function()
-		local data = freshData(100000, 0)
+		-- 1500 rolls, not 200: Secret sits at 0.7%, and 200 draws miss it a
+		-- quarter of the time. The seed makes this deterministic either way -
+		-- the count just has to be one where THIS seed completes the set.
+		local data = freshData(1000000, 0)
 		local rng = Random.new(99)
 		local refund = math.floor(Economy.GACHA_ROLL_COST * Economy.GACHA_DUPLICATE_REFUND_RATE)
 
-		for _ = 1, 200 do
+		for _ = 1, 1500 do
 			local before = data.Coins
 			local result = GachaFlow.rollTower(data, rng)
 
@@ -112,8 +115,7 @@ describe("GachaFlow.rollTower", function()
 			end
 		end
 
-		-- 200 rolls at 400 a roll from 100k: the whole roster must be owned
-		-- by now, and owned exactly once each.
+		-- By now the whole roster must be owned, and owned exactly once each.
 		for _, id in Towers.IDS do
 			local first = table.find(data.UnlockedTowers, id)
 
