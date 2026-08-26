@@ -27,7 +27,21 @@ export type BuiltLobby = {
 	spawn: SpawnLocation,
 }
 
-local FLOOR_SIZE = Vector3.new(120, 4, 120)
+--- The fixed 120-stud floor predates the zone row. Five maps of zones
+--- outspan it, and a zone the resolver counts but the floor does not
+--- cover would be a vote you fall off the world to cast - so the width
+--- derives from the zones the floor exists to hold.
+local FLOOR_MARGIN = 12
+
+local function floorSize(): Vector3
+	local width = 120
+
+	for _, zone in LobbyZones.zones() do
+		width = math.max(width, 2 * (math.abs(zone.center.X) + zone.size.X / 2 + FLOOR_MARGIN))
+	end
+
+	return Vector3.new(width, 4, 120)
+end
 local FLOOR_COLOR = Color3.fromRGB(64, 70, 82)
 local TRIM_COLOR = Color3.fromRGB(96, 104, 120)
 
@@ -63,16 +77,19 @@ function LobbyBuilder.build(): BuiltLobby
 	folder.Parent = workspace
 
 	-- Floor, top surface at y = 0 to match the convention every map uses.
-	newPart("Floor", FLOOR_SIZE, CFrame.new(0, -FLOOR_SIZE.Y / 2, 0), FLOOR_COLOR, folder)
+	local size = floorSize()
+
+	newPart("Floor", size, CFrame.new(0, -size.Y / 2, 0), FLOOR_COLOR, folder)
 
 	-- Low walls, purely so the space reads as a room rather than a slab.
-	local half = FLOOR_SIZE.X / 2
-	local wall = Vector3.new(FLOOR_SIZE.X, 8, 2)
+	local halfX = size.X / 2
+	local halfZ = size.Z / 2
+	local wall = Vector3.new(size.X, 8, 2)
 
-	newPart("WallNorth", wall, CFrame.new(0, 4, -half), TRIM_COLOR, folder)
-	newPart("WallSouth", wall, CFrame.new(0, 4, half), TRIM_COLOR, folder)
-	newPart("WallEast", Vector3.new(2, 8, FLOOR_SIZE.Z), CFrame.new(half, 4, 0), TRIM_COLOR, folder)
-	newPart("WallWest", Vector3.new(2, 8, FLOOR_SIZE.Z), CFrame.new(-half, 4, 0), TRIM_COLOR, folder)
+	newPart("WallNorth", wall, CFrame.new(0, 4, -halfZ), TRIM_COLOR, folder)
+	newPart("WallSouth", wall, CFrame.new(0, 4, halfZ), TRIM_COLOR, folder)
+	newPart("WallEast", Vector3.new(2, 8, size.Z), CFrame.new(halfX, 4, 0), TRIM_COLOR, folder)
+	newPart("WallWest", Vector3.new(2, 8, size.Z), CFrame.new(-halfX, 4, 0), TRIM_COLOR, folder)
 
 	-- An explicit SpawnLocation rather than relying on Roblox's fallback.
 	-- Without one, characters spawn at the origin - which on some maps is on

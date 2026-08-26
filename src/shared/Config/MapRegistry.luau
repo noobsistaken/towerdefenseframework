@@ -9,7 +9,9 @@
 
 local Types = require(script.Parent.Parent.Types)
 
+local Bastion = require(script.Parent.Maps.Bastion)
 local Crossroads = require(script.Parent.Maps.Crossroads)
+local Gauntlet = require(script.Parent.Maps.Gauntlet)
 local Fork = require(script.Parent.Maps.Fork)
 local Switchback = require(script.Parent.Maps.Switchback)
 
@@ -21,6 +23,8 @@ MapRegistry.MAPS = {
 	Crossroads = Crossroads,
 	Switchback = Switchback,
 	Fork = Fork,
+	Gauntlet = Gauntlet,
+	Bastion = Bastion,
 } :: { [string]: Types.MapConfig }
 
 --- Sorted for stable iteration - vote tallies and map lists must not reorder
