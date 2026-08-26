@@ -19,7 +19,7 @@ local Types = require(script.Parent.Types)
 
 local DataSchema = {}
 
-DataSchema.CURRENT_VERSION = 2
+DataSchema.CURRENT_VERSION = 3
 
 --- Towers every account owns from the start. Currently ALL of them, by
 --- request - the Coins sink this leaves behind is a design decision waiting
@@ -32,6 +32,8 @@ DataSchema.TEMPLATE = {
 	XP = 0,
 	Level = 1,
 	UnlockedTowers = STARTING_TOWERS,
+	Traits = {},
+	RerollTokens = 0,
 	Stats = {
 		MatchesPlayed = 0,
 		MatchesWon = 0,
@@ -62,6 +64,15 @@ local MIGRATIONS: { [number]: (Types.PlayerData) -> () } = {
 		end
 
 		data.Version = 2
+	end,
+
+	-- v2 -> v3: the gacha arrives. Rolled traits per tower and the tokens
+	-- that reroll them. Reconcile only fills missing TOP-LEVEL keys on new
+	-- profiles, so a v2 profile needs both added here explicitly.
+	[2] = function(data)
+		data.Traits = {}
+		data.RerollTokens = 0
+		data.Version = 3
 	end,
 }
 

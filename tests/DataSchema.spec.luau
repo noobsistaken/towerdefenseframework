@@ -40,7 +40,7 @@ describe("DataSchema", function()
 		end).toThrow()
 	end)
 
-	it("migrates v1 data to own every starting tower", function()
+	it("walks v1 data the whole ladder to the current version", function()
 		local data = table.clone(DataSchema.TEMPLATE)
 		data.Version = 1
 		-- What a real v1 profile holds: the original two starters, plus one
@@ -48,8 +48,14 @@ describe("DataSchema", function()
 		-- duplicate an existing one.
 		data.UnlockedTowers = { "Rifleman", "Ranger", "Mortar" }
 
-		expect(DataSchema.migrate(data)).toBe(1)
-		expect(data.Version).toBe(2)
+		-- One step per rung, all the way up - the count grows with the
+		-- ladder, which is the point: a v1 profile can never get stranded.
+		expect(DataSchema.migrate(data)).toBe(DataSchema.CURRENT_VERSION - 1)
+		expect(data.Version).toBe(DataSchema.CURRENT_VERSION)
+
+		-- v3's additions arrive on the way through.
+		expect(type(data.Traits)).toBe("table")
+		expect(data.RerollTokens).toBe(0)
 
 		for _, id in { "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator" } do
 			expect(table.find(data.UnlockedTowers, id) ~= nil).toBe(true)
@@ -63,6 +69,18 @@ describe("DataSchema", function()
 			end
 		end
 		expect(mortars).toBe(1)
+	end)
+
+	it("gives a v2 profile its trait storage without touching its towers", function()
+		local data = table.clone(DataSchema.TEMPLATE)
+		data.Version = 2
+		data.UnlockedTowers = { "Rifleman", "Flak" }
+
+		expect(DataSchema.migrate(data)).toBe(1)
+		expect(data.Version).toBe(3)
+		expect(type(data.Traits)).toBe("table")
+		expect(data.RerollTokens).toBe(0)
+		expect(#data.UnlockedTowers).toBe(2)
 	end)
 
 	it("never leaves data below the current version", function()

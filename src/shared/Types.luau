@@ -46,6 +46,11 @@ export type PlayerData = {
 	XP: number,
 	Level: number,
 	UnlockedTowers: { string },
+	--- Rolled trait ids per tower, persistent across matches - the
+	--- collection half of the gacha. Absent key means no traits rolled yet.
+	Traits: { [string]: { string } },
+	--- Spent by trait rerolls. Earned at match end alongside Coins.
+	RerollTokens: number,
 	Stats: PlayerStats,
 	Settings: PlayerSettings,
 }
@@ -321,6 +326,9 @@ export type TowerDefinition = {
 	--- the place file rather than the repo, so a fresh clone has none and
 	--- every tower falls back to its coloured part.
 	rig: string?,
+	--- Tier in Config/Rarity.luau. Drives the gacha's odds and every
+	--- surface's colour for this tower.
+	rarity: string,
 }
 
 -- ===========================================================================
