@@ -33,6 +33,8 @@ local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local AdminConsole = require(ReplicatedStorage.Shared.AdminConsole)
 
+local EggReveal = require(script.Parent.EggReveal)
+
 local atoms = require(script.Parent.Parent.State.atoms)
 
 local e = React.createElement
@@ -98,13 +100,6 @@ local function runReveal(setReveal: (Reveal?) -> (), pick: () -> Reveal)
 end
 
 local towerRng = Random.new()
-
-local function randomTowerReveal(): Reveal
-	local id = Towers.IDS[towerRng:NextInteger(1, #Towers.IDS)]
-	local definition = Towers.get(id)
-
-	return { text = definition.displayName, color = rarityColor(definition.rarity) }
-end
 
 local function randomTraitReveal(): Reveal
 	local id = Traits.IDS[towerRng:NextInteger(1, #Traits.IDS)]
@@ -716,13 +711,11 @@ local function GachaPanel()
 	local coins = useAtom(atoms.coins)
 	local busy, setBusy = React.useState(false)
 	local lastRoll, setLastRollRaw = React.useState(nil :: RollReply?)
-	local reveal, setRevealRaw = React.useState(nil :: Reveal?)
 	-- useState's inference over an optional initial is unreliable in the old
 	-- solver - it lands on `nil` or on the non-optional half depending on
 	-- the call site (TowerInspector's InfoState note documents the same
 	-- gotcha). One cast per setter, and nothing else widens.
 	local setLastRoll = setLastRollRaw :: (RollReply?) -> ()
-	local setReveal = setRevealRaw :: (Reveal?) -> ()
 	-- The real double-fire guard. `busy` is a render-closure value: a second
 	-- click landing before the re-render commits still sees busy=false, and
 	-- two Calls means paying twice. A ref reads and writes synchronously.
@@ -738,9 +731,8 @@ local function GachaPanel()
 	local resultText = "Walk up, pay, pray."
 	local resultColor = Theme.MUTED
 
-	if reveal ~= nil then
-		resultText = reveal.text
-		resultColor = reveal.color
+	if busy then
+		resultText = "..."
 	elseif lastRoll ~= nil then
 		local definition = Towers.find(lastRoll.towerId)
 		local name = if definition ~= nil then definition.displayName else lastRoll.towerId
@@ -817,13 +809,6 @@ local function GachaPanel()
 					end)
 
 					if ok then
-						-- The outcome is already decided; the flicker is
-						-- theatre, run only for a roll that actually rolled.
-						if reply.outcome == "Rolled" or reply.outcome == "Duplicate" then
-							setLastRoll(nil)
-							runReveal(setReveal, randomTowerReveal)
-						end
-
 						-- Server-returned balances, never derived locally -
 						-- and never from an Unavailable reply, whose zeros
 						-- describe a missing session, not this player.
@@ -835,6 +820,24 @@ local function GachaPanel()
 							local unlocked = table.clone(atoms.unlockedTowers())
 							table.insert(unlocked, reply.towerId)
 							atoms.unlockedTowers(unlocked)
+						end
+
+						-- A roll that rolled gets the egg. The guard stays
+						-- held until the cinematic dismisses, so eggs can
+						-- never stack; refusals skip straight to the text.
+						if reply.outcome == "Rolled" or reply.outcome == "Duplicate" then
+							EggReveal.play({
+								towerId = reply.towerId,
+								rarityId = reply.rarityId,
+								duplicate = reply.outcome == "Duplicate",
+								refunded = reply.refunded,
+							}, function()
+								setLastRoll(reply)
+								rolling.current = false
+								setBusy(false)
+							end)
+
+							return
 						end
 
 						setLastRoll(reply)

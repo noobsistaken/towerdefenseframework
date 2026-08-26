@@ -38,7 +38,14 @@ local EnemyVisuals = {}
 local BAR_MAX_DISTANCE = 260
 
 local BAR_WIDTH = 4
-local BAR_HEIGHT = 0.5
+local BAR_HEIGHT = 0.9
+
+--- The bar's drain colour by remaining fraction: full is green, half is
+--- yellow, empty is red - one hue sweep, so the colour IS the reading and
+--- no threshold ever pops.
+local function healthColor(fraction: number): Color3
+	return Color3.fromHSV(0.33 * math.clamp(fraction, 0, 1), 0.78, 0.85)
+end
 
 --- Accumulated damage is flushed into a number at most this often, per enemy.
 --- Long enough to coalesce a volley, short enough to feel responsive.
@@ -285,7 +292,7 @@ local function deathCueFor(isBoss: boolean): string
 	return "EnemyDeath"
 end
 
-local function buildBar(part: BasePart): (BillboardGui, Frame)
+local function buildBar(part: BasePart): (BillboardGui, Frame, TextLabel)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "HealthBar"
 	gui.Adornee = part
@@ -308,7 +315,7 @@ local function buildBar(part: BasePart): (BillboardGui, Frame)
 
 	local fill = Instance.new("Frame")
 	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Theme.POSITIVE
+	fill.BackgroundColor3 = healthColor(1)
 	fill.BorderSizePixel = 0
 	fill.Parent = track
 
@@ -316,7 +323,21 @@ local function buildBar(part: BasePart): (BillboardGui, Frame)
 	fillCorner.CornerRadius = UDim.new(0.5, 0)
 	fillCorner.Parent = fill
 
-	return gui, fill
+	-- The x/x figure, over the whole track so it never clips as the fill
+	-- drains out from under it.
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Theme.FONT
+	label.Text = ""
+	label.TextColor3 = Color3.fromRGB(245, 245, 245)
+	label.TextStrokeColor3 = Color3.fromRGB(10, 12, 14)
+	label.TextStrokeTransparency = 0.35
+	label.TextScaled = true
+	label.ZIndex = 3
+	label.Parent = track
+
+	return gui, fill, label
 end
 
 local activeNumbers = 0
@@ -447,11 +468,16 @@ function EnemyVisuals.start(): () -> ()
 			return
 		end
 
-		local gui, fill = buildBar(child)
+		local gui, fill, barLabel = buildBar(child)
 
 		-- The part's Name is its definition id, the same lookup the tint uses.
 		-- An unknown id is not a boss rather than an error.
 		local definition = Enemies.find(child.Name)
+
+		-- Displayed health rounds UP: a bleeding enemy at 0.4 reads 1, and
+		-- only an actually-dead one reads 0.
+		barLabel.Text = `{math.ceil(health)}/{math.ceil(maxHealth)}`
+		fill.BackgroundColor3 = healthColor(health / maxHealth)
 
 		local entry: Entry = {
 			part = child,
@@ -482,7 +508,10 @@ function EnemyVisuals.start(): () -> ()
 				entry.pendingDamage += delta
 			end
 
-			fill.Size = UDim2.fromScale(math.clamp(current / entry.maxHealth, 0, 1), 1)
+			local fraction = math.clamp(current / entry.maxHealth, 0, 1)
+			fill.Size = UDim2.fromScale(fraction, 1)
+			fill.BackgroundColor3 = healthColor(fraction)
+			barLabel.Text = `{math.ceil(math.max(current, 0))}/{math.ceil(entry.maxHealth)}`
 		end)
 
 		refreshTint(entry)
