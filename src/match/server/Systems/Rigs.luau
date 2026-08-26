@@ -31,6 +31,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
+local Pads = require(ReplicatedStorage.Shared.Config.Maps.Pads)
 
 local Rigs = {}
 
@@ -483,10 +484,14 @@ function Rigs.attachMoving(host: BasePart, templateName: string, walkSpeed: numb
 
 	rig:PivotTo(host.CFrame)
 
-	-- Feet on the bottom of the hitbox rather than floating at its centre:
-	-- at half scale a centred rig hangs mid-air.
+	-- Feet on the WALKWAY SURFACE, not the hitbox bottom. The hitbox bottom
+	-- sits on the sim's path plane at y = 0, but the visible walkway tops out
+	-- 1.15 studs higher - align to the hitbox and the rig walks buried to
+	-- the waist in the boards, which is exactly how it shipped once. Visual
+	-- only: the hitbox, and everything gameplay reads, does not move.
 	local afterCFrame, afterSize = rig:GetBoundingBox()
-	local bottomDelta = (host.Position.Y - host.Size.Y / 2) - (afterCFrame.Position.Y - afterSize.Y / 2)
+	local wantedBottom = host.Position.Y - host.Size.Y / 2 + Pads.WALKWAY_TOP
+	local bottomDelta = wantedBottom - (afterCFrame.Position.Y - afterSize.Y / 2)
 	rig:PivotTo(rig:GetPivot() + Vector3.new(0, bottomDelta, 0))
 
 	if not animated then

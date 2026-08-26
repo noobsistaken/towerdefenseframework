@@ -52,8 +52,9 @@ local PATH_THICKNESS = 1
 --- as one featureless slab with no path on it.
 ---
 --- Derived from Pads rather than hardcoded, so raising the apron cannot
---- bury the walkway again.
-local PATH_TOP_Y = Pads.GROUND_TOP + 0.15
+--- bury the walkway again - and shared with the rig fitting, so enemies
+--- stand ON this surface rather than on the y = 0 path plane beneath it.
+local PATH_TOP_Y = Pads.WALKWAY_TOP
 
 local function newPart(name: string, size: Vector3, cframe: CFrame, color: Color3, parent: Instance): Part
 	local part = Instance.new("Part")
