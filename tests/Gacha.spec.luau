@@ -22,7 +22,7 @@ local function fullPool(): { Gacha.PoolEntry }
 	local pool: { Gacha.PoolEntry } = {}
 
 	for _, id in Rarity.IDS do
-		table.insert(pool, { towerId = `Tower_{id}`, rarityId = id })
+		table.insert(pool, { id = `Tower_{id}`, rarityId = id })
 	end
 
 	return pool
@@ -57,7 +57,7 @@ describe("Gacha.roll", function()
 		local a = Gacha.roll(Random.new(42), fullPool())
 		local b = Gacha.roll(Random.new(42), fullPool())
 
-		expect((a :: Gacha.Result).towerId).toBe((b :: Gacha.Result).towerId)
+		expect((a :: Gacha.Result).id).toBe((b :: Gacha.Result).id)
 	end)
 
 	it("tracks the ladder's weights over many rolls", function()
@@ -85,8 +85,8 @@ describe("Gacha.roll", function()
 		-- Pool with only Commons: every roll must land Common, including the
 		-- rolls whose drawn tier was Secret.
 		local pool: { Gacha.PoolEntry } = {
-			{ towerId = "A", rarityId = "Common" },
-			{ towerId = "B", rarityId = "Common" },
+			{ id = "A", rarityId = "Common" },
+			{ id = "B", rarityId = "Common" },
 		}
 
 		local rng = Random.new(3)
@@ -101,21 +101,21 @@ describe("Gacha.roll", function()
 		-- A pool of one Secret: rolls that drew Common cannot fall lower and
 		-- must still resolve rather than returning nil.
 		local pool: { Gacha.PoolEntry } = {
-			{ towerId = "S", rarityId = "Secret" },
+			{ id = "S", rarityId = "Secret" },
 		}
 
 		local rng = Random.new(9)
 
 		for _ = 1, 200 do
 			local result = Gacha.roll(rng, pool) :: Gacha.Result
-			expect(result.towerId).toBe("S")
+			expect(result.id).toBe("S")
 		end
 	end)
 
 	it("splits a tier's chance evenly across its towers", function()
 		local pool: { Gacha.PoolEntry } = {
-			{ towerId = "A", rarityId = "Common" },
-			{ towerId = "B", rarityId = "Common" },
+			{ id = "A", rarityId = "Common" },
+			{ id = "B", rarityId = "Common" },
 		}
 
 		local rng = Random.new(11)
@@ -125,7 +125,7 @@ describe("Gacha.roll", function()
 		for _ = 1, rolls do
 			local result = Gacha.roll(rng, pool) :: Gacha.Result
 
-			if result.towerId == "A" then
+			if result.id == "A" then
 				a += 1
 			end
 		end

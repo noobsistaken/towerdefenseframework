@@ -27,12 +27,12 @@ local Rarity = require(script.Parent.Config.Rarity)
 local Gacha = {}
 
 export type PoolEntry = {
-	towerId: string,
+	id: string,
 	rarityId: string,
 }
 
 export type Result = {
-	towerId: string,
+	id: string,
 	rarityId: string,
 }
 
@@ -102,7 +102,7 @@ function Gacha.roll(rng: Random, pool: { PoolEntry }): Result?
 				if bucket ~= nil and #bucket > 0 then
 					local pick = bucket[rng:NextInteger(1, #bucket)]
 
-					return { towerId = pick.towerId, rarityId = pick.rarityId }
+					return { id = pick.id, rarityId = pick.rarityId }
 				end
 			end
 		end
@@ -118,7 +118,7 @@ function Gacha.roll(rng: Random, pool: { PoolEntry }): Result?
 				if bucket ~= nil and #bucket > 0 then
 					local pick = bucket[rng:NextInteger(1, #bucket)]
 
-					return { towerId = pick.towerId, rarityId = pick.rarityId }
+					return { id = pick.id, rarityId = pick.rarityId }
 				end
 			end
 		end
