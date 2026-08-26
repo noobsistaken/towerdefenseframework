@@ -25,6 +25,7 @@ local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local atoms = require(script.Parent.Parent.State.atoms)
@@ -361,49 +362,104 @@ local function useRangeDisc(towerId: number?, range: number?, splashRadius: numb
 		grow(dome, range * 2)
 
 		-- The ATTACK TYPE. Single-target towers say it with silence; splash
-		-- towers show WHERE a shell lands (the closest lane point, clamped
-		-- into range - the spot the server's shells actually favour) and
-		-- HOW it gets there (a thrown arc), with the blast radius drawn
-		-- true. No tower in the roster attacks in a cone; if one ever does,
-		-- this is where its wedge preview goes.
+		-- towers show WHERE their shells land and HOW they get there (a
+		-- thrown arc), with the blast radius drawn true. The preview is
+		-- LIVE: it opens on the closest lane point as an idle guess, then
+		-- follows the tower's actual shots - every TowerFired for this
+		-- tower re-aims the sphere and the arc at the real target, so the
+		-- blast marker chases the zombies the tower is fighting. No tower
+		-- in the roster attacks in a cone; if one ever does, this is where
+		-- its wedge preview goes.
+		local disconnectAim: (() -> ())? = nil
+
 		if splashRadius ~= nil and splashRadius > 0 then
 			local origin = Vector3.new(part.Position.X, base, part.Position.Z)
+			local top = part.Position + Vector3.new(0, part.Size.Y / 2 + 1, 0)
+
+			local blast = ball(0.5, SPLASH_COLOR, 0.72)
+			local dots: { Part } = {}
+
+			for _ = 1, 6 do
+				table.insert(dots, ball(0.9, SPLASH_COLOR, 0.25))
+			end
+
+			-- One in-flight tween per piece, REPLACED on every re-aim. An
+			-- Autocannon fires twice a second; accumulating tweens for a
+			-- whole selection would be a slow leak dressed as smoothness.
+			local aimTweens: { [Part]: Tween } = {}
+
+			local function glide(target: Part, cframe: CFrame, animate: boolean)
+				-- Annotated optional: indexing a map type yields the value
+				-- type, not an optional.
+				local previous: Tween? = aimTweens[target]
+
+				if previous ~= nil then
+					previous:Cancel()
+					aimTweens[target] = nil
+				end
+
+				if animate then
+					local tween = TweenService:Create(target, Theme.MOTION_REVEAL, { CFrame = cframe })
+					aimTweens[target] = tween
+					tween:Play()
+				else
+					target.CFrame = cframe
+				end
+			end
+
+			--- Points the whole splash preview at `impact`. The y is kept
+			--- (floored to the tower's base plane) so a Flak aiming at a
+			--- Drifter shows its blast in the AIR, where it happens.
+			local function aim(impact: Vector3, animate: boolean)
+				local grounded = Vector3.new(impact.X, math.max(impact.Y, base), impact.Z)
+				local flat = (Vector3.new(grounded.X, 0, grounded.Z) - Vector3.new(top.X, 0, top.Z)).Magnitude
+				local apex = math.max(8, flat * 0.3)
+
+				glide(blast, CFrame.new(grounded), animate)
+
+				for step, dot in dots do
+					local alpha = step / (#dots + 1)
+					local along = top:Lerp(grounded, alpha)
+
+					glide(dot, CFrame.new(along + Vector3.new(0, math.sin(alpha * math.pi) * apex, 0)), animate)
+				end
+			end
+
+			-- The idle guess: the closest lane point, clamped into range -
+			-- shown until the first real shot replaces guesswork with truth.
 			local lanePoint = closestLanePoint(part.Position)
-			local impact: Vector3
+			local idle: Vector3
 
 			if lanePoint ~= nil then
 				local offset = Vector3.new(lanePoint.X - origin.X, 0, lanePoint.Z - origin.Z)
 				local reach = math.min(offset.Magnitude, range * 0.92)
-				impact = if offset.Magnitude > 1e-3
+				idle = if offset.Magnitude > 1e-3
 					then origin + offset.Unit * reach
 					else origin + Vector3.new(reach, 0, 0)
 			else
-				impact = origin + Vector3.new(range * 0.6, 0, 0)
+				idle = origin + Vector3.new(range * 0.6, 0, 0)
 			end
 
-			impact = Vector3.new(impact.X, base, impact.Z)
-
-			local blast = ball(0.5, SPLASH_COLOR, 0.72)
-			blast.CFrame = CFrame.new(impact)
+			aim(idle, false)
 			grow(blast, splashRadius * 2)
 
-			-- The thrown arc: a handful of dots on a parabola from the
-			-- muzzle height to the impact point.
-			local top = part.Position + Vector3.new(0, part.Size.Y / 2 + 1, 0)
-			local flat = (Vector3.new(impact.X, 0, impact.Z) - Vector3.new(top.X, 0, top.Z)).Magnitude
-			local apex = math.max(8, flat * 0.3)
-
-			for step = 1, 6 do
-				local alpha = step / 7
-				local along = top:Lerp(impact, alpha)
-				local dot = ball(0.9, SPLASH_COLOR, 0.25)
-				dot.CFrame = CFrame.new(along + Vector3.new(0, math.sin(alpha * math.pi) * apex, 0))
-			end
+			-- Zap events take any number of listeners and hand back a
+			-- disconnect, so the tracers keep their subscription and this
+			-- one watches only the SELECTED tower's shots.
+			disconnectAim = Net.TowerFired.On(function(value)
+				if value.towerId == towerId then
+					aim(Wire.toVector3(value.targetPosition), true)
+				end
+			end)
 		end
 
 		container.Parent = workspace
 
 		return function()
+			if disconnectAim ~= nil then
+				disconnectAim()
+			end
+
 			for _, tween in tweens do
 				tween:Cancel()
 			end
