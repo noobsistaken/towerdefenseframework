@@ -1502,6 +1502,20 @@ local function RerollPanel()
 	local rerollScale = React.useRef(nil :: UIScale?)
 	local show, exiting = UiFx.usePresence(area == "Reroll")
 
+	-- Walking off the pad mid-spin would otherwise strand the reel: this
+	-- component stays mounted (it merely renders nil), but the spinner
+	-- unmounts and its onDone - the only guard release - dies with it,
+	-- leaving REROLL locked and a stale reel replaying on the next visit.
+	-- When the presence window closes, drop the theatre and free the
+	-- guards; the atoms already hold the truth.
+	React.useEffect(function()
+		if not show then
+			setSpin(nil)
+			rolling.current = false
+			setBusy(false)
+		end
+	end, { show })
+
 	if not show then
 		return nil
 	end
@@ -1650,7 +1664,12 @@ local function RerollPanel()
 				TextColor3 = Theme.INVERSE,
 				TextSize = 17,
 				[React.Event.Activated] = function()
-					atoms.unitPickerOpen(true)
+					-- Gated while the reel spins: the picker renders traits
+					-- straight from the atom, which already holds the result
+					-- the reel is still pretending to decide.
+					if not busy then
+						atoms.unitPickerOpen(true)
+					end
 				end,
 			}, {
 				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),

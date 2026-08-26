@@ -583,11 +583,11 @@ local function useSelectionEntrance(towerId: number?): { current: CanvasGroup? }
 		-- matters on a re-selection, where the shell is still sitting at its
 		-- resting values from the previous tower.
 		shell.GroupTransparency = 1
-		shell.Position = UDim2.new(1, -16, 1, -16 + PANEL_RISE)
+		shell.Position = UDim2.new(1, -16, 0.5, PANEL_RISE)
 
 		tween.current = Motion.retarget(nil, shell, Theme.MOTION_REVEAL, {
 			GroupTransparency = 0,
-			Position = UDim2.new(1, -16, 1, -16),
+			Position = UDim2.new(1, -16, 0.5, 0),
 		})
 
 		return function()
@@ -895,10 +895,14 @@ local function TowerInspector()
 	-- Transparent shell so the two panels stack with a real gap rather than
 	-- reading as one box with a line through it. AutomaticSize means neither
 	-- carries a hand-counted pixel height that goes stale when a row is added.
+	-- Middle-right, mirroring the base/cash stack on the middle-left. At
+	-- the old bottom-right slot the widened panel collided with the wider
+	-- shop bar on 1366- and 1280-wide viewports, with unspecified click
+	-- priority in the contested strip.
 	return e("CanvasGroup", {
 		ref = shellRef,
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.new(1, -16, 1, -16),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -16, 0.5, 0),
 		Size = UDim2.fromOffset(280, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
