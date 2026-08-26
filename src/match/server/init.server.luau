@@ -329,6 +329,16 @@ Net.RequestSetTargeting.On(
 	end
 )
 
+Net.RequestAbility.On(function(player: Player, value: { towerId: number })
+	if profiles[player] == nil then
+		return
+	end
+
+	-- Ownership, existence and cooldown are all checked inside. Refusals
+	-- are silent: the button already showed the cooldown.
+	match:useAbility(player, value.towerId)
+end)
+
 Net.RequestEarlyStart.On(function(player: Player)
 	-- Any player in the match may start the wave early; the bonus is shared,
 	-- so there is nothing to gain by racing. The controller re-checks the

@@ -56,6 +56,8 @@ type TowerInfo = {
 	range: number,
 	damage: number,
 	fireRate: number,
+	--- os.time() the ability comes off cooldown. 0 when ready or absent.
+	abilityReadyAt: number,
 }
 
 --- Finds a tower part by its replicated TowerId attribute.
@@ -85,6 +87,7 @@ local function readInfo(part: BasePart): TowerInfo?
 	local range = part:GetAttribute("Range")
 	local damage = part:GetAttribute("Damage")
 	local fireRate = part:GetAttribute("FireRate")
+	local abilityReadyAt = part:GetAttribute("AbilityReadyAt")
 
 	if
 		typeof(towerId) ~= "number"
@@ -110,6 +113,7 @@ local function readInfo(part: BasePart): TowerInfo?
 		range = range,
 		damage = damage,
 		fireRate = fireRate,
+		abilityReadyAt = if typeof(abilityReadyAt) == "number" then abilityReadyAt else 0,
 	}
 end
 
@@ -157,7 +161,7 @@ local function useTowerInfo(towerId: number?): TowerInfo?
 
 		refresh()
 
-		for _, attribute in { "Level", "TargetingMode", "SellValue", "Range", "Damage", "FireRate" } do
+		for _, attribute in { "Level", "TargetingMode", "SellValue", "Range", "Damage", "FireRate", "AbilityReadyAt" } do
 			table.insert(connections, part:GetAttributeChangedSignal(attribute):Connect(refresh))
 		end
 
@@ -685,6 +689,8 @@ end
 local function TowerInspector()
 	local selectedId = useAtom(atoms.selectedTowerId)
 	local cash = useAtom(atoms.cash)
+	-- Ticks once a second; what makes the cooldown text count down live.
+	local clock = useAtom(atoms.clock)
 	local info = useTowerInfo(selectedId)
 
 	-- Resolved BEFORE the early return below. useRangeDisc is a hook, and a
@@ -823,11 +829,30 @@ local function TowerInspector()
 			})
 		end
 
+		local ability = definition.ability
+
+		if ability ~= nil then
+			local remaining = math.max(0, math.ceil(info.abilityReadyAt - clock))
+			local ready = remaining <= 0
+
+			children.ability = e(ActionButton, {
+				text = if ready then `{ability.displayName:upper()}  -  READY` else `{ability.displayName:upper()}  -  {remaining}s`,
+				color = if ready then Theme.POSITIVE else Theme.DISABLED,
+				textColor = if ready then Theme.INVERSE else Theme.MUTED,
+				layoutOrder = 5,
+				onActivated = function()
+					-- Fired regardless of the local cooldown read, same rule
+					-- as UPGRADE: the server is the authority.
+					Net.RequestAbility.Fire({ towerId = info.towerId })
+				end,
+			})
+		end
+
 		children.targeting = e(ActionButton, {
 			text = `TARGET: {info.targetingMode}`,
 			color = Theme.RAISED,
 			textColor = Theme.TEXT,
-			layoutOrder = 5,
+			layoutOrder = 6,
 			onActivated = function()
 				Net.RequestSetTargeting.Fire({
 					towerId = info.towerId,
@@ -840,7 +865,7 @@ local function TowerInspector()
 			text = `SELL  +$${info.sellValue}`,
 			color = Theme.RAISED,
 			textColor = Theme.CASH,
-			layoutOrder = 6,
+			layoutOrder = 7,
 			onActivated = function()
 				Net.RequestSellTower.Fire({ towerId = info.towerId })
 			end,

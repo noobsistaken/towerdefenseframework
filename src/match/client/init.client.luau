@@ -33,6 +33,7 @@ local Janitor = require(ReplicatedStorage.Packages.Janitor)
 local Net = require(ReplicatedStorage.Net)
 local React = require(ReplicatedStorage.Packages.React)
 local ReactRoblox = require(ReplicatedStorage.Packages.ReactRoblox)
+local Theme = require(ReplicatedStorage.Shared.Theme)
 local Wire = require(ReplicatedStorage.Shared.Wire)
 
 local Bursts = require(script.Effects.Bursts)
@@ -119,6 +120,43 @@ janitor:Add(
 		})
 
 		SoundController.play(if value.won then "Victory" else "Defeat")
+	end),
+	true
+)
+
+janitor:Add(
+	Net.AbilityUsed.On(function(value)
+		local position = Wire.toVector3(value.position)
+
+		SoundController.play("AbilityUsed", position)
+		Bursts.emit(position + Vector3.new(0, 3, 0), Theme.ACCENT, 24)
+
+		-- The expanding ring, when the ability has an area to show.
+		if value.radius > 0 then
+			local ring = Instance.new("Part")
+			ring.Shape = Enum.PartType.Ball
+			ring.Size = Vector3.new(1, 1, 1)
+			ring.Anchored = true
+			ring.CanCollide = false
+			ring.CanQuery = false
+			ring.CanTouch = false
+			ring.CastShadow = false
+			ring.Material = Enum.Material.Neon
+			ring.Color = Theme.ACCENT
+			ring.Transparency = 0.5
+			ring.CFrame = CFrame.new(position)
+			ring.Parent = workspace
+
+			local tween = game:GetService("TweenService"):Create(
+				ring,
+				TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = Vector3.new(value.radius * 2, value.radius * 2, value.radius * 2), Transparency = 1 }
+			)
+			tween:Play()
+			tween.Completed:Once(function()
+				ring:Destroy()
+			end)
+		end
 	end),
 	true
 )

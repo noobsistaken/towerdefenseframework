@@ -175,6 +175,9 @@ if not RunService:IsRunning() then
 		RequestEarlyStart = table.freeze({
 			On = noop
 		}),
+		RequestAbility = table.freeze({
+			On = noop
+		}),
 		PlaySound = table.freeze({
 			Fire = noop,
 			FireAll = noop,
@@ -243,6 +246,13 @@ if not RunService:IsRunning() then
 		AdminGrant = table.freeze({
 			SetCallback = noop
 		}),
+		AbilityUsed = table.freeze({
+			Fire = noop,
+			FireAll = noop,
+			FireExcept = noop,
+			FireList = noop,
+			FireSet = noop
+		}),
 	}) :: Events
 end
 
@@ -289,10 +299,10 @@ Players.PlayerRemoving:Connect(function(player)
 	player_map[player] = nil
 end)
 export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
-export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
-export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState")
-export type LobbyState = ("Gathering" | "Launching")
 export type PollKind = ("Map" | "Difficulty")
+export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState")
+export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
+export type LobbyState = ("Gathering" | "Launching")
 
 local function SendEvents()
 	for player, outgoing in player_map do
@@ -312,14 +322,15 @@ end
 
 RunService.Heartbeat:Connect(SendEvents)
 
-local reliable_events = table.create(13)
+local reliable_events = table.create(14)
 reliable_events[1] = {}
 reliable_events[3] = {}
 reliable_events[2] = {}
 reliable_events[0] = {}
-reliable_events[6] = {}
-reliable_events[4] = {}
+reliable_events[7] = {}
 reliable_events[5] = {}
+reliable_events[4] = {}
+reliable_events[6] = {}
 reliable.OnServerEvent:Connect(function(player, buff, inst)
 	incoming_buff = buff
 	incoming_inst = inst
@@ -370,17 +381,24 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 			for _, cb in reliable_events[0] do
 				task.spawn(cb, player, value)
 			end
-		elseif id == 6 then -- RequestLaunch
+		elseif id == 7 then -- RequestLaunch
 			local value
-			for _, cb in reliable_events[6] do
+			for _, cb in reliable_events[7] do
 				task.spawn(cb, player, value)
 			end
-		elseif id == 4 then -- RequestEarlyStart
+		elseif id == 5 then -- RequestEarlyStart
 			local value
+			for _, cb in reliable_events[5] do
+				task.spawn(cb, player, value)
+			end
+		elseif id == 4 then -- RequestAbility
+			local value
+			value = {  }
+			value["towerId"] = buffer.readu32(incoming_buff, read(4))
 			for _, cb in reliable_events[4] do
 				task.spawn(cb, player, value)
 			end
-		elseif id == 5 then -- CastVote
+		elseif id == 6 then -- CastVote
 			local value
 			local bool_2 = buffer.readu8(incoming_buff, read(1))
 			value = {  }
@@ -393,10 +411,10 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 			assert(len_2 <= 96, "value is more than 96!")
 			value["option"] = buffer.readstring(incoming_buff, read(len_2), len_2)
 			assert(utf8.len(value["option"]) ~= nil, "value is not valid utf-8")
-			for _, cb in reliable_events[5] do
+			for _, cb in reliable_events[6] do
 				task.spawn(cb, player, value)
 			end
-		elseif id == 8 then -- SetLoadout
+		elseif id == 9 then -- SetLoadout
 			local call_id = buffer.readu8(buff, read(1))
 			local value
 			value = {  }
@@ -412,12 +430,12 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 				assert(utf8.len(val_1) ~= nil, "value is not valid utf-8")
 				value["towerIds"][i_1] = val_1
 			end
-			if reliable_events[8] then
+			if reliable_events[9] then
 				task.spawn(function(player_2, call_id_2, value_1)
-					local ret_1 = reliable_events[8](player_2, value_1)
+					local ret_1 = reliable_events[9](player_2, value_1)
 					load_player(player_2)
 					alloc(1)
-					buffer.writeu8(outgoing_buff, outgoing_apos, 9)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 10)
 					alloc(1)
 					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
 					local bool_3 = 0
@@ -444,16 +462,16 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					player_map[player_2] = save()
 				end, player, call_id, value)
 			end
-		elseif id == 9 then -- RollTower
+		elseif id == 10 then -- RollTower
 			local call_id = buffer.readu8(buff, read(1))
 			local value
 			value = {  }
-			if reliable_events[9] then
+			if reliable_events[10] then
 				task.spawn(function(player_2, call_id_2, value_1)
-					local ret_1 = reliable_events[9](player_2, value_1)
+					local ret_1 = reliable_events[10](player_2, value_1)
 					load_player(player_2)
 					alloc(1)
-					buffer.writeu8(outgoing_buff, outgoing_apos, 10)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 11)
 					alloc(1)
 					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
 					local bool_4 = 0
@@ -491,7 +509,7 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					player_map[player_2] = save()
 				end, player, call_id, value)
 			end
-		elseif id == 10 then -- RerollTrait
+		elseif id == 11 then -- RerollTrait
 			local call_id = buffer.readu8(buff, read(1))
 			local value
 			value = {  }
@@ -499,12 +517,12 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 			assert(len_9 <= 96, "value is more than 96!")
 			value["towerId"] = buffer.readstring(incoming_buff, read(len_9), len_9)
 			assert(utf8.len(value["towerId"]) ~= nil, "value is not valid utf-8")
-			if reliable_events[10] then
+			if reliable_events[11] then
 				task.spawn(function(player_2, call_id_2, value_1)
-					local ret_1 = reliable_events[10](player_2, value_1)
+					local ret_1 = reliable_events[11](player_2, value_1)
 					load_player(player_2)
 					alloc(1)
-					buffer.writeu8(outgoing_buff, outgoing_apos, 11)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 12)
 					alloc(1)
 					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
 					local bool_5 = 0
@@ -540,16 +558,16 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					player_map[player_2] = save()
 				end, player, call_id, value)
 			end
-		elseif id == 7 then -- GetMatchSnapshot
+		elseif id == 8 then -- GetMatchSnapshot
 			local call_id = buffer.readu8(buff, read(1))
 			local value
 			value = {  }
-			if reliable_events[7] then
+			if reliable_events[8] then
 				task.spawn(function(player_2, call_id_2, value_1)
-					local ret_1 = reliable_events[7](player_2, value_1)
+					local ret_1 = reliable_events[8](player_2, value_1)
 					load_player(player_2)
 					alloc(1)
-					buffer.writeu8(outgoing_buff, outgoing_apos, 8)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 9)
 					alloc(1)
 					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
 					local bool_6 = 0
@@ -625,16 +643,16 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					player_map[player_2] = save()
 				end, player, call_id, value)
 			end
-		elseif id == 11 then -- GetLobbyProfile
+		elseif id == 12 then -- GetLobbyProfile
 			local call_id = buffer.readu8(buff, read(1))
 			local value
 			value = {  }
-			if reliable_events[11] then
+			if reliable_events[12] then
 				task.spawn(function(player_2, call_id_2, value_1)
-					local ret_1 = reliable_events[11](player_2, value_1)
+					local ret_1 = reliable_events[12](player_2, value_1)
 					load_player(player_2)
 					alloc(1)
-					buffer.writeu8(outgoing_buff, outgoing_apos, 12)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 13)
 					alloc(1)
 					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
 					local bool_7 = 0
@@ -706,7 +724,7 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					player_map[player_2] = save()
 				end, player, call_id, value)
 			end
-		elseif id == 12 then -- AdminGrant
+		elseif id == 13 then -- AdminGrant
 			local call_id = buffer.readu8(buff, read(1))
 			local value
 			local bool_8 = buffer.readu8(incoming_buff, read(1))
@@ -719,12 +737,12 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 				value["currency"] = "Tokens"
 			end
 			value["amount"] = buffer.readu32(incoming_buff, read(4))
-			if reliable_events[12] then
+			if reliable_events[13] then
 				task.spawn(function(player_2, call_id_2, value_1)
-					local ret_1 = reliable_events[12](player_2, value_1)
+					local ret_1 = reliable_events[13](player_2, value_1)
 					load_player(player_2)
 					alloc(1)
-					buffer.writeu8(outgoing_buff, outgoing_apos, 13)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 14)
 					alloc(1)
 					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
 					local bool_9 = 0
@@ -763,7 +781,7 @@ local returns = {
 		}))
 			load_player(Player)
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
 			local len_24 = #Value["mapTallies"]
 			assert(len_24 >= 0, "value is less than 0!")
 			assert(len_24 <= 16, "value is more than 16!")
@@ -828,7 +846,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
 			local len_30 = #Value["mapTallies"]
 			assert(len_30 >= 0, "value is less than 0!")
 			assert(len_30 <= 16, "value is more than 16!")
@@ -900,7 +918,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
 			local len_36 = #Value["mapTallies"]
 			assert(len_36 >= 0, "value is less than 0!")
 			assert(len_36 <= 16, "value is more than 16!")
@@ -974,7 +992,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
 			local len_42 = #Value["mapTallies"]
 			assert(len_42 >= 0, "value is less than 0!")
 			assert(len_42 <= 16, "value is more than 16!")
@@ -1046,7 +1064,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
 			local len_48 = #Value["mapTallies"]
 			assert(len_48 >= 0, "value is less than 0!")
 			assert(len_48 <= 16, "value is more than 16!")
@@ -1207,9 +1225,9 @@ local returns = {
 			["ok"]: (boolean),
 			["loadout"]: ({ (string) }),
 		}))): () -> ()
-			reliable_events[8] = Callback
+			reliable_events[9] = Callback
 			return function()
-				reliable_events[8] = nil
+				reliable_events[9] = nil
 			end
 		end,
 	},
@@ -1222,9 +1240,9 @@ local returns = {
 			["coins"]: (number),
 			["refunded"]: (number),
 		}))): () -> ()
-			reliable_events[9] = Callback
+			reliable_events[10] = Callback
 			return function()
-				reliable_events[9] = nil
+				reliable_events[10] = nil
 			end
 		end,
 	},
@@ -1237,9 +1255,9 @@ local returns = {
 			["rarityId"]: (string),
 			["tokens"]: (number),
 		}))): () -> ()
-			reliable_events[10] = Callback
+			reliable_events[11] = Callback
 			return function()
-				reliable_events[10] = nil
+				reliable_events[11] = nil
 			end
 		end,
 	},
@@ -1288,14 +1306,24 @@ local returns = {
 	},
 	RequestLaunch = {
 		On = function(Callback: (Player: Player) -> ()): () -> ()
-			table.insert(reliable_events[6], Callback)
+			table.insert(reliable_events[7], Callback)
 			return function()
-				table.remove(reliable_events[6], table.find(reliable_events[6], Callback))
+				table.remove(reliable_events[7], table.find(reliable_events[7], Callback))
 			end
 		end,
 	},
 	RequestEarlyStart = {
 		On = function(Callback: (Player: Player) -> ()): () -> ()
+			table.insert(reliable_events[5], Callback)
+			return function()
+				table.remove(reliable_events[5], table.find(reliable_events[5], Callback))
+			end
+		end,
+	},
+	RequestAbility = {
+		On = function(Callback: (Player: Player, Value: ({
+			["towerId"]: (number),
+		})) -> ()): () -> ()
 			table.insert(reliable_events[4], Callback)
 			return function()
 				table.remove(reliable_events[4], table.find(reliable_events[4], Callback))
@@ -1670,7 +1698,7 @@ local returns = {
 		}))
 			load_player(Player)
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
 			local len_59 = #Value["reason"]
 			assert(len_59 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
@@ -1685,7 +1713,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
 			local len_60 = #Value["reason"]
 			assert(len_60 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
@@ -1707,7 +1735,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
 			local len_61 = #Value["reason"]
 			assert(len_61 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
@@ -1731,7 +1759,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
 			local len_62 = #Value["reason"]
 			assert(len_62 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
@@ -1753,7 +1781,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
 			local len_63 = #Value["reason"]
 			assert(len_63 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
@@ -2152,7 +2180,7 @@ local returns = {
 		}))
 			load_player(Player)
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
 			local bool_30 = 0
 			local bool_30_pos_1 = alloc(1)
 			if Value["state"] == "Gathering" then
@@ -2173,7 +2201,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
 			local bool_31 = 0
 			local bool_31_pos_1 = alloc(1)
 			if Value["state"] == "Gathering" then
@@ -2201,7 +2229,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
 			local bool_32 = 0
 			local bool_32_pos_1 = alloc(1)
 			if Value["state"] == "Gathering" then
@@ -2231,7 +2259,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
 			local bool_33 = 0
 			local bool_33_pos_1 = alloc(1)
 			if Value["state"] == "Gathering" then
@@ -2259,7 +2287,7 @@ local returns = {
 		}))
 			load_empty()
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
 			local bool_34 = 0
 			local bool_34_pos_1 = alloc(1)
 			if Value["state"] == "Gathering" then
@@ -2297,9 +2325,9 @@ local returns = {
 			["unlockedTowers"]: ({ (string) }),
 			["loadout"]: ({ (string) }),
 		}))): () -> ()
-			reliable_events[7] = Callback
+			reliable_events[8] = Callback
 			return function()
-				reliable_events[7] = nil
+				reliable_events[8] = nil
 			end
 		end,
 	},
@@ -2318,9 +2346,9 @@ local returns = {
 				["traitId"]: (string),
 			}) }),
 		}))): () -> ()
-			reliable_events[11] = Callback
+			reliable_events[12] = Callback
 			return function()
-				reliable_events[11] = nil
+				reliable_events[12] = nil
 			end
 		end,
 	},
@@ -2329,9 +2357,9 @@ local returns = {
 			["poll"]: ("Map" | "Difficulty"),
 			["option"]: (string),
 		})) -> ()): () -> ()
-			table.insert(reliable_events[5], Callback)
+			table.insert(reliable_events[6], Callback)
 			return function()
-				table.remove(reliable_events[5], table.find(reliable_events[5], Callback))
+				table.remove(reliable_events[6], table.find(reliable_events[6], Callback))
 			end
 		end,
 	},
@@ -2522,9 +2550,181 @@ local returns = {
 			["ok"]: (boolean),
 			["balance"]: (number),
 		}))): () -> ()
-			reliable_events[12] = Callback
+			reliable_events[13] = Callback
 			return function()
-				reliable_events[12] = nil
+				reliable_events[13] = nil
+			end
+		end,
+	},
+	AbilityUsed = {
+		Fire = function(Player: Player, Value: ({
+			["towerId"]: (number),
+			["abilityId"]: (string),
+			["position"]: (vector),
+			["radius"]: (number),
+		}))
+			load_player(Player)
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+			local len_64 = #Value["abilityId"]
+			assert(len_64 <= 96, "value is more than 96!")
+			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_64)
+			alloc(len_64)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_64)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["radius"])
+			player_map[Player] = save()
+		end,
+		FireAll = function(Value: ({
+			["towerId"]: (number),
+			["abilityId"]: (string),
+			["position"]: (vector),
+			["radius"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+			local len_65 = #Value["abilityId"]
+			assert(len_65 <= 96, "value is more than 96!")
+			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_65)
+			alloc(len_65)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_65)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["radius"])
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in Players:GetPlayers() do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
+			end
+		end,
+		FireExcept = function(Except: Player, Value: ({
+			["towerId"]: (number),
+			["abilityId"]: (string),
+			["position"]: (vector),
+			["radius"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+			local len_66 = #Value["abilityId"]
+			assert(len_66 <= 96, "value is more than 96!")
+			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_66)
+			alloc(len_66)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_66)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["radius"])
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in Players:GetPlayers() do
+				if player ~= Except then
+					load_player(player)
+					alloc(used)
+					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+					player_map[player] = save()
+				end
+			end
+		end,
+		FireList = function(List: { [unknown]: Player }, Value: ({
+			["towerId"]: (number),
+			["abilityId"]: (string),
+			["position"]: (vector),
+			["radius"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+			local len_67 = #Value["abilityId"]
+			assert(len_67 <= 96, "value is more than 96!")
+			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_67)
+			alloc(len_67)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_67)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["radius"])
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in List do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
+			end
+		end,
+		FireSet = function(Set: { [Player]: any }, Value: ({
+			["towerId"]: (number),
+			["abilityId"]: (string),
+			["position"]: (vector),
+			["radius"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
+			local len_68 = #Value["abilityId"]
+			assert(len_68 <= 96, "value is more than 96!")
+			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_68)
+			alloc(len_68)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_68)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			alloc(4)
+			buffer.writef32(outgoing_buff, outgoing_apos, Value["radius"])
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for player in Set do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
 			end
 		end,
 	},

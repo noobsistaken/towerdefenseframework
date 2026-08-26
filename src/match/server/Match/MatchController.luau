@@ -583,6 +583,82 @@ function MatchController.grantCash(self: Controller, player: Player, amount: num
 	return math.floor(self.economy:balance(player))
 end
 
+--- Fires a tower's active ability. Ownership, existence, match state and
+--- cooldown are all validated HERE, from state the server owns - the button
+--- being lit client-side is a hint, not a lock.
+---
+--- Executed in the controller rather than TowerSystem because two of the
+--- four kinds reach outside the tower system: Payday touches the economy,
+--- and every kind reports through the AbilityUsed cue.
+function MatchController.useAbility(self: Controller, player: Player, towerId: number): boolean
+	local tower = self.towers:get(towerId)
+
+	if tower == nil or tower.owner ~= player or not self:canBuildNow() then
+		return false
+	end
+
+	local ability = tower.definition.ability
+
+	if ability == nil then
+		return false
+	end
+
+	local now = os.time()
+
+	if now < tower.abilityReadyAt then
+		return false
+	end
+
+	tower.abilityReadyAt = now + ability.cooldownSeconds
+
+	local cueRadius = 0
+
+	if ability.kind == "Barrage" then
+		-- The closest-to-leaking enemies, exactly the ones a panic button
+		-- is pressed about.
+		local ids = self.towers:enemiesInRange(tower)
+
+		for index = 1, math.min(ability.strikes, #ids) do
+			self.simulation:damage(ids[index], ability.power, player)
+		end
+
+		cueRadius = tower:range()
+	elseif ability.kind == "Overcharge" then
+		tower:beginBoost(ability.power, ability.durationSeconds)
+	elseif ability.kind == "FreezeBurst" then
+		local effectId = ability.effectId
+
+		if effectId ~= nil then
+			for _, id in self.towers:enemiesInRange(tower) do
+				self.simulation:applyEffect(
+					id,
+					{ effectId = effectId, duration = ability.durationSeconds, power = 0 },
+					player
+				)
+			end
+		end
+
+		cueRadius = tower:range()
+	elseif ability.kind == "Payday" then
+		-- Scaled by the wave so the button stays worth its cooldown in the
+		-- late game without being a printing press in the early one.
+		local amount = math.floor(ability.power * (1 + self.waveNumber / 10) + 0.5)
+		self.economy:credit(player, amount)
+	end
+
+	-- The attribute refresh is what restarts every client's cooldown ring.
+	self.towers:refreshAbility(tower)
+
+	Net.AbilityUsed.FireAll({
+		towerId = tower.id,
+		abilityId = ability.id,
+		position = Wire.toWire(tower.position),
+		radius = cueRadius,
+	})
+
+	return true
+end
+
 --- Ends the build phase early, paying everyone for the time skipped. The
 --- server reads its own clock: a client-supplied duration would be free cash.
 function MatchController.requestEarlyStart(self: Controller): boolean

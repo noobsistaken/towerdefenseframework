@@ -101,6 +101,10 @@ local function writeAttributes(part: Part, tower: BaseTower.Tower)
 	-- only displays these; the numbers they change already arrive
 	-- through the Range attribute and the server's own combat maths.
 	part:SetAttribute("Traits", table.concat(tower.traits, ","))
+
+	local ability = tower.definition.ability
+	part:SetAttribute("AbilityId", if ability ~= nil then ability.id else "")
+	part:SetAttribute("AbilityReadyAt", tower.abilityReadyAt)
 end
 
 local function buildPart(self: System, tower: BaseTower.Tower): Part
@@ -221,6 +225,16 @@ function TowerSystem.remove(self: System, id: Types.TowerId): BaseTower.Tower?
 	return tower
 end
 
+--- Rewrites the ability attributes after a use, so every client's
+--- cooldown display restarts from the server's clock.
+function TowerSystem.refreshAbility(self: System, tower: BaseTower.Tower)
+	local part = self.parts[tower.id]
+
+	if part ~= nil then
+		part:SetAttribute("AbilityReadyAt", tower.abilityReadyAt)
+	end
+end
+
 --- Applies an upgrade that the caller has already paid for.
 function TowerSystem.upgrade(self: System, tower: BaseTower.Tower, paid: number)
 	tower:upgrade(paid)
@@ -269,6 +283,48 @@ end
 -- ---------------------------------------------------------------------------
 -- Combat
 -- ---------------------------------------------------------------------------
+
+--- Ids of every enemy this tower could legally shoot right now, closest
+--- to LEAKING first - the order a panic button wants. Public for the
+--- ability executor; combat acquisition uses the richer candidatesFor.
+function TowerSystem.enemiesInRange(self: System, tower: BaseTower.Tower): { Types.EnemyId }
+	local simulation = self.simulation
+	local origin = tower.position
+	local range = tower:range()
+	local rangeSquared = range * range
+	local found: { { id: Types.EnemyId, distanceToBase: number } } = {}
+
+	for _, enemy in simulation.enemies do
+		if not enemy.alive then
+			continue
+		end
+
+		if not tower:canTarget(enemy.definition.category) then
+			continue
+		end
+
+		local offset = simulation:positionOf(enemy) - origin
+		local distanceSquared = offset.X * offset.X + offset.Y * offset.Y + offset.Z * offset.Z
+
+		if distanceSquared > rangeSquared then
+			continue
+		end
+
+		table.insert(found, { id = enemy.id, distanceToBase = simulation:distanceToBase(enemy) })
+	end
+
+	table.sort(found, function(a, b)
+		return a.distanceToBase < b.distanceToBase
+	end)
+
+	local ids: { Types.EnemyId } = {}
+
+	for _, entry in found do
+		table.insert(ids, entry.id)
+	end
+
+	return ids
+end
 
 --- Every enemy this tower could legally shoot right now.
 local function candidatesFor(self: System, tower: BaseTower.Tower): { Targeting.Candidate }

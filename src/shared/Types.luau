@@ -296,6 +296,34 @@ export type PlacementRejectReason =
 	| "TowerCapReached"
 	| "WrongMatchState"
 
+--- What an ability DOES. Four kinds cover the design space the roster
+--- wants; a new kind is a new branch in MatchController.useAbility and a
+--- new line in Abilities.spec, deliberately - an ability is a balance
+--- surface, not just a table row.
+---   Barrage      instant damage to the first `strikes` enemies in range
+---   Overcharge   fire rate x `power` for `durationSeconds`
+---   FreezeBurst  applies `effectId` to EVERY enemy in range
+---   Payday       instant cash, `power` scaled up by the current wave
+export type TowerAbilityKind = "Barrage" | "Overcharge" | "FreezeBurst" | "Payday"
+
+export type TowerAbility = {
+	id: string,
+	displayName: string,
+	description: string,
+	kind: TowerAbilityKind,
+	cooldownSeconds: number,
+	--- Damage per strike (Barrage), rate multiplier (Overcharge), base cash
+	--- (Payday). Unused by FreezeBurst.
+	power: number,
+	--- Enemies hit by a Barrage. Unused elsewhere.
+	strikes: number,
+	--- Boost length (Overcharge) or effect length (FreezeBurst). Unused
+	--- elsewhere.
+	durationSeconds: number,
+	--- The status applied by a FreezeBurst. Must exist in StatusEffects.
+	effectId: string?,
+}
+
 export type TowerLevel = {
 	--- Cost to REACH this level. Index 1 is the purchase price; later indices
 	--- are upgrade costs, not cumulative totals.
@@ -335,6 +363,9 @@ export type TowerDefinition = {
 	--- Tier in Config/Rarity.luau. Drives the gacha's odds and every
 	--- surface's colour for this tower.
 	rarity: string,
+	--- The tower's active, if it has one. Most do not: an ability is a
+	--- flagship feature, and six buttons a wave is a keyboard, not a game.
+	ability: TowerAbility?,
 }
 
 -- ===========================================================================

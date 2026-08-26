@@ -77,6 +77,14 @@ export type Tower = typeof(setmetatable(
 		--- written into the shared definition, which every tower of this
 		--- type reads.
 		traitMultipliers: TraitEffects.Multipliers,
+		--- Overcharge state: fire rate is multiplied by boostMultiplier
+		--- while boostRemaining is above zero. Ticked down with the same
+		--- clock the reload uses, so a boost and a reload can never drift.
+		boostMultiplier: number,
+		boostRemaining: number,
+		--- os.time() at which the ability may fire again. 0 means ready
+		--- (or no ability at all - the definition decides).
+		abilityReadyAt: number,
 	},
 	BaseTower
 ))
@@ -116,6 +124,9 @@ function BaseTower.new(params: PlaceParams): Tower
 		invested = definition.levels[1].cost,
 		traits = params.traits or {},
 		traitMultipliers = TraitEffects.multipliers(params.traits or {}),
+		boostMultiplier = 1,
+		boostRemaining = 0,
+		abilityReadyAt = 0,
 	}, BaseTower)
 
 	local hook = tower.behavior.onPlaced
@@ -196,11 +207,28 @@ function BaseTower.tickCooldown(self: Tower, deltaTime: number)
 	if self.cooldown > 0 then
 		self.cooldown = math.max(0, self.cooldown - deltaTime)
 	end
+
+	if self.boostRemaining > 0 then
+		self.boostRemaining = math.max(0, self.boostRemaining - deltaTime)
+	end
+end
+
+--- Starts an Overcharge: fire rate multiplied for a fixed window. A second
+--- cast REPLACES the window rather than stacking - the cooldown makes that
+--- almost impossible anyway, but almost is how exploits start.
+function BaseTower.beginBoost(self: Tower, multiplier: number, durationSeconds: number)
+	self.boostMultiplier = multiplier
+	self.boostRemaining = durationSeconds
 end
 
 --- Starts the reload. fireRate is shots per second.
 function BaseTower.beginReload(self: Tower)
 	local rate = self:currentLevel().fireRate * self.traitMultipliers.fireRate
+
+	if self.boostRemaining > 0 then
+		rate *= self.boostMultiplier
+	end
+
 	self.cooldown = if rate > 0 then 1 / rate else math.huge
 end
 

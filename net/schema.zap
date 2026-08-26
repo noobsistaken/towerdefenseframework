@@ -127,6 +127,17 @@ event RequestSetTargeting = {
 	},
 }
 
+-- Fires a tower's active ability. The server checks ownership, that the
+-- tower HAS an ability, and its cooldown - all from state it already owns.
+event RequestAbility = {
+	from: Client,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		towerId: u32,
+	},
+}
+
 -- Ends the build phase early. The remaining prep time converts to a cash
 -- bonus for everyone, so the server reads its own clock and never trusts a
 -- client-supplied duration.
@@ -198,6 +209,21 @@ event MatchEnded = {
 		-- RerollTokens granted by this payout, spent on trait rerolls in the
 		-- lobby. Small by design; u8 is generous.
 		tokensAwarded: u8,
+	},
+}
+
+-- An ability went off - the cue every client plays. Reliable, unlike the
+-- tracers: abilities are rare and missing one reads as a dead button.
+event AbilityUsed = {
+	from: Server,
+	type: Reliable,
+	call: ManyAsync,
+	data: struct {
+		towerId: u32,
+		abilityId: string.utf8(..24),
+		position: vector,
+		-- Blast radius for the cue's expanding ring. 0 draws none.
+		radius: f32,
 	},
 }
 
