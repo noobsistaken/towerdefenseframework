@@ -77,4 +77,15 @@ atoms.activeArea = Charm.atom(nil :: string?)
 --- button that opens it and the panel that closes itself.
 atoms.loadoutOpen = Charm.atom(false)
 
+--- The unit featured on the reroll screen. Nil means "first owned". Set by
+--- the unit-picker overlay, read by the panel - they are separate mounts,
+--- which is why this lives here and not in component state.
+atoms.rerollUnit = Charm.atom(nil :: string?)
+
+--- The reroll screen's two overlays. Mounted at the ROOT of the UI tree
+--- rather than inside the panel, so they can never z-fight the panel that
+--- opened them - the lesson of the unreadable first Trait Chances popup.
+atoms.traitChancesOpen = Charm.atom(false)
+atoms.unitPickerOpen = Charm.atom(false)
+
 return atoms

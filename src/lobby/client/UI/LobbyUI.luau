@@ -947,9 +947,71 @@ local function UnitPortrait(props: { towerId: string? })
 	})
 end
 
---- The odds popup, genre-standard: every trait, rarity-coloured, with the
---- true percentage beside it.
-local function TraitChances(props: { onClose: () -> () })
+--- Shared scaffolding for the reroll screen's overlays: a full-screen
+--- dimmer that swallows clicks (and closes on one), with a fully OPAQUE
+--- panel on top. Mounted at the UI root, above every panel - the first
+--- chances popup lived inside the panel and z-fought it into
+--- unreadability.
+local function overlay(onClose: () -> (), size: UDim2, children: { [string]: any })
+	return e("TextButton", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 0.45,
+		BorderSizePixel = 0,
+		AutoButtonColor = false,
+		Text = "",
+		ZIndex = 10,
+		[React.Event.Activated] = onClose,
+	}, {
+		panel = e("TextButton", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = size,
+			BackgroundColor3 = Theme.PANEL,
+			BackgroundTransparency = 0,
+			BorderSizePixel = 0,
+			AutoButtonColor = false,
+			Text = "",
+			ZIndex = 11,
+			-- Swallows the click so tapping the panel does not close it.
+			[React.Event.Activated] = function() end,
+		}, children),
+	})
+end
+
+local function closeButton(onClose: () -> ())
+	return e("TextButton", {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -8, 0, 8),
+		Size = UDim2.fromOffset(30, 30),
+		BackgroundColor3 = Theme.NEGATIVE,
+		BorderSizePixel = 0,
+		AutoButtonColor = true,
+		Font = Theme.FONT,
+		Text = "X",
+		TextColor3 = Theme.TEXT,
+		TextSize = 15,
+		ZIndex = 12,
+		[React.Event.Activated] = onClose,
+	}, {
+		corner = e("UICorner", { CornerRadius = UDim.new(0.5, 0) }),
+	})
+end
+
+--- The odds table, genre-standard: every trait, rarity-coloured, with the
+--- true percentage beside it. Its own overlay, opaque, readable.
+local function TraitChancesOverlay()
+	local area = useAtom(atoms.activeArea)
+	local open = useAtom(atoms.traitChancesOpen)
+
+	if not open or area ~= "Reroll" then
+		return nil
+	end
+
+	local close = function()
+		atoms.traitChancesOpen(false)
+	end
+
 	local ordered: { string } = {}
 
 	for _, id in Traits.IDS do
@@ -980,89 +1042,68 @@ local function TraitChances(props: { onClose: () -> () })
 		local color = rarityColor(definition.rarity)
 
 		rows[id] = e("Frame", {
-			Size = UDim2.fromOffset(280, 34),
+			Size = UDim2.fromOffset(300, 36),
 			BackgroundColor3 = Theme.RAISED,
 			BorderSizePixel = 0,
 			LayoutOrder = index,
+			ZIndex = 12,
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-			stroke = e("UIStroke", { Color = color, Thickness = 1, Transparency = 0.35 }),
+			stroke = e("UIStroke", { Color = color, Thickness = 1.2, Transparency = 0.25 }),
 			name = label({
-				Position = UDim2.fromOffset(12, 0),
-				Size = UDim2.new(1, -90, 1, 0),
+				Position = UDim2.fromOffset(14, 0),
+				Size = UDim2.new(1, -100, 1, 0),
 				Text = definition.displayName,
 				TextColor3 = color,
-				TextSize = 15,
+				TextSize = 16,
 				TextXAlignment = Enum.TextXAlignment.Left,
+				ZIndex = 12,
 			}),
 			chance = label({
 				AnchorPoint = Vector2.new(1, 0),
-				Position = UDim2.new(1, -12, 0, 0),
-				Size = UDim2.fromOffset(80, 34),
+				Position = UDim2.new(1, -14, 0, 0),
+				Size = UDim2.fromOffset(84, 36),
 				Text = formatChance(traitChance(id)),
 				TextColor3 = color,
-				TextSize = 15,
+				TextSize = 16,
 				TextXAlignment = Enum.TextXAlignment.Right,
+				ZIndex = 12,
 			}),
 		})
 	end
 
-	return e("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(320, 430),
-		BackgroundColor3 = Theme.PANEL,
-		BackgroundTransparency = 0.03,
-		BorderSizePixel = 0,
-		ZIndex = 5,
-	}, {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
-		stroke = e("UIStroke", { Color = Theme.CASH, Thickness = 1.5, Transparency = 0.3 }),
+	return overlay(close, UDim2.fromOffset(360, 480), {
 		title = label({
-			Position = UDim2.fromOffset(0, 10),
-			Size = UDim2.new(1, 0, 0, 24),
-			Text = "Trait Chances",
+			Position = UDim2.fromOffset(0, 12),
+			Size = UDim2.new(1, 0, 0, 26),
+			Text = "TRAIT CHANCES",
 			TextColor3 = Theme.CASH,
-			TextSize = 19,
+			TextSize = 20,
+			ZIndex = 12,
 		}),
-		close = e("TextButton", {
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -8, 0, 8),
-			Size = UDim2.fromOffset(28, 28),
-			BackgroundColor3 = Theme.NEGATIVE,
-			BorderSizePixel = 0,
-			AutoButtonColor = true,
-			Font = Theme.FONT,
-			Text = "X",
-			TextColor3 = Theme.TEXT,
-			TextSize = 15,
-			ZIndex = 6,
-			[React.Event.Activated] = props.onClose,
-		}, {
-			corner = e("UICorner", { CornerRadius = UDim.new(0.5, 0) }),
-		}),
+		close = closeButton(close),
 		list = e("ScrollingFrame", {
-			Position = UDim2.fromOffset(12, 44),
-			Size = UDim2.new(1, -24, 1, -56),
+			Position = UDim2.fromOffset(16, 50),
+			Size = UDim2.new(1, -32, 1, -66),
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			ScrollBarThickness = 4,
+			ScrollBarThickness = 5,
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			CanvasSize = UDim2.new(),
-			ZIndex = 5,
+			ZIndex = 12,
 		}, rows),
 	})
 end
 
-type PickButtonProps = {
+type InventoryCellProps = {
 	towerId: string,
-	selected: boolean,
+	picked: boolean,
 	traitId: string?,
 	onPick: (towerId: string) -> (),
 	order: number,
 }
 
-local function PickButton(props: PickButtonProps)
+local function InventoryCell(props: InventoryCellProps)
 	local definition = Towers.find(props.towerId)
 
 	if definition == nil then
@@ -1070,61 +1111,163 @@ local function PickButton(props: PickButtonProps)
 	end
 
 	local traitText = "no trait"
+	local traitColor = Theme.MUTED
 
 	if props.traitId ~= nil then
 		local trait = Traits.find(props.traitId)
 
 		if trait ~= nil then
 			traitText = trait.displayName
+			traitColor = rarityColor(trait.rarity)
 		end
 	end
 
 	return e("TextButton", {
-		Size = UDim2.fromOffset(170, 40),
-		BackgroundColor3 = if props.selected then Theme.ACCENT else Theme.RAISED,
+		Size = UDim2.fromOffset(150, 56),
+		BackgroundColor3 = Theme.RAISED,
 		BorderSizePixel = 0,
 		AutoButtonColor = true,
 		Text = "",
 		LayoutOrder = props.order,
+		ZIndex = 12,
 		[React.Event.Activated] = function()
 			props.onPick(props.towerId)
 		end,
 	}, {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		stroke = e("UIStroke", {
+			Color = if props.picked then Theme.ACCENT else rarityColor(definition.rarity),
+			Thickness = if props.picked then 2.5 else 1,
+			Transparency = if props.picked then 0 else 0.55,
+		}),
 		name = label({
-			Position = UDim2.fromOffset(0, 4),
-			Size = UDim2.new(1, 0, 0, 18),
+			Position = UDim2.fromOffset(0, 8),
+			Size = UDim2.new(1, 0, 0, 20),
 			Text = definition.displayName,
-			TextColor3 = if props.selected then Theme.INVERSE else rarityColor(definition.rarity),
-			TextSize = 13,
+			TextColor3 = rarityColor(definition.rarity),
+			TextSize = 14,
+			ZIndex = 12,
 		}),
 		trait = label({
-			Position = UDim2.fromOffset(0, 22),
-			Size = UDim2.new(1, 0, 0, 14),
+			Position = UDim2.fromOffset(0, 30),
+			Size = UDim2.new(1, 0, 0, 16),
 			Font = Theme.FONT_BODY,
 			Text = traitText,
-			TextColor3 = if props.selected then Theme.INVERSE else Theme.MUTED,
-			TextSize = 10,
+			TextColor3 = traitColor,
+			TextSize = 11,
+			ZIndex = 12,
 		}),
 	})
 end
 
---- The reroll station, genre-shaped: pick a unit from the grid, see it
---- standing in the portrait with its current trait, reroll for one token,
---- and read the true odds off the Trait Chances popup.
+--- The inventory: opened by SELECT UNIT on the reroll screen, on top of
+--- it. Click a unit to highlight it, then SELECT to make it the featured
+--- one - two deliberate steps, so a stray tap can never switch the unit
+--- a reroll is about to spend a token on.
+local function UnitInventoryOverlay()
+	local area = useAtom(atoms.activeArea)
+	local open = useAtom(atoms.unitPickerOpen)
+	local unlocked = useAtom(atoms.unlockedTowers)
+	local traits = useAtom(atoms.traits)
+	local picked, setPickedRaw = React.useState(nil :: string?)
+	-- Same optional-initial inference gotcha as the panels; same cast.
+	local setPicked = setPickedRaw :: (string?) -> ()
+
+	-- A fresh visit starts with nothing highlighted. The boolean dep is the
+	-- point: open/close is exactly when to reset.
+	React.useEffect(function()
+		if open then
+			setPicked(nil)
+		end
+	end, { open })
+
+	if not open or area ~= "Reroll" then
+		return nil
+	end
+
+	local close = function()
+		atoms.unitPickerOpen(false)
+	end
+
+	local cells: { [string]: any } = {
+		layout = e("UIGridLayout", {
+			CellSize = UDim2.fromOffset(150, 56),
+			CellPadding = UDim2.fromOffset(8, 8),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		}),
+	}
+
+	for order, towerId in unlocked do
+		cells[towerId] = e(InventoryCell, {
+			towerId = towerId,
+			picked = towerId == picked,
+			traitId = traits[towerId],
+			onPick = setPicked,
+			order = order,
+		})
+	end
+
+	local canSelect = picked ~= nil
+
+	return overlay(close, UDim2.fromOffset(540, 440), {
+		title = label({
+			Position = UDim2.fromOffset(0, 12),
+			Size = UDim2.new(1, 0, 0, 26),
+			Text = "SELECT A UNIT",
+			TextColor3 = Theme.ACCENT,
+			TextSize = 20,
+			ZIndex = 12,
+		}),
+		close = closeButton(close),
+		grid = e("ScrollingFrame", {
+			Position = UDim2.fromOffset(16, 50),
+			Size = UDim2.new(1, -32, 1, -122),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ScrollBarThickness = 5,
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+			ZIndex = 12,
+		}, cells),
+		select = e("TextButton", {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -14),
+			Size = UDim2.fromOffset(220, 46),
+			BackgroundColor3 = if canSelect then Theme.POSITIVE else Theme.DISABLED,
+			BorderSizePixel = 0,
+			AutoButtonColor = canSelect,
+			Font = Theme.FONT,
+			Text = "SELECT",
+			TextColor3 = if canSelect then Theme.INVERSE else Theme.MUTED,
+			TextSize = 17,
+			ZIndex = 12,
+			[React.Event.Activated] = function()
+				if picked ~= nil then
+					atoms.rerollUnit(picked)
+					close()
+				end
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		}),
+	})
+end
+
+--- The reroll station: the featured unit standing as a model, SELECT UNIT
+--- to swap it through the inventory overlay, REROLL to spend a token, and
+--- TRAIT CHANCES for the true odds.
 local function RerollPanel()
 	local area = useAtom(atoms.activeArea)
 	local tokens = useAtom(atoms.rerollTokens)
 	local unlocked = useAtom(atoms.unlockedTowers)
 	local traits = useAtom(atoms.traits)
+	local featured = useAtom(atoms.rerollUnit)
 	local busy, setBusy = React.useState(false)
-	local chancesOpen, setChancesOpen = React.useState(false)
-	local selected, setSelectedRaw = React.useState(nil :: string?)
 	local lastReroll, setLastRerollRaw = React.useState(nil :: RerollReply?)
 	local reveal, setRevealRaw = React.useState(nil :: Reveal?)
 	-- Same optional-initial inference gotcha as GachaPanel; same one cast
 	-- per setter.
-	local setSelected = setSelectedRaw :: (string?) -> ()
 	local setLastReroll = setLastRerollRaw :: (RerollReply?) -> ()
 	local setReveal = setRevealRaw :: (Reveal?) -> ()
 	-- Same synchronous double-fire guard as the gacha's roll button: `busy`
@@ -1135,7 +1278,7 @@ local function RerollPanel()
 		return nil
 	end
 
-	local currentId: string? = selected or unlocked[1]
+	local currentId: string? = featured or unlocked[1]
 	local currentDefinition = if currentId ~= nil then Towers.find(currentId) else nil
 
 	local onReroll = function()
@@ -1205,30 +1348,12 @@ local function RerollPanel()
 		end
 	end
 
-	local grid: { [string]: any } = {
-		layout = e("UIGridLayout", {
-			CellSize = UDim2.fromOffset(170, 40),
-			CellPadding = UDim2.fromOffset(8, 8),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	}
-
-	for order, towerId in unlocked do
-		grid[towerId] = e(PickButton, {
-			towerId = towerId,
-			selected = towerId == currentId,
-			traitId = traits[towerId],
-			onPick = setSelected,
-			order = order,
-		})
-	end
-
 	local affordable = tokens >= 1 and currentId ~= nil
 
 	return e("Frame", {
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -100),
-		Size = UDim2.fromOffset(620, 400),
+		Size = UDim2.fromOffset(520, 380),
 		BackgroundColor3 = Theme.PANEL,
 		BackgroundTransparency = 0.06,
 		BorderSizePixel = 0,
@@ -1252,7 +1377,7 @@ local function RerollPanel()
 			Position = UDim2.fromOffset(0, 38),
 			Size = UDim2.new(1, 0, 0, 16),
 			Font = Theme.FONT_BODY,
-			Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}  ·  rerolling replaces the current trait`,
+			Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}  -  rerolling replaces the current trait`,
 			TextColor3 = Theme.MUTED,
 			TextSize = 12,
 		}),
@@ -1266,30 +1391,38 @@ local function RerollPanel()
 		}),
 		traitName = label({
 			Position = UDim2.fromOffset(16, 280),
-			Size = UDim2.fromOffset(190, 18),
+			Size = UDim2.fromOffset(190, 34),
 			Font = Theme.FONT_BODY,
 			Text = traitLine,
 			TextColor3 = traitColor,
 			TextSize = 12,
 			TextWrapped = true,
 		}),
-		pickHeader = label({
-			Position = UDim2.fromOffset(222, 58),
-			Size = UDim2.fromOffset(190, 16),
-			Text = "PICK A UNIT",
+		selectUnit = e("TextButton", {
+			Position = UDim2.fromOffset(240, 100),
+			Size = UDim2.fromOffset(240, 52),
+			BackgroundColor3 = Theme.ACCENT,
+			BorderSizePixel = 0,
+			AutoButtonColor = true,
+			Font = Theme.FONT,
+			Text = "SELECT UNIT",
+			TextColor3 = Theme.INVERSE,
+			TextSize = 17,
+			[React.Event.Activated] = function()
+				atoms.unitPickerOpen(true)
+			end,
+		}, {
+			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+		}),
+		selectHint = label({
+			Position = UDim2.fromOffset(240, 156),
+			Size = UDim2.fromOffset(240, 30),
+			Font = Theme.FONT_BODY,
+			Text = "Pick which unit the reroll applies to",
 			TextColor3 = Theme.MUTED,
 			TextSize = 11,
-			TextXAlignment = Enum.TextXAlignment.Left,
+			TextWrapped = true,
 		}),
-		picker = e("ScrollingFrame", {
-			Position = UDim2.fromOffset(222, 78),
-			Size = UDim2.new(1, -238, 1, -158),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			ScrollBarThickness = 4,
-			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-			CanvasSize = UDim2.new(),
-		}, grid),
 		chances = e("TextButton", {
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.new(0, 16, 1, -16),
@@ -1302,7 +1435,7 @@ local function RerollPanel()
 			TextColor3 = Theme.INVERSE,
 			TextSize = 14,
 			[React.Event.Activated] = function()
-				setChancesOpen(not chancesOpen)
+				atoms.traitChancesOpen(true)
 			end,
 		}, {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
@@ -1336,13 +1469,6 @@ local function RerollPanel()
 				})
 				else nil,
 		}),
-		chancesPopup = if chancesOpen
-			then e(TraitChances, {
-				onClose = function()
-					setChancesOpen(false)
-				end,
-			})
-			else nil,
 	})
 end
 
@@ -1359,6 +1485,8 @@ local function LobbyUI()
 		loadout = e(LoadoutPanel),
 		gacha = e(GachaPanel),
 		reroll = e(RerollPanel),
+		unitPicker = e(UnitInventoryOverlay),
+		traitChances = e(TraitChancesOverlay),
 		-- F2. No Cash here - there is no match to be cash in - and grants
 		-- patch the same atoms the roll replies do, from the same kind of
 		-- server-returned balance.
