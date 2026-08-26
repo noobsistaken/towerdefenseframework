@@ -34,6 +34,48 @@ local DEFINITIONS: { [string]: Types.StatusEffectDefinition } = {
 		color = Color3.fromRGB(168, 36, 44),
 	},
 
+	Burn = {
+		id = "Burn",
+		displayName = "Burn",
+		kind = "DamageOverTime" :: Types.StatusEffectKind,
+		tickInterval = 0.4,
+		-- Stacks shallower than Bleed: burn towers hit harder per
+		-- application, so the cap is what keeps two of them honest.
+		stacking = "Stack" :: Types.StatusStacking,
+		maxStacks = 3,
+		magnitude = 1,
+		color = Color3.fromRGB(226, 124, 44),
+	},
+
+	Sunder = {
+		id = "Sunder",
+		displayName = "Sunder",
+		kind = "DamageTakenMultiplier" :: Types.StatusEffectKind,
+		tickInterval = 0,
+		-- Refresh, like Slow and for the same reason: multiplicative
+		-- vulnerability stacks are how one debuffer becomes a damage
+		-- doubling nobody priced.
+		stacking = "Refresh" :: Types.StatusStacking,
+		maxStacks = 1,
+		magnitude = 1.2,
+		color = Color3.fromRGB(168, 96, 202),
+	},
+
+	-- Short on purpose, and Refresh: a stun that outlasted its tower's
+	-- reload would be a permanent freeze with extra steps. At 0.5-0.7s
+	-- against a ~0.9s reload, uptime tops out near 60% on one target.
+	Concuss = {
+		id = "Concuss",
+		displayName = "Concuss",
+		kind = "Stun" :: Types.StatusEffectKind,
+		tickInterval = 0,
+		stacking = "Refresh" :: Types.StatusStacking,
+		maxStacks = 1,
+		-- Unused by Stun; speed is forced to zero regardless.
+		magnitude = 0,
+		color = Color3.fromRGB(232, 220, 120),
+	},
+
 	Slow = {
 		id = "Slow",
 		displayName = "Slow",

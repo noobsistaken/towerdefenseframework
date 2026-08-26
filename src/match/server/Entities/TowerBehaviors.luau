@@ -9,24 +9,43 @@
 	under Towers/, add a line here - and adding one that does not is zero.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Types = require(ReplicatedStorage.Shared.Types)
+
 local Splash = require(script.Parent.Towers.Splash)
 
 local BaseTower = require(script.Parent.BaseTower)
 
 local TowerBehaviors = {}
 
-local BY_ID: { [string]: BaseTower.TowerBehavior } = {
-	-- Both splash towers share one implementation; the radius that
-	-- distinguishes them lives in Config/Towers.luau, not here.
-	Mortar = Splash,
-	Flak = Splash,
-}
+--- Only towers whose behaviour cannot be DERIVED from their config need
+--- a line here. Splash is not one of them any more - see `find`.
+local BY_ID: { [string]: BaseTower.TowerBehavior } = {}
 
 TowerBehaviors.BY_ID = BY_ID
 
---- Behaviour for a tower id, or nil to use BaseTower's defaults.
-function TowerBehaviors.find(id: string): BaseTower.TowerBehavior?
-	return BY_ID[id]
+--- Behaviour for a tower, or nil to use BaseTower's defaults.
+---
+--- Splash is derived from the definition rather than listed by id:
+--- with a twenty-six tower roster, a hand-kept list's failure mode is a
+--- new splash tower silently single-targeting because someone forgot
+--- the registry line. Config that already says splashRadius > 0 IS the
+--- registration.
+function TowerBehaviors.find(definition: Types.TowerDefinition): BaseTower.TowerBehavior?
+	local override = BY_ID[definition.id]
+
+	if override ~= nil then
+		return override
+	end
+
+	for _, level in definition.levels do
+		if level.splashRadius > 0 then
+			return Splash
+		end
+	end
+
+	return nil
 end
 
 return TowerBehaviors

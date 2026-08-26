@@ -26,6 +26,32 @@ local Types = require(script.Parent.Parent.Types)
 
 local Towers = {}
 
+--- Compact level constructor for the expanded roster. The first six
+--- towers predate it and stay verbatim; everything after uses this,
+--- because twenty towers of hand-written level tables is how a typo
+--- ships. Argument order mirrors the field order the verbatim tables use.
+local function makeLevel(
+	cost: number,
+	damage: number,
+	fireRate: number,
+	range: number,
+	splashRadius: number,
+	applies: { Types.StatusApplication },
+	modelSize: Vector3,
+	color: Color3
+): Types.TowerLevel
+	return {
+		cost = cost,
+		damage = damage,
+		fireRate = fireRate,
+		range = range,
+		splashRadius = splashRadius,
+		applies = applies,
+		modelSize = modelSize,
+		color = color,
+	}
+end
+
 local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 	-- -----------------------------------------------------------------------
 	-- Ground
@@ -360,6 +386,376 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 				modelSize = Vector3.new(5.5, 10, 5.5),
 				color = Color3.fromRGB(212, 108, 130),
 			},
+		},
+	},
+	-- -----------------------------------------------------------------------
+	-- The expanded roster. Twenty towers, distributed pyramid-style across
+	-- the rarity ladder; every one is pure config - splash and status
+	-- behaviour derive from the numbers below, never from new code.
+	-- -----------------------------------------------------------------------
+
+	-- Commons: one clear job each, cheaply.
+
+	Scout = {
+		id = "Scout",
+		displayName = "Scout",
+		rarity = "Common",
+		description = "Fast, cheap chip damage anywhere. The first thing worth placing.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(5, 5),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "ArmyNoobSoldier",
+		levels = {
+			makeLevel(100, 4, 2.2, 38, 0, {}, Vector3.new(3.5, 5.5, 3.5), Color3.fromRGB(186, 172, 138)),
+			makeLevel(90, 7, 2.4, 41, 0, {}, Vector3.new(4, 6, 4), Color3.fromRGB(198, 186, 152)),
+			makeLevel(170, 12, 2.6, 44, 0, {}, Vector3.new(4, 6.5, 4), Color3.fromRGB(212, 202, 170)),
+		},
+	},
+	Shotgunner = {
+		id = "Shotgunner",
+		displayName = "Shotgunner",
+		rarity = "Common",
+		description = "Brutal up close, useless at distance. Ground only.",
+		category = "Ground" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "Closest" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "ArmySoldier2",
+		levels = {
+			makeLevel(200, 22, 0.9, 28, 0, {}, Vector3.new(4, 6, 4), Color3.fromRGB(158, 122, 92)),
+			makeLevel(180, 38, 1.0, 30, 0, {}, Vector3.new(4.5, 7, 4.5), Color3.fromRGB(172, 134, 100)),
+			makeLevel(340, 68, 1.1, 33, 0, {}, Vector3.new(5, 8, 5), Color3.fromRGB(188, 148, 110)),
+		},
+	},
+	Slinger = {
+		id = "Slinger",
+		displayName = "Slinger",
+		rarity = "Common",
+		description = "The budget answer to air. Elevated ground only.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(5, 5),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "ToySoldier",
+		levels = {
+			makeLevel(180, 9, 1.5, 55, 0, {}, Vector3.new(4, 6, 4), Color3.fromRGB(122, 148, 170)),
+			makeLevel(160, 15, 1.6, 60, 0, {}, Vector3.new(4, 6.5, 4), Color3.fromRGB(134, 162, 186)),
+			makeLevel(300, 27, 1.8, 66, 0, {}, Vector3.new(4.5, 7, 4.5), Color3.fromRGB(148, 178, 204)),
+		},
+	},
+	Watchman = {
+		id = "Watchman",
+		displayName = "Watchman",
+		rarity = "Common",
+		description = "Sees far, hits light. Buys reach before you can afford real range.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "VDVSoldier",
+		levels = {
+			makeLevel(220, 12, 1.1, 70, 0, {}, Vector3.new(4, 7, 4), Color3.fromRGB(128, 138, 128)),
+			makeLevel(200, 20, 1.2, 76, 0, {}, Vector3.new(4.5, 8, 4.5), Color3.fromRGB(140, 152, 140)),
+			makeLevel(380, 34, 1.3, 84, 0, {}, Vector3.new(5, 9, 5), Color3.fromRGB(154, 168, 154)),
+		},
+	},
+	Grenadier = {
+		id = "Grenadier",
+		displayName = "Grenadier",
+		rarity = "Common",
+		description = "Small, honest splash on a small, honest budget. Ground only.",
+		category = "Ground" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(7, 7),
+		defaultTargeting = "Last" :: Types.TargetingMode,
+		perPlayerCap = 8,
+		rig = "SwatSoldier",
+		levels = {
+			makeLevel(250, 14, 0.8, 48, 8, {}, Vector3.new(5, 5.5, 5), Color3.fromRGB(130, 122, 96)),
+			makeLevel(220, 24, 0.85, 52, 9, {}, Vector3.new(5.5, 6, 5.5), Color3.fromRGB(142, 134, 104)),
+			makeLevel(420, 42, 0.9, 56, 11, {}, Vector3.new(6, 6.5, 6), Color3.fromRGB(156, 148, 114)),
+		},
+	},
+
+	-- Uncommons: a real specialisation each.
+
+	Gunner = {
+		id = "Gunner",
+		displayName = "Gunner",
+		rarity = "Uncommon",
+		description = "Sustained automatic fire. Ground only, and never stops.",
+		category = "Ground" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "ArmyNoobSoldier",
+		levels = {
+			makeLevel(450, 12, 3.2, 44, 0, {}, Vector3.new(4.5, 6, 4.5), Color3.fromRGB(110, 116, 130)),
+			makeLevel(380, 20, 3.5, 48, 0, {}, Vector3.new(5, 6.5, 5), Color3.fromRGB(122, 130, 146)),
+			makeLevel(700, 34, 3.8, 52, 0, {}, Vector3.new(5, 7, 5), Color3.fromRGB(136, 146, 164)),
+			makeLevel(1200, 58, 4.0, 56, 0, {}, Vector3.new(5.5, 8, 5.5), Color3.fromRGB(152, 164, 184)),
+		},
+	},
+	Frostcaster = {
+		id = "Frostcaster",
+		displayName = "Frostcaster",
+		rarity = "Uncommon",
+		description = "Light hits that chill everything they touch. The damage is the excuse.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 6,
+		rig = "WinterSoldier",
+		levels = {
+			makeLevel(400, 8, 1.0, 55, 0, { { effectId = "Slow", duration = 2, power = 0 } }, Vector3.new(4.5, 7, 4.5), Color3.fromRGB(152, 196, 220)),
+			makeLevel(350, 13, 1.1, 60, 0, { { effectId = "Slow", duration = 2.5, power = 0 } }, Vector3.new(5, 8, 5), Color3.fromRGB(166, 208, 230)),
+			makeLevel(650, 22, 1.2, 66, 0, { { effectId = "Slow", duration = 3, power = 0 } }, Vector3.new(5.5, 9, 5.5), Color3.fromRGB(182, 220, 240)),
+		},
+	},
+	Skirmisher = {
+		id = "Skirmisher",
+		displayName = "Skirmisher",
+		rarity = "Uncommon",
+		description = "A Ranger that traded its air coverage for a harder punch.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "ArmySoldier2",
+		levels = {
+			makeLevel(350, 18, 1.7, 50, 0, {}, Vector3.new(4.5, 7, 4.5), Color3.fromRGB(104, 132, 96)),
+			makeLevel(300, 30, 1.8, 54, 0, {}, Vector3.new(5, 8, 5), Color3.fromRGB(114, 146, 106)),
+			makeLevel(560, 52, 2.0, 58, 0, {}, Vector3.new(5.5, 9, 5.5), Color3.fromRGB(126, 162, 118)),
+		},
+	},
+	Flaresman = {
+		id = "Flaresman",
+		displayName = "Flaresman",
+		rarity = "Uncommon",
+		description = "Shoots ONLY air, and punishes it for existing. Elevated ground only.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Air" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "VDVSoldier",
+		levels = {
+			makeLevel(300, 26, 1.3, 65, 0, {}, Vector3.new(4.5, 8, 4.5), Color3.fromRGB(190, 110, 90)),
+			makeLevel(260, 42, 1.4, 70, 0, {}, Vector3.new(5, 9, 5), Color3.fromRGB(204, 122, 100)),
+			makeLevel(500, 74, 1.5, 76, 0, {}, Vector3.new(5.5, 10, 5.5), Color3.fromRGB(220, 136, 112)),
+		},
+	},
+
+	-- Rares: the mid-game backbone.
+
+	Autocannon = {
+		id = "Autocannon",
+		displayName = "Autocannon",
+		rarity = "Rare",
+		description = "Rapid bursting shells. What Flak grows up wanting to be. Elevated only.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(7, 7),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 8,
+		rig = "SciFiRobot",
+		levels = {
+			makeLevel(700, 20, 1.8, 58, 8, {}, Vector3.new(6, 6, 6), Color3.fromRGB(96, 108, 122)),
+			makeLevel(600, 33, 2.0, 62, 9, {}, Vector3.new(6.5, 6.5, 6.5), Color3.fromRGB(106, 120, 136)),
+			makeLevel(1100, 56, 2.2, 68, 11, {}, Vector3.new(7, 7, 7), Color3.fromRGB(118, 134, 152)),
+		},
+	},
+	Hexer = {
+		id = "Hexer",
+		displayName = "Hexer",
+		rarity = "Rare",
+		description = "Marks the strongest enemy to take extra damage from EVERYTHING.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "Strongest" :: Types.TargetingMode,
+		perPlayerCap = 6,
+		rig = "ToySoldier",
+		levels = {
+			makeLevel(500, 10, 1.2, 52, 0, { { effectId = "Sunder", duration = 3, power = 0 } }, Vector3.new(4.5, 7.5, 4.5), Color3.fromRGB(148, 104, 178)),
+			makeLevel(450, 16, 1.3, 56, 0, { { effectId = "Sunder", duration = 3.5, power = 0 } }, Vector3.new(5, 8.5, 5), Color3.fromRGB(160, 116, 190)),
+			makeLevel(850, 27, 1.4, 62, 0, { { effectId = "Sunder", duration = 4, power = 0 } }, Vector3.new(5.5, 9.5, 5.5), Color3.fromRGB(174, 130, 204)),
+		},
+	},
+	Marauder = {
+		id = "Marauder",
+		displayName = "Marauder",
+		rarity = "Rare",
+		description = "Heavy rounds for heavy targets. Hunts the strongest thing it can see.",
+		category = "Ground" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "Strongest" :: Types.TargetingMode,
+		perPlayerCap = 0,
+		rig = "ArmySoldier2",
+		levels = {
+			makeLevel(600, 34, 1.6, 48, 0, {}, Vector3.new(5, 7, 5), Color3.fromRGB(132, 106, 84)),
+			makeLevel(500, 55, 1.7, 52, 0, {}, Vector3.new(5.5, 8, 5.5), Color3.fromRGB(146, 116, 92)),
+			makeLevel(950, 92, 1.8, 56, 0, {}, Vector3.new(6, 9, 6), Color3.fromRGB(160, 128, 100)),
+			makeLevel(1700, 170, 1.9, 60, 0, {}, Vector3.new(6.5, 10, 6.5), Color3.fromRGB(176, 142, 110)),
+		},
+	},
+	Longbow = {
+		id = "Longbow",
+		displayName = "Longbow",
+		rarity = "Rare",
+		description = "Marksman range on a working budget. Elevated ground only.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "Strongest" :: Types.TargetingMode,
+		perPlayerCap = 8,
+		rig = "ToySoldier",
+		levels = {
+			makeLevel(550, 48, 0.9, 100, 0, {}, Vector3.new(4.5, 8.5, 4.5), Color3.fromRGB(96, 124, 112)),
+			makeLevel(480, 78, 0.95, 108, 0, {}, Vector3.new(5, 9.5, 5), Color3.fromRGB(106, 138, 124)),
+			makeLevel(900, 130, 1.0, 116, 0, {}, Vector3.new(5.5, 10.5, 5.5), Color3.fromRGB(118, 154, 138)),
+		},
+	},
+
+	-- Epics: build-defining.
+
+	Pyromancer = {
+		id = "Pyromancer",
+		displayName = "Pyromancer",
+		rarity = "Epic",
+		description = "Sets the lane on fire and lets the fire do the arguing. Ground targets.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 6,
+		rig = "SwatSoldier",
+		levels = {
+			makeLevel(800, 16, 1.4, 50, 0, { { effectId = "Burn", duration = 3, power = 6 } }, Vector3.new(5, 8, 5), Color3.fromRGB(216, 118, 62)),
+			makeLevel(700, 26, 1.5, 54, 0, { { effectId = "Burn", duration = 3.5, power = 10 } }, Vector3.new(5.5, 9, 5.5), Color3.fromRGB(228, 132, 72)),
+			makeLevel(1300, 44, 1.6, 60, 0, { { effectId = "Burn", duration = 4, power = 16 } }, Vector3.new(6, 10, 6), Color3.fromRGB(240, 148, 84)),
+		},
+	},
+	Railgunner = {
+		id = "Railgunner",
+		displayName = "Railgunner",
+		rarity = "Epic",
+		description = "One enormous hit at a time, from very far away. Elevated ground only.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(7, 7),
+		defaultTargeting = "Strongest" :: Types.TargetingMode,
+		perPlayerCap = 6,
+		rig = "SciFiRobot",
+		levels = {
+			makeLevel(1000, 130, 0.75, 90, 0, {}, Vector3.new(6, 8, 6), Color3.fromRGB(84, 110, 140)),
+			makeLevel(850, 210, 0.8, 98, 0, {}, Vector3.new(6.5, 9, 6.5), Color3.fromRGB(94, 124, 158)),
+			makeLevel(1600, 380, 0.85, 106, 0, {}, Vector3.new(7, 10, 7), Color3.fromRGB(106, 140, 178)),
+		},
+	},
+	Warden = {
+		id = "Warden",
+		displayName = "Warden",
+		rarity = "Epic",
+		description = "Hits hard enough to stop things mid-step. Briefly. Ground only.",
+		category = "Ground" :: Types.TowerCategory,
+		targets = "Ground" :: Types.TargetClass,
+		footprint = Vector2.new(7, 7),
+		defaultTargeting = "First" :: Types.TargetingMode,
+		perPlayerCap = 4,
+		rig = "SwatSoldier",
+		levels = {
+			makeLevel(900, 28, 1.1, 46, 0, { { effectId = "Concuss", duration = 0.5, power = 0 } }, Vector3.new(5.5, 7.5, 5.5), Color3.fromRGB(196, 186, 120)),
+			makeLevel(800, 46, 1.15, 50, 0, { { effectId = "Concuss", duration = 0.6, power = 0 } }, Vector3.new(6, 8.5, 6), Color3.fromRGB(208, 198, 132)),
+			makeLevel(1500, 78, 1.2, 54, 0, { { effectId = "Concuss", duration = 0.7, power = 0 } }, Vector3.new(6.5, 9.5, 6.5), Color3.fromRGB(222, 212, 146)),
+		},
+	},
+
+	-- Legendaries: the ones a lobby notices.
+
+	Stormcaller = {
+		id = "Stormcaller",
+		displayName = "Stormcaller",
+		rarity = "Legendary",
+		description = "Wide, freezing detonations across half the lane. Elevated ground only.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(8, 8),
+		defaultTargeting = "Last" :: Types.TargetingMode,
+		perPlayerCap = 4,
+		rig = "WinterSoldier",
+		levels = {
+			makeLevel(1400, 60, 0.9, 72, 16, { { effectId = "Slow", duration = 1.5, power = 0 } }, Vector3.new(6.5, 9, 6.5), Color3.fromRGB(110, 150, 200)),
+			makeLevel(1200, 100, 0.95, 78, 18, { { effectId = "Slow", duration = 2, power = 0 } }, Vector3.new(7, 10, 7), Color3.fromRGB(124, 164, 214)),
+			makeLevel(2200, 170, 1.0, 84, 20, { { effectId = "Slow", duration = 2.5, power = 0 } }, Vector3.new(7.5, 11, 7.5), Color3.fromRGB(140, 180, 228)),
+		},
+	},
+	Executioner = {
+		id = "Executioner",
+		displayName = "Executioner",
+		rarity = "Legendary",
+		description = "Finds the strongest thing on the map and deletes it. Anywhere, anything.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(6, 6),
+		defaultTargeting = "Strongest" :: Types.TargetingMode,
+		perPlayerCap = 4,
+		rig = "VDVSoldier",
+		levels = {
+			makeLevel(1200, 150, 0.8, 60, 0, {}, Vector3.new(5, 9, 5), Color3.fromRGB(90, 84, 96)),
+			makeLevel(1000, 240, 0.85, 65, 0, {}, Vector3.new(5.5, 10, 5.5), Color3.fromRGB(102, 96, 110)),
+			makeLevel(1900, 430, 0.9, 70, 0, {}, Vector3.new(6, 11, 6), Color3.fromRGB(116, 108, 124)),
+			makeLevel(3200, 700, 1.0, 76, 0, {}, Vector3.new(6.5, 12, 6.5), Color3.fromRGB(132, 122, 140)),
+		},
+	},
+
+	-- Mythic: the reason to keep rolling.
+
+	Annihilator = {
+		id = "Annihilator",
+		displayName = "Annihilator",
+		rarity = "Mythic",
+		description = "Burning shells the size of rooms. Elevated ground only, mercifully.",
+		category = "Hillside" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(9, 9),
+		defaultTargeting = "Last" :: Types.TargetingMode,
+		perPlayerCap = 4,
+		rig = "SciFiRobot",
+		levels = {
+			makeLevel(2200, 120, 1.1, 66, 14, { { effectId = "Burn", duration = 2.5, power = 8 } }, Vector3.new(7, 8, 7), Color3.fromRGB(180, 84, 64)),
+			makeLevel(1800, 190, 1.2, 72, 16, { { effectId = "Burn", duration = 3, power = 12 } }, Vector3.new(7.5, 9, 7.5), Color3.fromRGB(196, 96, 72)),
+			makeLevel(3400, 320, 1.3, 78, 18, { { effectId = "Burn", duration = 3.5, power = 18 } }, Vector3.new(8, 10, 8), Color3.fromRGB(214, 110, 82)),
+		},
+	},
+
+	-- Secret: the chase.
+
+	Godhand = {
+		id = "Godhand",
+		displayName = "Godhand",
+		rarity = "Secret",
+		description = "There is a 0.7% chance the toy soldier was the strongest one all along.",
+		category = "Hybrid" :: Types.TowerCategory,
+		targets = "Both" :: Types.TargetClass,
+		footprint = Vector2.new(7, 7),
+		defaultTargeting = "Strongest" :: Types.TargetingMode,
+		perPlayerCap = 2,
+		rig = "ToySoldier",
+		levels = {
+			makeLevel(2500, 210, 1.5, 80, 0, {}, Vector3.new(5.5, 10, 5.5), Color3.fromRGB(236, 200, 96)),
+			makeLevel(2000, 330, 1.6, 86, 0, {}, Vector3.new(6, 11, 6), Color3.fromRGB(242, 210, 110)),
+			makeLevel(3800, 560, 1.7, 92, 0, {}, Vector3.new(6.5, 12, 6.5), Color3.fromRGB(248, 222, 126)),
+			makeLevel(6000, 950, 1.8, 100, 0, {}, Vector3.new(7, 13, 7), Color3.fromRGB(252, 232, 146)),
 		},
 	},
 }

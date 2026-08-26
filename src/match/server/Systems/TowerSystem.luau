@@ -165,7 +165,7 @@ function TowerSystem.place(self: System, params: PlaceParams): BaseTower.Tower
 	local tower = BaseTower.new({
 		id = id,
 		definition = params.definition,
-		behavior = TowerBehaviors.find(params.definition.id),
+		behavior = TowerBehaviors.find(params.definition),
 		owner = params.owner,
 		position = params.position,
 		rotationY = params.rotationY,
