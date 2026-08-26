@@ -30,8 +30,9 @@ export type PlaceRole = "Match" | "Lobby"
 Places.LOBBY_PLACE_ID = 108948328624758
 Places.MATCH_PLACE_ID = 80721394481917
 
---- Which entry point boots in Studio and in the test place. Flip to "Lobby"
---- to work on the lobby without publishing anything.
+--- Which entry point boots in a Studio place the config does NOT recognise
+--- (a fresh clone, a scratch place). In the real lobby and match places the
+--- PLACE ID decides, Studio included - this switch no longer applies there.
 Places.STUDIO_ROLE = "Match" :: PlaceRole
 
 --- False until both ids above are real. TeleportGate refuses to attempt a
@@ -47,23 +48,34 @@ end
 --- RunService or game, so that src/shared/ stays free of service lookups at
 --- require time and this stays testable.
 ---
---- Outside Studio the PLACE ID decides, not the entry script's mere
---- presence. "Only one entry exists per published place" was the old
---- production rule, and it stopped being safe the day the dev window
---- started syncing the full test superset: one accidental Publish from that
---- window would have shipped BOTH entries into the start place and booted a
---- match inside the live lobby. With the id check, publishing the superset
---- anywhere is harmless - each place boots only its own role.
+--- A REAL place id decides EVERYWHERE, Studio included. The dev windows
+--- have the actual places open, and a playtest in the lobby window must
+--- boot the lobby no matter how the role switch happens to be set - the
+--- day it did not, pressing Play on the lobby produced a match, which
+--- reads as "the lobby is broken", not as "a switch needs flipping".
+--- STUDIO_ROLE only breaks ties for places the config does not recognise:
+--- a fresh clone's local file, a copy, a scratch place.
+---
+--- In production an UNKNOWN place boots nothing at all: the superset
+--- published to a third place must not run two games in one world.
 function Places.shouldBoot(role: PlaceRole, isStudio: boolean, placeId: number): boolean
-	if not isStudio then
-		if not Places.isConfigured() then
-			-- Ids unset: fall back to the old rule, entry presence decides.
-			return true
+	if Places.isConfigured() then
+		if placeId == Places.LOBBY_PLACE_ID then
+			return role == "Lobby"
 		end
 
-		local expected = if role == "Lobby" then Places.LOBBY_PLACE_ID else Places.MATCH_PLACE_ID
+		if placeId == Places.MATCH_PLACE_ID then
+			return role == "Match"
+		end
 
-		return placeId == expected
+		return isStudio and Places.STUDIO_ROLE == role
+	end
+
+	-- Ids unset: the old rules. Entry presence decides in production (each
+	-- published place holds only its own entry); the switch decides in
+	-- Studio.
+	if not isStudio then
+		return true
 	end
 
 	return Places.STUDIO_ROLE == role

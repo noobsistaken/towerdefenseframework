@@ -19,16 +19,25 @@ local expect = JestGlobals.expect
 local it = JestGlobals.it
 
 describe("Places.shouldBoot", function()
-	it("lets only STUDIO_ROLE boot in Studio, whatever the place id", function()
+	it("lets STUDIO_ROLE decide only in places the config does not know", function()
 		-- Literal args, not a variable holding STUDIO_ROLE: the old solver
 		-- widens the table field to string, which can't pass as PlaceRole.
 		local lobbyWins = Places.STUDIO_ROLE == "Lobby"
 
 		expect(Places.shouldBoot("Lobby", true, 0)).toBe(lobbyWins)
 		expect(Places.shouldBoot("Match", true, 0)).toBe(not lobbyWins)
-		-- The id must not matter in Studio: the test place's id is neither.
 		expect(Places.shouldBoot("Lobby", true, 123456)).toBe(lobbyWins)
 		expect(Places.shouldBoot("Match", true, 123456)).toBe(not lobbyWins)
+	end)
+
+	it("boots each real place as ITSELF in Studio, whatever the switch says", function()
+		-- The regression that shipped: the dev window has the REAL lobby
+		-- place open, the switch said Match, and pressing Play produced a
+		-- game where the hub should be. A real id outranks the switch.
+		expect(Places.shouldBoot("Lobby", true, Places.LOBBY_PLACE_ID)).toBe(true)
+		expect(Places.shouldBoot("Match", true, Places.LOBBY_PLACE_ID)).toBe(false)
+		expect(Places.shouldBoot("Match", true, Places.MATCH_PLACE_ID)).toBe(true)
+		expect(Places.shouldBoot("Lobby", true, Places.MATCH_PLACE_ID)).toBe(false)
 	end)
 
 	it("boots each role only in its own place outside Studio", function()
