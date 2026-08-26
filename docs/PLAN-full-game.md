@@ -1,120 +1,93 @@
 # Plan: from framework to full game
 
-Written 2026-08-26 night, for the next session. Ordered by dependency, not
-ambition - the bug first, then the systems the content hangs off, then the
-content, because 20 troops rolled through a gacha need the gacha to exist.
+Written 2026-08-26 night; **executed 2026-08-26**. Kept as the record of
+what was planned against what shipped - every numbered section below is
+DONE and annotated with how it landed and where its tests live.
 
 **FRAMING, from Alexei: this is a PORTFOLIO PIECE, not a live game.** That
 recolours the priorities: demonstrable systems and clean inspectable code
 over retention tuning; visible variety over meta balance; the rarity ladder
 and gacha exist to SHOW the craft (data-driven content, server authority,
-tested economy) rather than to monetise. Concretely - the paid-odds
-compliance note in section 2 becomes moot, screenshots and a strong README
-become deliverables, and "does this read impressively in 10 minutes of
-play" beats "is wave 60 balanced".
+tested economy) rather than to monetise.
 
-## 0. BUG: zombies sunk in the ground (diagnosed, not yet fixed)
+## 0. BUG: zombies sunk in the ground - FIXED
 
-From the published-game screenshot: rigs buried to the waist in the walkway.
+`Pads.WALKWAY_TOP` is the single shared constant; MapBuilder's walkway
+draws at it and `Rigs.attachMoving` plants feet on it. Visual-only - the
+hitbox stays on the path plane, one comment in Rigs explains why. Verified
+live: feet at 1.15-1.4 on the walkway.
 
-DIAGNOSIS: enemy feet align to the HOST hitbox bottom, which sits on the
-path plane at y = 0 - but the walkway SURFACE was raised to y = 1.15 when
-the buried-walkway bug was fixed (PATH_TOP_Y = Pads.GROUND_TOP + 0.15). A
-full-size 4-stud box hid the 1.15-stud sink; a half-scale 2-stud rig is
-buried past the knees. The boxes were always sunk too - it just read less.
+## 1. Lobby v2: zones instead of menus - SHIPPED
 
-FIX: enemies must stand on the WALKWAY surface, not the path plane.
-Cleanest: hoist the visual in Rigs.attachMoving's bottom-align by the
-walkway surface height, taken from a new shared constant that MapBuilder's
-PATH_TOP_Y also derives from (single source, or the two drift). Decide
-whether the HITBOX should also lift (gameplay: splash origin, tower range) -
-default no, visual-only, one comment explaining. Verify with the live drift
-probe plus a screenshot at ground level.
+`LobbyZones` (shared, pure) derives one walk-in zone per registered map
+with difficulty pads inside (map zone x difficulty pad, as recommended);
+occupancy scanned server-side each heartbeat from server-owned character
+positions - never Touched events, never client messages. Zone exit
+withdraws the vote AND un-readies. CastVote stays on the wire as the
+fallback path. Server-painted billboard vote boards, winner starred.
+The lobby floor derives its width from the zone row, so a sixth map
+grows the room. Tests: LobbyZones.spec (zones, pads, resolver, stations).
 
-## 1. Lobby v2: zones instead of menus
+## 2. Persistence + economy for rolls - SHIPPED
 
-Today: spawn + vote plinths + UI buttons. Wanted: a real lobby you RUN
-around - distinct zones you walk into (TDS-style):
+- DataSchema v3: `Traits: { [towerId]: { traitId } }` + `RerollTokens`.
+  Coins ARE the gacha currency (the recommended answer, taken).
+- `Config/Rarity.luau`: 7 tiers (Common -> Mythic + **Secret**), weights
+  summing to exactly 100; colour read by shop, gacha UI and reroll grid.
+- `Config/Traits.luau`: 12 traits across all tiers, multiplier bundles;
+  every trait an overall buff (spec-enforced). `TraitEffects` folds them;
+  BaseTower applies at stat READ time (range/beginReload/dealDamage),
+  snapshotted at placement. Tests: Traits.spec, TraitEffects.spec.
+- `Gacha` (pure tier-first roller, falls down the ladder, walks up only
+  when nothing below) + `GachaFlow` (check-then-charge-then-roll, dupes
+  refund half, reroll REPLACES - SLOTS=1 enforced at the write). Rolled
+  server-side only, server-owned RNG. Wire: RollTower / RerollTrait /
+  GetLobbyProfile functs. Tests: Gacha.spec (20k-roll distribution),
+  GachaFlow.spec (ledger conservation over 1500 rolls).
+- RerollTokens earned at match end (1 per payout, +1 win, difficulty-
+  blind), shown on the results screen. The lobby holds real ProfileStore
+  sessions now - the session lock makes the two-place handoff safe, and
+  the lobby entry documents why the old "never load data here" rule fell.
 
-- **Map zones**: one walk-in pad per map (3 now, more later); standing in
-  one = your map vote. Zone occupancy IS the vote - kills the vote UI.
-- **Difficulty zones** the same way, or difficulty pads inside each map
-  zone (decide: fewer zones reads better; recommend map zone x difficulty
-  pad inside).
-- **Reroll zone** and **Gacha zone**: walk up, UI prompt opens (section 2).
-- Ready-up stays a button (walking away must un-ready you - zone exit).
+## 3. 20 new troops - SHIPPED (roster 6 -> 26)
 
-BUILD: extend LobbyBuilder with zone geometry from a LOBBY CONFIG module
-(zones as data, same philosophy as maps). Server: zone occupancy via
-spatial check per heartbeat against zone bounds (NOT Touched events - flaky,
-and the sim owns truth). Rewire LobbyController's vote intake from CastVote
-messages to occupancy; KEEP the CastVote wire message for a while (mobile
-fallback + the Poll spec covers the tally logic - reuse, do not rewrite).
-TeleportGate untouched - it reads the winning tally exactly as now.
+All pure config through a `makeLevel` constructor; splash DERIVES from
+`splashRadius > 0` (no behaviour registry line to forget), status effects
+from `applies`. Three new effects, one config entry each: Burn (stacking
+DoT), Sunder (+20% damage taken), Concuss (short stun, uptime capped by
+design ~60%). Pyramid distribution: 7/5/5/4/3/1/1 across the ladder.
+Rigs reuse the nine templates already in the place. Tests:
+TowerBalance.spec (structure, monotonic upgrades, effect references,
+typo band on pure single-target openers).
 
-## 2. Persistence + economy for rolls (the foundation)
+## 4. Maps - SHIPPED (3 -> 5)
 
-DataSchema v3 (one version bump, one migration - the ladder works, 196
-tests green):
+Config-authored (the MapExtract Studio loop remains available for later
+maps): **Gauntlet** - one 320-stud lane, the shortest walk in the game,
+flanking plateaus, pressure is money; **Bastion** - centre base, two
+pincer lanes from opposite edges, 350 vs 415 studs (D8). Tests:
+MapIntegrity.spec, registry-wide - axis-aligned segments, waypoints on
+the slab, lanes end at the base, both surface types, unequal lanes.
 
-- `Traits: { [towerId]: { trait ids } }` - rolled traits per owned tower
-- `RollCurrency` (rerolls) + `GachaCurrency` (character rolls) - decide
-  names; Coins already exist and are currently a dead sink, so RECOMMEND:
-  Coins ARE the gacha currency, add only `RerollTokens`
-- Trait definitions in Config/Traits.luau: id, displayName, rarity, effect
-  hooks (damage mult, range mult, fireRate mult, splash bonus, bounty
-  mult). Effects apply in BaseTower stat reads - ONE place, like status
-  multipliers on enemies.
-- **Rarity ladder** (per Alexei): Common, Uncommon, Rare, Epic, Legendary,
-  Mythic, plus one chase tier above - recommend **Secret** (genre-native
-  for Roblox TD; alternatives: Exotic, Celestial). Defined once in
-  Config/Rarity.luau: id, order, display name, colour, gacha weight. The
-  colour becomes a Theme-adjacent token the shop, gacha UI and inspector
-  all read, so a rarity is one config row and every surface follows -
-  which is exactly the data-driven story the portfolio wants to tell.
-- Gacha pool config: weight = the tower's rarity's weight. Server-rolled
-  ONLY (server authority, D-rules), results through a new zap message pair.
-- Rates/pity: pick sane defaults (advertise odds - Roblox requires
-  disclosed paid-random odds if Robux ever touches it; free-currency-only
-  for now keeps that moot, note it).
+## 5. Publish flow reminder - STILL OPEN
 
-## 3. 20 new troops
+Place publishing is still File->Publish x2 in each window (no Open Cloud
+key). The current cloud places predate this whole run - **both need a
+republish before any of this is live**.
 
-Config-first: each = Config/Towers.luau entry (levels, damage curves) +
-rig assignment + store-rig audit through the established pipeline (insert,
-strip scripts, arm, muzzle tag). Balance: extend Scaling.spec-style
-assertions - every tower's DPS-per-cost inside a band, so 26 towers stay
-comparable by test rather than by feel. Realistic sequencing: 5 archetypes
-x variants (sniper/splash/DoT/support/economy), not 20 bespoke mechanics -
-behaviour modules only where config cannot express (D4). Distribute the 26
-across the rarity ladder pyramid-style (many commons, one or two Secrets);
-a variant's tier tracks its power so rarity reads as meaningful. Rigs: batch-audit
-20 store rigs in one quarantine pass; expect ~1/3 rejects.
+## Standing debts (unchanged)
 
-## 4. Maps x2-3
+- Rig templates -> committed assets/ (blocks: fresh clones get boxes,
+  noobsv8-as-Titan in the original place)
+- MAX_RIGGED=64 profiling, now that 26 tower types can crowd the field
+- LobbyController itself has no spec (its pure pieces - Poll, LobbyZones,
+  GachaFlow - do)
 
-Author in Studio via the build->drag->extract loop (MapExtract is tested,
-lossless, and reports authoring mistakes). One map with a genuinely
-different shape: dual-lane merge, or a spiral with interior plateaus.
+## What a next session could add
 
-## 5. Publish flow reminder
-
-Place publishing is still File->Publish x2 (StudioPublishService is not
-reachable from MCP; no Open Cloud key exists). If iteration pace hurts,
-create the Open Cloud API key (universe-places:write) and publishing goes
-CLI - see docs/session-notes.
-
-## Standing debts that block pieces of the above
-
-- Rig templates -> committed assets/ (blocks: new places get boxes,
-  noobsv8-as-Titan, fresh clones)
-- MAX_RIGGED profiling before 20 troops multiply rigged towers on field
-- The suite has no LobbyController/zone coverage - write specs with the
-  Poll tally reuse
-
-## Open decisions parked for Alexei
-
-1. Coins as gacha currency (recommended) or a separate currency?
-2. Traits reroll per-tower-per-match, or persistent per-owned-character?
-   (Recommended: persistent - it is what makes collection feel like a game.)
-3. Difficulty selection: pads inside map zones, or its own zone row?
+1. Trait display in the match TowerInspector (the part already carries a
+   Traits attribute; the UI just doesn't read it yet).
+2. Air enemies beyond the current roster - Flaresman is priced as an air
+   specialist and earns its band only when air actually shows up.
+3. A pity counter on the Secret tier, if the gacha should read kinder.
+4. Screenshots + README pass - the portfolio deliverable proper.
