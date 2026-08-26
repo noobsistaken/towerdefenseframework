@@ -132,9 +132,11 @@ local function ShopBar()
 	local loadout = useAtom(atoms.loadout)
 	local selected = useAtom(atoms.selectedTowerDefId)
 	local state = useAtom(atoms.matchState)
+	-- The shop is meaningless once the match is decided; it plays out
+	-- instead of vanishing.
+	local show, exiting = UiFx.usePresence(state ~= "Victory" and state ~= "Defeat")
 
-	-- The shop is meaningless once the match is decided.
-	if state == "Victory" or state == "Defeat" then
+	if not show then
 		return nil
 	end
 
@@ -171,6 +173,7 @@ local function ShopBar()
 			Size = UDim2.fromOffset(math.max(#loadout, 1) * (BUTTON_WIDTH + 8) + 16, BUTTON_HEIGHT + 16),
 			BackgroundTransparency = 1,
 		},
+		exit = exiting,
 		children = {
 			art = UiArt.Plate({ frame = { Size = UDim2.fromScale(1, 1), ZIndex = 0 } }),
 			row = e("Frame", {

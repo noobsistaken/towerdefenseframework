@@ -33,6 +33,7 @@ local e = React.createElement
 local POP_INFO = TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 local FADE_INFO = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local PRESS_INFO = TweenInfo.new(0.14, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local EXIT_INFO = TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 
 export type PopInProps = {
 	--- Host props for the CanvasGroup, exactly as they would go on a Frame.
@@ -43,6 +44,9 @@ export type PopInProps = {
 	restartKey: string?,
 	--- Seconds to hold, invisible, before the entrance - the stagger knob.
 	delay: number?,
+	--- True while the panel is playing OUT (see usePresence). The panel
+	--- shrinks and fades; unmount it when the presence window closes.
+	exit: boolean?,
 }
 
 --- A panel that pops into place. Renders a CanvasGroup so the WHOLE
@@ -92,6 +96,42 @@ function UiFx.PopIn(props: PopInProps)
 		end
 	end, { props.restartKey or "" })
 
+	-- The exit (and the return from a cancelled exit). Tracks whether an
+	-- exit ever played so the mount-time run with exit=false does nothing.
+	local exitedRef = React.useRef(false)
+
+	React.useEffect(function(): () -> ()
+		local group = groupRef.current
+		local scale = scaleRef.current
+
+		if group == nil or scale == nil then
+			return function() end
+		end
+
+		local tweens: { Tween } = {}
+
+		if props.exit == true then
+			exitedRef.current = true
+			table.insert(tweens, TweenService:Create(group, EXIT_INFO, { GroupTransparency = 1 }))
+			table.insert(tweens, TweenService:Create(scale, EXIT_INFO, { Scale = 0.94 }))
+		elseif exitedRef.current then
+			-- Reopened mid-exit: play back to fully visible.
+			exitedRef.current = false
+			table.insert(tweens, TweenService:Create(group, FADE_INFO, { GroupTransparency = 0 }))
+			table.insert(tweens, TweenService:Create(scale, POP_INFO, { Scale = 1 }))
+		end
+
+		for _, tween in tweens do
+			tween:Play()
+		end
+
+		return function()
+			for _, tween in tweens do
+				tween:Cancel()
+			end
+		end
+	end, { props.exit == true })
+
 	local merged: { [string]: any } = {
 		-- Declared as a CONSTANT, which the safety rule allows: React writes
 		-- it once at mount and never again, so the first frame is invisible
@@ -116,6 +156,35 @@ function UiFx.PopIn(props: PopInProps)
 	end
 
 	return e("CanvasGroup", merged, children)
+end
+
+--- The presence window that makes exit animations possible: returns
+--- whether the panel should still RENDER, and whether it is currently
+--- playing out. When `open` flips false the render window stays open for
+--- `seconds` (default 0.15) so PopIn's `exit` can play before unmount.
+---
+---   local show, exiting = UiFx.usePresence(area == "Game")
+---   if not show then return nil end
+---   ... e(UiFx.PopIn, { frame = ..., exit = exiting, children = ... })
+function UiFx.usePresence(open: boolean, seconds: number?): (boolean, boolean)
+	local rendered, setRendered = React.useState(open)
+
+	React.useEffect(function(): () -> ()
+		if open then
+			setRendered(true)
+			return function() end
+		end
+
+		local handle = task.delay(seconds or 0.15, function()
+			setRendered(false)
+		end)
+
+		return function()
+			task.cancel(handle)
+		end
+	end, { open })
+
+	return open or rendered, rendered and not open
 end
 
 --- A number that chases `target` over `seconds` (default 0.35) with an

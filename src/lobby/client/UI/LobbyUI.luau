@@ -376,8 +376,9 @@ local function GamePanel()
 	local winningMap = useAtom(atoms.winningMapId)
 	local winningDifficulty = useAtom(atoms.winningDifficultyId)
 	local startScale = React.useRef(nil :: UIScale?)
+	local show, exiting = UiFx.usePresence(area == "Game")
 
-	if area ~= "Game" then
+	if not show then
 		return nil
 	end
 
@@ -422,6 +423,7 @@ local function GamePanel()
 			Size = UDim2.fromOffset(580, 290),
 			BackgroundTransparency = 1,
 		},
+		exit = exiting,
 		children = {
 			art = UiArt.frameUnderlay(),
 			title = label({
@@ -552,6 +554,7 @@ local function LoadoutPanel()
 	local status, setStatus = React.useState("")
 	local saving = React.useRef(false)
 	local saveScale = React.useRef(nil :: UIScale?)
+	local show, exiting = UiFx.usePresence(open)
 
 	-- Re-seed the draft from the saved deck each time the panel opens. The
 	-- boolean dep is deliberate: open/close is exactly when to reset.
@@ -562,7 +565,7 @@ local function LoadoutPanel()
 		end
 	end, { open })
 
-	if not open then
+	if not show then
 		return nil
 	end
 
@@ -619,6 +622,7 @@ local function LoadoutPanel()
 			Size = UDim2.fromOffset(480, 380),
 			BackgroundTransparency = 1,
 		},
+		exit = exiting,
 		children = {
 			art = UiArt.frameUnderlay(),
 			title = label({
@@ -749,8 +753,9 @@ local function GachaPanel()
 	-- two Calls means paying twice. A ref reads and writes synchronously.
 	local rolling = React.useRef(false)
 	local rollScale = React.useRef(nil :: UIScale?)
+	local show, exiting = UiFx.usePresence(area == "Gacha")
 
-	if area ~= "Gacha" then
+	if not show then
 		return nil
 	end
 
@@ -788,6 +793,7 @@ local function GachaPanel()
 			Size = UDim2.fromOffset(400, 190),
 			BackgroundTransparency = 1,
 		},
+		exit = exiting,
 		children = {
 			art = UiArt.frameUnderlay(),
 			title = label({
@@ -982,10 +988,19 @@ end
 --- panel on top. Mounted at the UI root, above every panel - the first
 --- chances popup lived inside the panel and z-fought it into
 --- unreadability.
-local function overlay(onClose: () -> (), size: UDim2, children: { [string]: any }): any
-	-- The panel pops on mount through a function-ref UIScale: overlays
-	-- render conditionally, so a hook here would break the rules of hooks.
-	children.uiFxScale = e("UIScale", { ref = UiFx.popScale })
+local function overlay(onClose: () -> (), size: UDim2, exiting: boolean, children: { [string]: any }): any
+	-- The panel is a PopIn CanvasGroup, so the overlay enters and exits
+	-- through the same motion vocabulary as every other panel. A CanvasGroup
+	-- is not a button, so a transparent shield swallows clicks - tapping the
+	-- panel must not close it.
+	children.shield = e("TextButton", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Text = "",
+		AutoButtonColor = false,
+		ZIndex = 11,
+		[React.Event.Activated] = function() end,
+	})
 
 	return e("TextButton", {
 		Size = UDim2.fromScale(1, 1),
@@ -997,19 +1012,18 @@ local function overlay(onClose: () -> (), size: UDim2, children: { [string]: any
 		ZIndex = 10,
 		[React.Event.Activated] = onClose,
 	}, {
-		panel = e("TextButton", {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = size,
-			BackgroundColor3 = Theme.INVERSE,
-			BackgroundTransparency = 0.05,
-			BorderSizePixel = 0,
-			AutoButtonColor = false,
-			Text = "",
-			ZIndex = 11,
-			-- Swallows the click so tapping the panel does not close it.
-			[React.Event.Activated] = function() end,
-		}, children),
+		panel = e(UiFx.PopIn, {
+			frame = {
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = size,
+				BackgroundColor3 = Theme.INVERSE,
+				BackgroundTransparency = 0.05,
+				ZIndex = 11,
+			},
+			exit = exiting,
+			children = children,
+		}),
 	})
 end
 
@@ -1037,8 +1051,9 @@ end
 local function TraitChancesOverlay()
 	local area = useAtom(atoms.activeArea)
 	local open = useAtom(atoms.traitChancesOpen)
+	local show, exiting = UiFx.usePresence(open and area == "Reroll")
 
-	if not open or area ~= "Reroll" then
+	if not show then
 		return nil
 	end
 
@@ -1106,7 +1121,7 @@ local function TraitChancesOverlay()
 		})
 	end
 
-	return overlay(close, UDim2.fromOffset(360, 480), {
+	return overlay(close, UDim2.fromOffset(360, 480), exiting, {
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 26),
@@ -1206,6 +1221,7 @@ local function UnitInventoryOverlay()
 	local picked, setPickedRaw = React.useState(nil :: string?)
 	-- Same optional-initial inference gotcha as the panels; same cast.
 	local setPicked = setPickedRaw :: (string?) -> ()
+	local show, exiting = UiFx.usePresence(open and area == "Reroll")
 
 	-- A fresh visit starts with nothing highlighted. The boolean dep is the
 	-- point: open/close is exactly when to reset.
@@ -1215,7 +1231,7 @@ local function UnitInventoryOverlay()
 		end
 	end, { open })
 
-	if not open or area ~= "Reroll" then
+	if not show then
 		return nil
 	end
 
@@ -1244,7 +1260,7 @@ local function UnitInventoryOverlay()
 
 	local canSelect = picked ~= nil
 
-	return overlay(close, UDim2.fromOffset(540, 440), {
+	return overlay(close, UDim2.fromOffset(540, 440), exiting, {
 		title = label({
 			Position = UDim2.fromOffset(0, 12),
 			Size = UDim2.new(1, 0, 0, 26),
@@ -1308,8 +1324,9 @@ local function RerollPanel()
 	-- alone is a render-closure value and two fast clicks spend two tokens.
 	local rolling = React.useRef(false)
 	local rerollScale = React.useRef(nil :: UIScale?)
+	local show, exiting = UiFx.usePresence(area == "Reroll")
 
-	if area ~= "Reroll" then
+	if not show then
 		return nil
 	end
 
@@ -1392,6 +1409,7 @@ local function RerollPanel()
 			Size = UDim2.fromOffset(520, 380),
 			BackgroundTransparency = 1,
 		},
+		exit = exiting,
 		children = {
 			art = UiArt.frameUnderlay(),
 			title = e("TextLabel", {
