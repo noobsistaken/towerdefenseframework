@@ -80,6 +80,12 @@ export type RewardAwarder = (player: Player, coins: number, xp: number) -> ()
 --- two above: profiles belong to the entry point.
 export type SettingsResolver = (player: Player) -> boolean
 
+--- The trait ids this player has rolled for one tower type. Injected for
+--- the same reason as the three above. Read once per PLACEMENT - the tower
+--- snapshots the answer, so a lobby reroll applies from the next placement
+--- rather than mutating towers already standing.
+export type TraitsResolver = (player: Player, towerDefId: string) -> { string }
+
 export type Controller = typeof(setmetatable(
 	{} :: {
 		state: Types.MatchState,
@@ -97,6 +103,7 @@ export type Controller = typeof(setmetatable(
 		isUnlocked: UnlockedResolver,
 		awardRewards: RewardAwarder,
 		sfxEnabledFor: SettingsResolver,
+		traitsOf: TraitsResolver,
 		--- Highest wave already paid for. A run can pay out twice - once when
 		--- the campaign is cleared, once when endless finally ends - so a
 		--- boolean would either double-pay waves 1..finalWave or leave every
@@ -279,7 +286,8 @@ end
 function MatchController.new(
 	isUnlocked: UnlockedResolver,
 	awardRewards: RewardAwarder,
-	sfxEnabledFor: SettingsResolver
+	sfxEnabledFor: SettingsResolver,
+	traitsOf: TraitsResolver
 ): Controller
 	local mapConfig, difficulty = resolveMatchConfig()
 	local map = MapBuilder.build(mapConfig)
@@ -301,6 +309,7 @@ function MatchController.new(
 		isUnlocked = isUnlocked,
 		awardRewards = awardRewards,
 		sfxEnabledFor = sfxEnabledFor,
+		traitsOf = traitsOf,
 		paidThroughWave = 0,
 		returning = false,
 		heartbeat = nil,
@@ -444,6 +453,7 @@ function MatchController.placeTower(
 		owner = player,
 		position = result.position,
 		rotationY = rotationY,
+		traits = self.traitsOf(player, towerDefId),
 	})
 
 	-- To the acting player only. Everyone hearing every placement in a

@@ -56,6 +56,8 @@ export type PlaceParams = {
 	owner: Player,
 	position: Vector3,
 	rotationY: number,
+	--- Rolled trait ids for this tower type, from the owner's profile.
+	traits: { string }?,
 }
 
 function TowerSystem.new(simulation: EnemySimulation.Simulation, parent: Instance): System
@@ -89,6 +91,10 @@ local function writeAttributes(part: Part, tower: BaseTower.Tower)
 	part:SetAttribute("TargetingMode", tower.targetingMode)
 	part:SetAttribute("Range", tower:range())
 	part:SetAttribute("SellValue", tower:sellValue())
+	-- Comma-joined, because attributes cannot hold tables. The client
+	-- only displays these; the numbers they change already arrive
+	-- through the Range attribute and the server's own combat maths.
+	part:SetAttribute("Traits", table.concat(tower.traits, ","))
 end
 
 local function buildPart(self: System, tower: BaseTower.Tower): Part
@@ -163,6 +169,7 @@ function TowerSystem.place(self: System, params: PlaceParams): BaseTower.Tower
 		owner = params.owner,
 		position = params.position,
 		rotationY = params.rotationY,
+		traits = params.traits,
 	})
 
 	table.insert(self.towers, tower)

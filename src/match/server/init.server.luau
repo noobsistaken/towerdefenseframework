@@ -122,7 +122,28 @@ local function sfxEnabledFor(player: Player): boolean
 	return profile.Data.Settings.SfxEnabled
 end
 
-local match = MatchController.new(unlockedTowersOf, awardRewards, sfxEnabledFor)
+--- The trait ids this player rolled for one tower type. Same contract as
+--- unlockedTowersOf: empty for a missing profile, and a copy, so the
+--- placement path can never mutate persisted data through it.
+local function traitsOf(player: Player, towerDefId: string): { string }
+	local profile = profiles[player]
+
+	if profile == nil then
+		return {}
+	end
+
+	-- Annotated optional: indexing a map type yields the value type, not
+	-- an optional, and an absent key means nothing rolled yet.
+	local rolled: { string }? = profile.Data.Traits[towerDefId]
+
+	if rolled == nil then
+		return {}
+	end
+
+	return table.clone(rolled)
+end
+
+local match = MatchController.new(unlockedTowersOf, awardRewards, sfxEnabledFor, traitsOf)
 match:start()
 
 -- ---------------------------------------------------------------------------

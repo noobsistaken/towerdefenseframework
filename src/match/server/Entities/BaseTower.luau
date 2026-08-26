@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local TraitEffects = require(ReplicatedStorage.Shared.TraitEffects)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local EnemySimulation = require(script.Parent.Parent.Simulation.EnemySimulation)
@@ -68,6 +69,14 @@ export type Tower = typeof(setmetatable(
 		--- Cash actually paid, purchase plus upgrades. Sell refunds against
 		--- this rather than the base price.
 		invested: number,
+		--- Trait ids this tower carries, snapshotted at PLACEMENT. Traits
+		--- change only in the lobby, so a mid-match reroll cannot exist;
+		--- snapshotting keeps every stat read allocation-free.
+		traits: { string },
+		--- Precomputed from `traits`. Applied at stat READ time - never
+		--- written into the shared definition, which every tower of this
+		--- type reads.
+		traitMultipliers: TraitEffects.Multipliers,
 	},
 	BaseTower
 ))
@@ -85,6 +94,8 @@ export type PlaceParams = {
 	owner: Player,
 	position: Vector3,
 	rotationY: number,
+	--- Rolled trait ids for this tower type, from the owner's profile.
+	traits: { string }?,
 }
 
 function BaseTower.new(params: PlaceParams): Tower
@@ -103,6 +114,8 @@ function BaseTower.new(params: PlaceParams): Tower
 		-- reload before its first shot.
 		cooldown = 0,
 		invested = definition.levels[1].cost,
+		traits = params.traits or {},
+		traitMultipliers = TraitEffects.multipliers(params.traits or {}),
 	}, BaseTower)
 
 	local hook = tower.behavior.onPlaced
@@ -123,7 +136,7 @@ function BaseTower.currentLevel(self: Tower): Types.TowerLevel
 end
 
 function BaseTower.range(self: Tower): number
-	return self:currentLevel().range
+	return self:currentLevel().range * self.traitMultipliers.range
 end
 
 function BaseTower.maxLevel(self: Tower): number
@@ -187,7 +200,7 @@ end
 
 --- Starts the reload. fireRate is shots per second.
 function BaseTower.beginReload(self: Tower)
-	local rate = self:currentLevel().fireRate
+	local rate = self:currentLevel().fireRate * self.traitMultipliers.fireRate
 	self.cooldown = if rate > 0 then 1 / rate else math.huge
 end
 
@@ -201,7 +214,7 @@ function BaseTower.dealDamage(
 	scale: number
 )
 	local level = self:currentLevel()
-	local damage = level.damage * scale
+	local damage = level.damage * scale * self.traitMultipliers.damage
 
 	local modifier = self.behavior.modifyDamage
 
