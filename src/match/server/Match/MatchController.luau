@@ -256,9 +256,7 @@ end
 local function settleTerminal(self: Controller, throughWave: number, won: boolean)
 	settleWaves(self, throughWave)
 
-	local bonus: Rewards.Payout = if won
-		then Rewards.forMatch(0, true, self.difficulty)
-		else { coins = 0, xp = 0 }
+	local bonus: Rewards.Payout = if won then Rewards.forMatch(0, true, self.difficulty) else { coins = 0, xp = 0 }
 	local tokens = Rewards.tokensFor(won)
 
 	self.paidCoins += bonus.coins

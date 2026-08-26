@@ -16,8 +16,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local React = require(ReplicatedStorage.Packages.React)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
-local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Types = require(ReplicatedStorage.Shared.Types)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local atoms = require(script.Parent.Parent.State.atoms)

@@ -771,7 +771,9 @@ local function TowerInspector()
 			local ready = remaining <= 0
 
 			children.ability = e(ActionButton, {
-				text = if ready then `{ability.displayName:upper()}  -  READY` else `{ability.displayName:upper()}  -  {remaining}s`,
+				text = if ready
+					then `{ability.displayName:upper()}  -  READY`
+					else `{ability.displayName:upper()}  -  {remaining}s`,
 				color = if ready then Theme.POSITIVE else Theme.DISABLED,
 				textColor = if ready then Theme.INVERSE else Theme.MUTED,
 				layoutOrder = 5,

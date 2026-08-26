@@ -555,9 +555,36 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 			effectId = "Concuss",
 		},
 		levels = {
-			makeLevel(400, 8, 1.0, 55, 0, { { effectId = "Slow", duration = 2, power = 0 } }, Vector3.new(4.5, 7, 4.5), Color3.fromRGB(152, 196, 220)),
-			makeLevel(350, 13, 1.1, 60, 0, { { effectId = "Slow", duration = 2.5, power = 0 } }, Vector3.new(5, 8, 5), Color3.fromRGB(166, 208, 230)),
-			makeLevel(650, 22, 1.2, 66, 0, { { effectId = "Slow", duration = 3, power = 0 } }, Vector3.new(5.5, 9, 5.5), Color3.fromRGB(182, 220, 240)),
+			makeLevel(
+				400,
+				8,
+				1.0,
+				55,
+				0,
+				{ { effectId = "Slow", duration = 2, power = 0 } },
+				Vector3.new(4.5, 7, 4.5),
+				Color3.fromRGB(152, 196, 220)
+			),
+			makeLevel(
+				350,
+				13,
+				1.1,
+				60,
+				0,
+				{ { effectId = "Slow", duration = 2.5, power = 0 } },
+				Vector3.new(5, 8, 5),
+				Color3.fromRGB(166, 208, 230)
+			),
+			makeLevel(
+				650,
+				22,
+				1.2,
+				66,
+				0,
+				{ { effectId = "Slow", duration = 3, power = 0 } },
+				Vector3.new(5.5, 9, 5.5),
+				Color3.fromRGB(182, 220, 240)
+			),
 		},
 	},
 	Skirmisher = {
@@ -626,9 +653,36 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		perPlayerCap = 6,
 		rig = "ToySoldier",
 		levels = {
-			makeLevel(500, 10, 1.2, 52, 0, { { effectId = "Sunder", duration = 3, power = 0 } }, Vector3.new(4.5, 7.5, 4.5), Color3.fromRGB(148, 104, 178)),
-			makeLevel(450, 16, 1.3, 56, 0, { { effectId = "Sunder", duration = 3.5, power = 0 } }, Vector3.new(5, 8.5, 5), Color3.fromRGB(160, 116, 190)),
-			makeLevel(850, 27, 1.4, 62, 0, { { effectId = "Sunder", duration = 4, power = 0 } }, Vector3.new(5.5, 9.5, 5.5), Color3.fromRGB(174, 130, 204)),
+			makeLevel(
+				500,
+				10,
+				1.2,
+				52,
+				0,
+				{ { effectId = "Sunder", duration = 3, power = 0 } },
+				Vector3.new(4.5, 7.5, 4.5),
+				Color3.fromRGB(148, 104, 178)
+			),
+			makeLevel(
+				450,
+				16,
+				1.3,
+				56,
+				0,
+				{ { effectId = "Sunder", duration = 3.5, power = 0 } },
+				Vector3.new(5, 8.5, 5),
+				Color3.fromRGB(160, 116, 190)
+			),
+			makeLevel(
+				850,
+				27,
+				1.4,
+				62,
+				0,
+				{ { effectId = "Sunder", duration = 4, power = 0 } },
+				Vector3.new(5.5, 9.5, 5.5),
+				Color3.fromRGB(174, 130, 204)
+			),
 		},
 	},
 	Marauder = {
@@ -681,9 +735,36 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		perPlayerCap = 6,
 		rig = "SwatSoldier",
 		levels = {
-			makeLevel(800, 16, 1.4, 50, 0, { { effectId = "Burn", duration = 3, power = 6 } }, Vector3.new(5, 8, 5), Color3.fromRGB(216, 118, 62)),
-			makeLevel(700, 26, 1.5, 54, 0, { { effectId = "Burn", duration = 3.5, power = 10 } }, Vector3.new(5.5, 9, 5.5), Color3.fromRGB(228, 132, 72)),
-			makeLevel(1300, 44, 1.6, 60, 0, { { effectId = "Burn", duration = 4, power = 16 } }, Vector3.new(6, 10, 6), Color3.fromRGB(240, 148, 84)),
+			makeLevel(
+				800,
+				16,
+				1.4,
+				50,
+				0,
+				{ { effectId = "Burn", duration = 3, power = 6 } },
+				Vector3.new(5, 8, 5),
+				Color3.fromRGB(216, 118, 62)
+			),
+			makeLevel(
+				700,
+				26,
+				1.5,
+				54,
+				0,
+				{ { effectId = "Burn", duration = 3.5, power = 10 } },
+				Vector3.new(5.5, 9, 5.5),
+				Color3.fromRGB(228, 132, 72)
+			),
+			makeLevel(
+				1300,
+				44,
+				1.6,
+				60,
+				0,
+				{ { effectId = "Burn", duration = 4, power = 16 } },
+				Vector3.new(6, 10, 6),
+				Color3.fromRGB(240, 148, 84)
+			),
 		},
 	},
 	Railgunner = {
@@ -728,9 +809,36 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 			-- Stun durations sit under the FASTEST reload any trait can buy
 			-- (fireRate x1.3 Godslayer), so a permanent freeze is impossible
 			-- by arithmetic - TowerBalance.spec enforces the inequality.
-			makeLevel(900, 28, 1.1, 46, 0, { { effectId = "Concuss", duration = 0.35, power = 0 } }, Vector3.new(5.5, 7.5, 5.5), Color3.fromRGB(196, 186, 120)),
-			makeLevel(800, 46, 1.15, 50, 0, { { effectId = "Concuss", duration = 0.4, power = 0 } }, Vector3.new(6, 8.5, 6), Color3.fromRGB(208, 198, 132)),
-			makeLevel(1500, 78, 1.2, 54, 0, { { effectId = "Concuss", duration = 0.45, power = 0 } }, Vector3.new(6.5, 9.5, 6.5), Color3.fromRGB(222, 212, 146)),
+			makeLevel(
+				900,
+				28,
+				1.1,
+				46,
+				0,
+				{ { effectId = "Concuss", duration = 0.35, power = 0 } },
+				Vector3.new(5.5, 7.5, 5.5),
+				Color3.fromRGB(196, 186, 120)
+			),
+			makeLevel(
+				800,
+				46,
+				1.15,
+				50,
+				0,
+				{ { effectId = "Concuss", duration = 0.4, power = 0 } },
+				Vector3.new(6, 8.5, 6),
+				Color3.fromRGB(208, 198, 132)
+			),
+			makeLevel(
+				1500,
+				78,
+				1.2,
+				54,
+				0,
+				{ { effectId = "Concuss", duration = 0.45, power = 0 } },
+				Vector3.new(6.5, 9.5, 6.5),
+				Color3.fromRGB(222, 212, 146)
+			),
 		},
 	},
 
@@ -759,9 +867,36 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 			effectId = "Slow",
 		},
 		levels = {
-			makeLevel(1400, 60, 0.9, 72, 16, { { effectId = "Slow", duration = 1.5, power = 0 } }, Vector3.new(6.5, 9, 6.5), Color3.fromRGB(110, 150, 200)),
-			makeLevel(1200, 100, 0.95, 78, 18, { { effectId = "Slow", duration = 2, power = 0 } }, Vector3.new(7, 10, 7), Color3.fromRGB(124, 164, 214)),
-			makeLevel(2200, 170, 1.0, 84, 20, { { effectId = "Slow", duration = 2.5, power = 0 } }, Vector3.new(7.5, 11, 7.5), Color3.fromRGB(140, 180, 228)),
+			makeLevel(
+				1400,
+				60,
+				0.9,
+				72,
+				16,
+				{ { effectId = "Slow", duration = 1.5, power = 0 } },
+				Vector3.new(6.5, 9, 6.5),
+				Color3.fromRGB(110, 150, 200)
+			),
+			makeLevel(
+				1200,
+				100,
+				0.95,
+				78,
+				18,
+				{ { effectId = "Slow", duration = 2, power = 0 } },
+				Vector3.new(7, 10, 7),
+				Color3.fromRGB(124, 164, 214)
+			),
+			makeLevel(
+				2200,
+				170,
+				1.0,
+				84,
+				20,
+				{ { effectId = "Slow", duration = 2.5, power = 0 } },
+				Vector3.new(7.5, 11, 7.5),
+				Color3.fromRGB(140, 180, 228)
+			),
 		},
 	},
 	Executioner = {
@@ -797,9 +932,36 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		perPlayerCap = 4,
 		rig = "SciFiRobot",
 		levels = {
-			makeLevel(2200, 120, 1.1, 66, 14, { { effectId = "Burn", duration = 2.5, power = 8 } }, Vector3.new(7, 8, 7), Color3.fromRGB(180, 84, 64)),
-			makeLevel(1800, 190, 1.2, 72, 16, { { effectId = "Burn", duration = 3, power = 12 } }, Vector3.new(7.5, 9, 7.5), Color3.fromRGB(196, 96, 72)),
-			makeLevel(3400, 320, 1.3, 78, 18, { { effectId = "Burn", duration = 3.5, power = 18 } }, Vector3.new(8, 10, 8), Color3.fromRGB(214, 110, 82)),
+			makeLevel(
+				2200,
+				120,
+				1.1,
+				66,
+				14,
+				{ { effectId = "Burn", duration = 2.5, power = 8 } },
+				Vector3.new(7, 8, 7),
+				Color3.fromRGB(180, 84, 64)
+			),
+			makeLevel(
+				1800,
+				190,
+				1.2,
+				72,
+				16,
+				{ { effectId = "Burn", duration = 3, power = 12 } },
+				Vector3.new(7.5, 9, 7.5),
+				Color3.fromRGB(196, 96, 72)
+			),
+			makeLevel(
+				3400,
+				320,
+				1.3,
+				78,
+				18,
+				{ { effectId = "Burn", duration = 3.5, power = 18 } },
+				Vector3.new(8, 10, 8),
+				Color3.fromRGB(214, 110, 82)
+			),
 		},
 	},
 

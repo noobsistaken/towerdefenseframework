@@ -23,14 +23,14 @@ local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
 local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
-local PlayerRoster = require(ReplicatedStorage.Shared.PlayerRoster)
 local Net = require(ReplicatedStorage.Net)
+local PlayerRoster = require(ReplicatedStorage.Shared.PlayerRoster)
 local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
 local React = require(ReplicatedStorage.Packages.React)
+local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
 local Theme = require(ReplicatedStorage.Shared.Theme)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 local Traits = require(ReplicatedStorage.Shared.Config.Traits)
-local SoundKit = require(ReplicatedStorage.Shared.SoundKit)
 local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
@@ -130,25 +130,25 @@ local function HudIdentity()
 			Size = UDim2.fromOffset(250, 62),
 		},
 		children = {
-		title = label({
-			Position = UDim2.fromOffset(14, 8),
-			Size = UDim2.new(1, -28, 0, 24),
-			Text = "LOBBY",
-			TextColor3 = Theme.ACCENT,
-			TextSize = 20,
-			TextXAlignment = Enum.TextXAlignment.Left,
-		}),
-		counts = label({
-			Position = UDim2.fromOffset(14, 34),
-			Size = UDim2.new(1, -28, 0, 16),
-			Font = Theme.FONT_BODY,
-			Text = if state == "Launching"
-				then "launching a match..."
-				else `{players} online  ·  walk into an area to play`,
-			TextColor3 = Theme.MUTED,
-			TextSize = 12,
-			TextXAlignment = Enum.TextXAlignment.Left,
-		}),
+			title = label({
+				Position = UDim2.fromOffset(14, 8),
+				Size = UDim2.new(1, -28, 0, 24),
+				Text = "LOBBY",
+				TextColor3 = Theme.ACCENT,
+				TextSize = 20,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			counts = label({
+				Position = UDim2.fromOffset(14, 34),
+				Size = UDim2.new(1, -28, 0, 16),
+				Font = Theme.FONT_BODY,
+				Text = if state == "Launching"
+					then "launching a match..."
+					else `{players} online  ·  walk into an area to play`,
+				TextColor3 = Theme.MUTED,
+				TextSize = 12,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
 		},
 	})
 end
@@ -176,31 +176,31 @@ local function HudWallet()
 			Size = UDim2.fromOffset(180, 62),
 		},
 		children = {
-		star = UiArt.icon("Star", UDim2.fromOffset(10, 8), 18),
-		coinIcon = UiArt.icon("Coin", UDim2.fromOffset(10, 26), 18),
-		tokenIcon = UiArt.icon("Token", UDim2.fromOffset(12, 44), 14),
-		level = label({
-			Position = UDim2.fromOffset(0, 6),
-			Size = UDim2.new(1, 0, 0, 18),
-			Text = `LEVEL {level}`,
-			TextColor3 = Theme.ACCENT,
-			TextSize = 13,
-		}),
-		coins = label({
-			Position = UDim2.fromOffset(0, 24),
-			Size = UDim2.new(1, 0, 0, 18),
-			Text = `{coins} coins`,
-			TextColor3 = Theme.CASH,
-			TextSize = 15,
-		}),
-		tokens = label({
-			Position = UDim2.fromOffset(0, 42),
-			Size = UDim2.new(1, 0, 0, 14),
-			Font = Theme.FONT_BODY,
-			Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}`,
-			TextColor3 = REROLL_COLOR,
-			TextSize = 11,
-		}),
+			star = UiArt.icon("Star", UDim2.fromOffset(10, 8), 18),
+			coinIcon = UiArt.icon("Coin", UDim2.fromOffset(10, 26), 18),
+			tokenIcon = UiArt.icon("Token", UDim2.fromOffset(12, 44), 14),
+			level = label({
+				Position = UDim2.fromOffset(0, 6),
+				Size = UDim2.new(1, 0, 0, 18),
+				Text = `LEVEL {level}`,
+				TextColor3 = Theme.ACCENT,
+				TextSize = 13,
+			}),
+			coins = label({
+				Position = UDim2.fromOffset(0, 24),
+				Size = UDim2.new(1, 0, 0, 18),
+				Text = `{coins} coins`,
+				TextColor3 = Theme.CASH,
+				TextSize = 15,
+			}),
+			tokens = label({
+				Position = UDim2.fromOffset(0, 42),
+				Size = UDim2.new(1, 0, 0, 14),
+				Font = Theme.FONT_BODY,
+				Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}`,
+				TextColor3 = REROLL_COLOR,
+				TextSize = 11,
+			}),
 		},
 	})
 end
@@ -423,67 +423,67 @@ local function GamePanel()
 			BackgroundTransparency = 1,
 		},
 		children = {
-		art = UiArt.frameUnderlay(),
-		title = label({
-			Position = UDim2.fromOffset(0, 12),
-			Size = UDim2.new(1, 0, 0, 24),
-			Text = "CHOOSE YOUR BATTLE",
-			TextColor3 = Theme.ACCENT,
-			TextSize = 19,
-		}),
-		hint = label({
-			Position = UDim2.fromOffset(0, 38),
-			Size = UDim2.new(1, 0, 0, 16),
-			Font = Theme.FONT_BODY,
-			Text = "Everyone standing in the GAME area comes along when START is pressed",
-			TextColor3 = Theme.MUTED,
-			TextSize = 12,
-		}),
-		mapHeader = label({
-			Position = UDim2.fromOffset(0, 62),
-			Size = UDim2.new(1, 0, 0, 14),
-			Text = "MAP",
-			TextColor3 = Theme.MUTED,
-			TextSize = 11,
-		}),
-		maps = e("Frame", {
-			Position = UDim2.fromOffset(0, 80),
-			Size = UDim2.new(1, 0, 0, 54),
-			BackgroundTransparency = 1,
-		}, mapButtons),
-		difficultyHeader = label({
-			Position = UDim2.fromOffset(0, 142),
-			Size = UDim2.new(1, 0, 0, 14),
-			Text = "DIFFICULTY",
-			TextColor3 = Theme.MUTED,
-			TextSize = 11,
-		}),
-		difficulties = e("Frame", {
-			Position = UDim2.fromOffset(0, 160),
-			Size = UDim2.new(1, 0, 0, 40),
-			BackgroundTransparency = 1,
-		}, difficultyButtons),
-		start = e("TextButton", {
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 1, -14),
-			Size = UDim2.fromOffset(280, 48),
-			BackgroundColor3 = if launching then Theme.DISABLED else Theme.POSITIVE,
-			BorderSizePixel = 0,
-			AutoButtonColor = not launching,
-			Font = Theme.FONT,
-			Text = if launching then "LAUNCHING..." else `START  -  {winnerName} · {winningDifficulty}`,
-			TextColor3 = if launching then Theme.MUTED else Theme.INVERSE,
-			TextSize = 16,
-			[React.Event.Activated] = function()
-				if not launching then
-					UiFx.pressPop(startScale.current)
-					Net.RequestLaunch.Fire()
-				end
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-			pressScale = e("UIScale", { ref = startScale }),
-		}),
+			art = UiArt.frameUnderlay(),
+			title = label({
+				Position = UDim2.fromOffset(0, 12),
+				Size = UDim2.new(1, 0, 0, 24),
+				Text = "CHOOSE YOUR BATTLE",
+				TextColor3 = Theme.ACCENT,
+				TextSize = 19,
+			}),
+			hint = label({
+				Position = UDim2.fromOffset(0, 38),
+				Size = UDim2.new(1, 0, 0, 16),
+				Font = Theme.FONT_BODY,
+				Text = "Everyone standing in the GAME area comes along when START is pressed",
+				TextColor3 = Theme.MUTED,
+				TextSize = 12,
+			}),
+			mapHeader = label({
+				Position = UDim2.fromOffset(0, 62),
+				Size = UDim2.new(1, 0, 0, 14),
+				Text = "MAP",
+				TextColor3 = Theme.MUTED,
+				TextSize = 11,
+			}),
+			maps = e("Frame", {
+				Position = UDim2.fromOffset(0, 80),
+				Size = UDim2.new(1, 0, 0, 54),
+				BackgroundTransparency = 1,
+			}, mapButtons),
+			difficultyHeader = label({
+				Position = UDim2.fromOffset(0, 142),
+				Size = UDim2.new(1, 0, 0, 14),
+				Text = "DIFFICULTY",
+				TextColor3 = Theme.MUTED,
+				TextSize = 11,
+			}),
+			difficulties = e("Frame", {
+				Position = UDim2.fromOffset(0, 160),
+				Size = UDim2.new(1, 0, 0, 40),
+				BackgroundTransparency = 1,
+			}, difficultyButtons),
+			start = e("TextButton", {
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -14),
+				Size = UDim2.fromOffset(280, 48),
+				BackgroundColor3 = if launching then Theme.DISABLED else Theme.POSITIVE,
+				BorderSizePixel = 0,
+				AutoButtonColor = not launching,
+				Font = Theme.FONT,
+				Text = if launching then "LAUNCHING..." else `START  -  {winnerName} · {winningDifficulty}`,
+				TextColor3 = if launching then Theme.MUTED else Theme.INVERSE,
+				TextSize = 16,
+				[React.Event.Activated] = function()
+					if not launching then
+						UiFx.pressPop(startScale.current)
+						Net.RequestLaunch.Fire()
+					end
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+				pressScale = e("UIScale", { ref = startScale }),
+			}),
 		},
 	})
 end
@@ -620,91 +620,91 @@ local function LoadoutPanel()
 			BackgroundTransparency = 1,
 		},
 		children = {
-		art = UiArt.frameUnderlay(),
-		title = label({
-			Position = UDim2.fromOffset(0, 12),
-			Size = UDim2.new(1, 0, 0, 22),
-			Text = `LOADOUT  {#draft}/{Loadouts.MAX}`,
-			TextColor3 = Theme.ACCENT,
-			TextSize = 18,
-		}),
-		hint = label({
-			Position = UDim2.fromOffset(0, 36),
-			Size = UDim2.new(1, 0, 0, 16),
-			Font = Theme.FONT_BODY,
-			Text = if status ~= "" then status else "The six you bring to every match. Tap to equip.",
-			TextColor3 = if status ~= "" then Theme.NEGATIVE else Theme.MUTED,
-			TextSize = 12,
-		}),
-		grid = e("ScrollingFrame", {
-			Position = UDim2.fromOffset(12, 58),
-			Size = UDim2.new(1, -24, 1, -122),
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			ScrollBarThickness = 4,
-			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-			CanvasSize = UDim2.new(),
-		}, rows),
-		save = e("TextButton", {
-			AnchorPoint = Vector2.new(1, 1),
-			Position = UDim2.new(0.5, -6, 1, -14),
-			Size = UDim2.fromOffset(150, 40),
-			BackgroundColor3 = if dirty and #draft > 0 then Theme.POSITIVE else Theme.DISABLED,
-			BorderSizePixel = 0,
-			AutoButtonColor = dirty and #draft > 0,
-			Font = Theme.FONT,
-			Text = "SAVE",
-			TextColor3 = if dirty and #draft > 0 then Theme.INVERSE else Theme.MUTED,
-			TextSize = 15,
-			[React.Event.Activated] = function()
-				if saving.current or not dirty or #draft == 0 then
-					return
-				end
-
-				UiFx.pressPop(saveScale.current)
-				saving.current = true
-
-				task.spawn(function()
-					local ok, reply = pcall(function()
-						return Net.SetLoadout.Call({ towerIds = draft })
-					end)
-
-					if ok then
-						-- The echo is the deck as the server now holds it,
-						-- accepted or refused - never guess from `ok` alone.
-						atoms.loadout(reply.loadout)
-
-						if reply.ok then
-							atoms.loadoutOpen(false)
-						else
-							setStatus("That loadout was refused - it may hold towers you no longer own.")
-						end
+			art = UiArt.frameUnderlay(),
+			title = label({
+				Position = UDim2.fromOffset(0, 12),
+				Size = UDim2.new(1, 0, 0, 22),
+				Text = `LOADOUT  {#draft}/{Loadouts.MAX}`,
+				TextColor3 = Theme.ACCENT,
+				TextSize = 18,
+			}),
+			hint = label({
+				Position = UDim2.fromOffset(0, 36),
+				Size = UDim2.new(1, 0, 0, 16),
+				Font = Theme.FONT_BODY,
+				Text = if status ~= "" then status else "The six you bring to every match. Tap to equip.",
+				TextColor3 = if status ~= "" then Theme.NEGATIVE else Theme.MUTED,
+				TextSize = 12,
+			}),
+			grid = e("ScrollingFrame", {
+				Position = UDim2.fromOffset(12, 58),
+				Size = UDim2.new(1, -24, 1, -122),
+				BackgroundTransparency = 1,
+				BorderSizePixel = 0,
+				ScrollBarThickness = 4,
+				AutomaticCanvasSize = Enum.AutomaticSize.Y,
+				CanvasSize = UDim2.new(),
+			}, rows),
+			save = e("TextButton", {
+				AnchorPoint = Vector2.new(1, 1),
+				Position = UDim2.new(0.5, -6, 1, -14),
+				Size = UDim2.fromOffset(150, 40),
+				BackgroundColor3 = if dirty and #draft > 0 then Theme.POSITIVE else Theme.DISABLED,
+				BorderSizePixel = 0,
+				AutoButtonColor = dirty and #draft > 0,
+				Font = Theme.FONT,
+				Text = "SAVE",
+				TextColor3 = if dirty and #draft > 0 then Theme.INVERSE else Theme.MUTED,
+				TextSize = 15,
+				[React.Event.Activated] = function()
+					if saving.current or not dirty or #draft == 0 then
+						return
 					end
 
-					saving.current = false
-				end)
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-			pressScale = e("UIScale", { ref = saveScale }),
-		}),
-		cancel = e("TextButton", {
-			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.new(0.5, 6, 1, -14),
-			Size = UDim2.fromOffset(150, 40),
-			BackgroundColor3 = Theme.RAISED,
-			BorderSizePixel = 0,
-			AutoButtonColor = true,
-			Font = Theme.FONT,
-			Text = "CLOSE",
-			TextColor3 = Theme.TEXT,
-			TextSize = 15,
-			[React.Event.Activated] = function()
-				atoms.loadoutOpen(false)
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-		}),
+					UiFx.pressPop(saveScale.current)
+					saving.current = true
+
+					task.spawn(function()
+						local ok, reply = pcall(function()
+							return Net.SetLoadout.Call({ towerIds = draft })
+						end)
+
+						if ok then
+							-- The echo is the deck as the server now holds it,
+							-- accepted or refused - never guess from `ok` alone.
+							atoms.loadout(reply.loadout)
+
+							if reply.ok then
+								atoms.loadoutOpen(false)
+							else
+								setStatus("That loadout was refused - it may hold towers you no longer own.")
+							end
+						end
+
+						saving.current = false
+					end)
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+				pressScale = e("UIScale", { ref = saveScale }),
+			}),
+			cancel = e("TextButton", {
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.new(0.5, 6, 1, -14),
+				Size = UDim2.fromOffset(150, 40),
+				BackgroundColor3 = Theme.RAISED,
+				BorderSizePixel = 0,
+				AutoButtonColor = true,
+				Font = Theme.FONT,
+				Text = "CLOSE",
+				TextColor3 = Theme.TEXT,
+				TextSize = 15,
+				[React.Event.Activated] = function()
+					atoms.loadoutOpen(false)
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			}),
 		},
 	})
 end
@@ -789,98 +789,98 @@ local function GachaPanel()
 			BackgroundTransparency = 1,
 		},
 		children = {
-		art = UiArt.frameUnderlay(),
-		title = label({
-			Position = UDim2.fromOffset(0, 12),
-			Size = UDim2.new(1, 0, 0, 22),
-			Text = "TROOP GACHA",
-			TextColor3 = Theme.CASH,
-			TextSize = 18,
-		}),
-		odds = label({
-			Position = UDim2.fromOffset(8, 38),
-			Size = UDim2.new(1, -16, 0, 26),
-			Font = Theme.FONT_BODY,
-			Text = oddsText(),
-			TextColor3 = Theme.MUTED,
-			TextSize = 10,
-			TextWrapped = true,
-		}),
-		result = label({
-			Position = UDim2.fromOffset(0, 72),
-			Size = UDim2.new(1, 0, 0, 24),
-			Text = resultText,
-			TextColor3 = resultColor,
-			TextSize = 16,
-		}),
-		roll = e("TextButton", {
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 1, -16),
-			Size = UDim2.fromOffset(240, 44),
-			BackgroundColor3 = if affordable and not busy then Theme.CASH else Theme.DISABLED,
-			BorderSizePixel = 0,
-			AutoButtonColor = affordable and not busy,
-			Font = Theme.FONT,
-			Text = if busy then "ROLLING..." else `ROLL  -  {cost} COINS`,
-			TextColor3 = if affordable and not busy then Theme.INVERSE else Theme.MUTED,
-			TextSize = 16,
-			[React.Event.Activated] = function()
-				if rolling.current or not atoms.profileLoaded() then
-					return
-				end
-
-				UiFx.pressPop(rollScale.current)
-				rolling.current = true
-				setBusy(true)
-
-				task.spawn(function()
-					local ok, reply = pcall(function()
-						return Net.RollTower.Call({})
-					end)
-
-					if ok then
-						-- Server-returned balances, never derived locally -
-						-- and never from an Unavailable reply, whose zeros
-						-- describe a missing session, not this player.
-						if reply.outcome ~= "Unavailable" then
-							atoms.coins(reply.coins)
-						end
-
-						if reply.outcome == "Rolled" then
-							local unlocked = table.clone(atoms.unlockedTowers())
-							table.insert(unlocked, reply.towerId)
-							atoms.unlockedTowers(unlocked)
-						end
-
-						-- A roll that rolled gets the egg. The guard stays
-						-- held until the cinematic dismisses, so eggs can
-						-- never stack; refusals skip straight to the text.
-						if reply.outcome == "Rolled" or reply.outcome == "Duplicate" then
-							EggReveal.play({
-								towerId = reply.towerId,
-								rarityId = reply.rarityId,
-								duplicate = reply.outcome == "Duplicate",
-								refunded = reply.refunded,
-							}, function()
-								setLastRoll(reply)
-								rolling.current = false
-								setBusy(false)
-							end)
-
-							return
-						end
-
-						setLastRoll(reply)
+			art = UiArt.frameUnderlay(),
+			title = label({
+				Position = UDim2.fromOffset(0, 12),
+				Size = UDim2.new(1, 0, 0, 22),
+				Text = "TROOP GACHA",
+				TextColor3 = Theme.CASH,
+				TextSize = 18,
+			}),
+			odds = label({
+				Position = UDim2.fromOffset(8, 38),
+				Size = UDim2.new(1, -16, 0, 26),
+				Font = Theme.FONT_BODY,
+				Text = oddsText(),
+				TextColor3 = Theme.MUTED,
+				TextSize = 10,
+				TextWrapped = true,
+			}),
+			result = label({
+				Position = UDim2.fromOffset(0, 72),
+				Size = UDim2.new(1, 0, 0, 24),
+				Text = resultText,
+				TextColor3 = resultColor,
+				TextSize = 16,
+			}),
+			roll = e("TextButton", {
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -16),
+				Size = UDim2.fromOffset(240, 44),
+				BackgroundColor3 = if affordable and not busy then Theme.CASH else Theme.DISABLED,
+				BorderSizePixel = 0,
+				AutoButtonColor = affordable and not busy,
+				Font = Theme.FONT,
+				Text = if busy then "ROLLING..." else `ROLL  -  {cost} COINS`,
+				TextColor3 = if affordable and not busy then Theme.INVERSE else Theme.MUTED,
+				TextSize = 16,
+				[React.Event.Activated] = function()
+					if rolling.current or not atoms.profileLoaded() then
+						return
 					end
 
-					rolling.current = false
-					setBusy(false)
-				end)
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-			pressScale = e("UIScale", { ref = rollScale }),
-		}),
+					UiFx.pressPop(rollScale.current)
+					rolling.current = true
+					setBusy(true)
+
+					task.spawn(function()
+						local ok, reply = pcall(function()
+							return Net.RollTower.Call({})
+						end)
+
+						if ok then
+							-- Server-returned balances, never derived locally -
+							-- and never from an Unavailable reply, whose zeros
+							-- describe a missing session, not this player.
+							if reply.outcome ~= "Unavailable" then
+								atoms.coins(reply.coins)
+							end
+
+							if reply.outcome == "Rolled" then
+								local unlocked = table.clone(atoms.unlockedTowers())
+								table.insert(unlocked, reply.towerId)
+								atoms.unlockedTowers(unlocked)
+							end
+
+							-- A roll that rolled gets the egg. The guard stays
+							-- held until the cinematic dismisses, so eggs can
+							-- never stack; refusals skip straight to the text.
+							if reply.outcome == "Rolled" or reply.outcome == "Duplicate" then
+								EggReveal.play({
+									towerId = reply.towerId,
+									rarityId = reply.rarityId,
+									duplicate = reply.outcome == "Duplicate",
+									refunded = reply.refunded,
+								}, function()
+									setLastRoll(reply)
+									rolling.current = false
+									setBusy(false)
+								end)
+
+								return
+							end
+
+							setLastRoll(reply)
+						end
+
+						rolling.current = false
+						setBusy(false)
+					end)
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+				pressScale = e("UIScale", { ref = rollScale }),
+			}),
 		},
 	})
 end
@@ -943,10 +943,8 @@ local function UnitPortrait(props: { towerId: string? })
 		unit.Parent = viewport
 
 		local _, extents = unit:GetBoundingBox()
-		camera.CFrame = CFrame.lookAt(
-			Vector3.new(0, extents.Y * 0.15, extents.Magnitude * 0.85 + 2),
-			Vector3.new(0, 0, 0)
-		)
+		camera.CFrame =
+			CFrame.lookAt(Vector3.new(0, extents.Y * 0.15, extents.Magnitude * 0.85 + 2), Vector3.new(0, 0, 0))
 
 		local alive = true
 
@@ -1395,118 +1393,118 @@ local function RerollPanel()
 			BackgroundTransparency = 1,
 		},
 		children = {
-		art = UiArt.frameUnderlay(),
-		title = e("TextLabel", {
-			Position = UDim2.fromOffset(0, 10),
-			Size = UDim2.new(1, 0, 0, 26),
-			BackgroundTransparency = 1,
-			Font = Theme.FONT,
-			Text = "TRAIT REROLL",
-			TextColor3 = Color3.new(1, 1, 1),
-			TextSize = 22,
-		}, {
-			gradient = e("UIGradient", {
-				Color = ColorSequence.new(Color3.fromRGB(236, 110, 170), Color3.fromRGB(150, 110, 236)),
+			art = UiArt.frameUnderlay(),
+			title = e("TextLabel", {
+				Position = UDim2.fromOffset(0, 10),
+				Size = UDim2.new(1, 0, 0, 26),
+				BackgroundTransparency = 1,
+				Font = Theme.FONT,
+				Text = "TRAIT REROLL",
+				TextColor3 = Color3.new(1, 1, 1),
+				TextSize = 22,
+			}, {
+				gradient = e("UIGradient", {
+					Color = ColorSequence.new(Color3.fromRGB(236, 110, 170), Color3.fromRGB(150, 110, 236)),
+				}),
 			}),
-		}),
-		tokensLine = label({
-			Position = UDim2.fromOffset(0, 38),
-			Size = UDim2.new(1, 0, 0, 16),
-			Font = Theme.FONT_BODY,
-			Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}  -  rerolling replaces the current trait`,
-			TextColor3 = Theme.MUTED,
-			TextSize = 12,
-		}),
-		portrait = e(UnitPortrait, { towerId = currentId }),
-		unitName = label({
-			Position = UDim2.fromOffset(16, 258),
-			Size = UDim2.fromOffset(190, 22),
-			Text = if currentDefinition ~= nil then currentDefinition.displayName else "-",
-			TextColor3 = if currentDefinition ~= nil then rarityColor(currentDefinition.rarity) else Theme.MUTED,
-			TextSize = 17,
-		}),
-		traitName = label({
-			Position = UDim2.fromOffset(16, 280),
-			Size = UDim2.fromOffset(190, 34),
-			Font = Theme.FONT_BODY,
-			Text = traitLine,
-			TextColor3 = traitColor,
-			TextSize = 12,
-			TextWrapped = true,
-		}),
-		selectUnit = e("TextButton", {
-			Position = UDim2.fromOffset(240, 100),
-			Size = UDim2.fromOffset(240, 52),
-			BackgroundColor3 = Theme.ACCENT,
-			BorderSizePixel = 0,
-			AutoButtonColor = true,
-			Font = Theme.FONT,
-			Text = "SELECT UNIT",
-			TextColor3 = Theme.INVERSE,
-			TextSize = 17,
-			[React.Event.Activated] = function()
-				atoms.unitPickerOpen(true)
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-		}),
-		selectHint = label({
-			Position = UDim2.fromOffset(240, 156),
-			Size = UDim2.fromOffset(240, 30),
-			Font = Theme.FONT_BODY,
-			Text = "Pick which unit the reroll applies to",
-			TextColor3 = Theme.MUTED,
-			TextSize = 11,
-			TextWrapped = true,
-		}),
-		chances = e("TextButton", {
-			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.new(0, 16, 1, -16),
-			Size = UDim2.fromOffset(170, 44),
-			BackgroundColor3 = Theme.CASH,
-			BorderSizePixel = 0,
-			AutoButtonColor = true,
-			Font = Theme.FONT,
-			Text = "TRAIT CHANCES",
-			TextColor3 = Theme.INVERSE,
-			TextSize = 14,
-			[React.Event.Activated] = function()
-				atoms.traitChancesOpen(true)
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-			gradient = e("UIGradient", {
-				Color = ColorSequence.new(Color3.fromRGB(255, 214, 120), Color3.fromRGB(236, 160, 70)),
-				Rotation = 90,
+			tokensLine = label({
+				Position = UDim2.fromOffset(0, 38),
+				Size = UDim2.new(1, 0, 0, 16),
+				Font = Theme.FONT_BODY,
+				Text = `{tokens} reroll token{if tokens == 1 then "" else "s"}  -  rerolling replaces the current trait`,
+				TextColor3 = Theme.MUTED,
+				TextSize = 12,
 			}),
-		}),
-		reroll = e("TextButton", {
-			AnchorPoint = Vector2.new(1, 1),
-			Position = UDim2.new(1, -16, 1, -16),
-			Size = UDim2.fromOffset(240, 44),
-			BackgroundColor3 = if affordable and not busy then Color3.fromRGB(236, 110, 170) else Theme.DISABLED,
-			BorderSizePixel = 0,
-			AutoButtonColor = affordable and not busy,
-			Font = Theme.FONT,
-			Text = if busy then "REROLLING..." else "REROLL  -  1 TOKEN",
-			TextColor3 = if affordable and not busy then Theme.INVERSE else Theme.MUTED,
-			TextSize = 16,
-			[React.Event.Activated] = function()
-				if affordable and not busy then
-					UiFx.pressPop(rerollScale.current)
-					onReroll()
-				end
-			end,
-		}, {
-			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
-			pressScale = e("UIScale", { ref = rerollScale }),
-			gradient = if affordable and not busy
-				then e("UIGradient", {
-					Color = ColorSequence.new(Color3.fromRGB(255, 150, 200), Color3.fromRGB(190, 120, 255)),
-					Rotation = 10,
-				})
-				else nil,
-		}),
+			portrait = e(UnitPortrait, { towerId = currentId }),
+			unitName = label({
+				Position = UDim2.fromOffset(16, 258),
+				Size = UDim2.fromOffset(190, 22),
+				Text = if currentDefinition ~= nil then currentDefinition.displayName else "-",
+				TextColor3 = if currentDefinition ~= nil then rarityColor(currentDefinition.rarity) else Theme.MUTED,
+				TextSize = 17,
+			}),
+			traitName = label({
+				Position = UDim2.fromOffset(16, 280),
+				Size = UDim2.fromOffset(190, 34),
+				Font = Theme.FONT_BODY,
+				Text = traitLine,
+				TextColor3 = traitColor,
+				TextSize = 12,
+				TextWrapped = true,
+			}),
+			selectUnit = e("TextButton", {
+				Position = UDim2.fromOffset(240, 100),
+				Size = UDim2.fromOffset(240, 52),
+				BackgroundColor3 = Theme.ACCENT,
+				BorderSizePixel = 0,
+				AutoButtonColor = true,
+				Font = Theme.FONT,
+				Text = "SELECT UNIT",
+				TextColor3 = Theme.INVERSE,
+				TextSize = 17,
+				[React.Event.Activated] = function()
+					atoms.unitPickerOpen(true)
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+			}),
+			selectHint = label({
+				Position = UDim2.fromOffset(240, 156),
+				Size = UDim2.fromOffset(240, 30),
+				Font = Theme.FONT_BODY,
+				Text = "Pick which unit the reroll applies to",
+				TextColor3 = Theme.MUTED,
+				TextSize = 11,
+				TextWrapped = true,
+			}),
+			chances = e("TextButton", {
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.new(0, 16, 1, -16),
+				Size = UDim2.fromOffset(170, 44),
+				BackgroundColor3 = Theme.CASH,
+				BorderSizePixel = 0,
+				AutoButtonColor = true,
+				Font = Theme.FONT,
+				Text = "TRAIT CHANCES",
+				TextColor3 = Theme.INVERSE,
+				TextSize = 14,
+				[React.Event.Activated] = function()
+					atoms.traitChancesOpen(true)
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+				gradient = e("UIGradient", {
+					Color = ColorSequence.new(Color3.fromRGB(255, 214, 120), Color3.fromRGB(236, 160, 70)),
+					Rotation = 90,
+				}),
+			}),
+			reroll = e("TextButton", {
+				AnchorPoint = Vector2.new(1, 1),
+				Position = UDim2.new(1, -16, 1, -16),
+				Size = UDim2.fromOffset(240, 44),
+				BackgroundColor3 = if affordable and not busy then Color3.fromRGB(236, 110, 170) else Theme.DISABLED,
+				BorderSizePixel = 0,
+				AutoButtonColor = affordable and not busy,
+				Font = Theme.FONT,
+				Text = if busy then "REROLLING..." else "REROLL  -  1 TOKEN",
+				TextColor3 = if affordable and not busy then Theme.INVERSE else Theme.MUTED,
+				TextSize = 16,
+				[React.Event.Activated] = function()
+					if affordable and not busy then
+						UiFx.pressPop(rerollScale.current)
+						onReroll()
+					end
+				end,
+			}, {
+				corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
+				pressScale = e("UIScale", { ref = rerollScale }),
+				gradient = if affordable and not busy
+					then e("UIGradient", {
+						Color = ColorSequence.new(Color3.fromRGB(255, 150, 200), Color3.fromRGB(190, 120, 255)),
+						Rotation = 10,
+					})
+					else nil,
+			}),
 		},
 	})
 end

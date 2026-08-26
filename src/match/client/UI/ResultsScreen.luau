@@ -16,8 +16,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local React = require(ReplicatedStorage.Packages.React)
 local Rewards = require(ReplicatedStorage.Shared.Rewards)
-local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Theme = require(ReplicatedStorage.Shared.Theme)
+local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local atoms = require(script.Parent.Parent.State.atoms)
@@ -50,19 +50,19 @@ local function Stat(props: { caption: string, value: string, color: Color3, x: n
 		},
 		delay = 0.12 + props.order * 0.09,
 		children = {
-		value = label({
-			Size = UDim2.new(1, 0, 0, 26),
-			Text = props.value,
-			TextColor3 = props.color,
-			TextSize = 24,
-		}),
-		caption = label({
-			Position = UDim2.fromOffset(0, 28),
-			Size = UDim2.new(1, 0, 0, 16),
-			Text = props.caption,
-			TextColor3 = Theme.MUTED,
-			TextSize = 12,
-		}),
+			value = label({
+				Size = UDim2.new(1, 0, 0, 26),
+				Text = props.value,
+				TextColor3 = props.color,
+				TextSize = 24,
+			}),
+			caption = label({
+				Position = UDim2.fromOffset(0, 28),
+				Size = UDim2.new(1, 0, 0, 16),
+				Text = props.caption,
+				TextColor3 = Theme.MUTED,
+				TextSize = 12,
+			}),
 		},
 	})
 end
@@ -94,64 +94,64 @@ local function ResultsScreen()
 		},
 		restartKey = if won then "won" else "lost",
 		children = {
-		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
-		stroke = e("UIStroke", {
-			Color = if won then Theme.POSITIVE else Theme.NEGATIVE,
-			Thickness = 2,
-		}),
-		headline = label({
-			Position = UDim2.fromOffset(0, 20),
-			Size = UDim2.new(1, 0, 0, 30),
-			Text = headline,
-			TextColor3 = if won then Theme.POSITIVE else Theme.NEGATIVE,
-			TextSize = 26,
-		}),
-		subtitle = label({
-			Position = UDim2.fromOffset(0, 52),
-			Size = UDim2.new(1, 0, 0, 18),
-			Text = subtitle,
-			TextColor3 = Theme.MUTED,
-			TextSize = 13,
-		}),
-		waves = e(Stat, {
-			caption = "CLEARED",
-			value = wavesText,
-			color = Theme.TEXT,
-			x = 20,
-			order = 0,
-		}),
-		coins = e(Stat, {
-			caption = "COINS EARNED",
-			value = `+{result.coinsAwarded}`,
-			color = Theme.CASH,
-			x = 160,
-			order = 1,
-		}),
-		xp = e(Stat, {
-			caption = `XP EARNED`,
-			value = `+{result.xpAwarded}`,
-			color = Theme.ACCENT,
-			x = 300,
-			order = 2,
-		}),
-		-- Spent at the lobby's reroll station; earning them HERE is what makes
-		-- the results screen the bridge between the two places.
-		tokens = e(Stat, {
-			caption = "REROLL TOKENS",
-			value = `+{result.tokensAwarded}`,
-			color = Color3.fromRGB(158, 110, 208),
-			x = 420,
-			order = 3,
-		}),
-		-- Shown so the number means something. Level is derived from total XP
-		-- on the server, so this is only ever a preview of the gain.
-		levels = label({
-			Position = UDim2.fromOffset(0, 148),
-			Size = UDim2.new(1, 0, 0, 14),
-			Text = `worth {Rewards.levelFor(result.xpAwarded) - 1} level(s) from scratch`,
-			TextColor3 = Theme.MUTED,
-			TextSize = 11,
-		}),
+			corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+			stroke = e("UIStroke", {
+				Color = if won then Theme.POSITIVE else Theme.NEGATIVE,
+				Thickness = 2,
+			}),
+			headline = label({
+				Position = UDim2.fromOffset(0, 20),
+				Size = UDim2.new(1, 0, 0, 30),
+				Text = headline,
+				TextColor3 = if won then Theme.POSITIVE else Theme.NEGATIVE,
+				TextSize = 26,
+			}),
+			subtitle = label({
+				Position = UDim2.fromOffset(0, 52),
+				Size = UDim2.new(1, 0, 0, 18),
+				Text = subtitle,
+				TextColor3 = Theme.MUTED,
+				TextSize = 13,
+			}),
+			waves = e(Stat, {
+				caption = "CLEARED",
+				value = wavesText,
+				color = Theme.TEXT,
+				x = 20,
+				order = 0,
+			}),
+			coins = e(Stat, {
+				caption = "COINS EARNED",
+				value = `+{result.coinsAwarded}`,
+				color = Theme.CASH,
+				x = 160,
+				order = 1,
+			}),
+			xp = e(Stat, {
+				caption = `XP EARNED`,
+				value = `+{result.xpAwarded}`,
+				color = Theme.ACCENT,
+				x = 300,
+				order = 2,
+			}),
+			-- Spent at the lobby's reroll station; earning them HERE is what makes
+			-- the results screen the bridge between the two places.
+			tokens = e(Stat, {
+				caption = "REROLL TOKENS",
+				value = `+{result.tokensAwarded}`,
+				color = Color3.fromRGB(158, 110, 208),
+				x = 420,
+				order = 3,
+			}),
+			-- Shown so the number means something. Level is derived from total XP
+			-- on the server, so this is only ever a preview of the gain.
+			levels = label({
+				Position = UDim2.fromOffset(0, 148),
+				Size = UDim2.new(1, 0, 0, 14),
+				Text = `worth {Rewards.levelFor(result.xpAwarded) - 1} level(s) from scratch`,
+				TextColor3 = Theme.MUTED,
+				TextSize = 11,
+			}),
 		},
 	})
 end

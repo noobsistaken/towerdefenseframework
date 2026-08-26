@@ -11,8 +11,8 @@ local Types = require(script.Parent.Parent.Types)
 
 local Bastion = require(script.Parent.Maps.Bastion)
 local Crossroads = require(script.Parent.Maps.Crossroads)
-local Gauntlet = require(script.Parent.Maps.Gauntlet)
 local Fork = require(script.Parent.Maps.Fork)
+local Gauntlet = require(script.Parent.Maps.Gauntlet)
 local Switchback = require(script.Parent.Maps.Switchback)
 
 local MapRegistry = {}
