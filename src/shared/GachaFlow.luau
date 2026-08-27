@@ -24,6 +24,10 @@ local Types = require(script.Parent.Types)
 
 local GachaFlow = {}
 
+--- The tier the pity guarantee pays out in. Named once so the constant and
+--- the rarity ladder cannot drift apart silently.
+local SECRET_TIER = "Secret"
+
 export type RollOutcome = "Rolled" | "Duplicate" | "CannotAfford"
 
 export type RollResult = {
@@ -33,6 +37,8 @@ export type RollResult = {
 	rarityId: string,
 	--- Coins handed back on a duplicate. 0 otherwise.
 	refunded: number,
+	--- True when the pity guarantee, not the dice, produced this Secret.
+	pitied: boolean,
 }
 
 export type RerollOutcome = "Rolled" | "CannotAfford" | "UnknownTower"
@@ -74,29 +80,55 @@ function GachaFlow.rollTower(data: Types.PlayerData, rng: Random): RollResult
 	local cost = Economy.GACHA_ROLL_COST
 
 	if data.Coins < cost then
-		return { outcome = "CannotAfford", towerId = "", rarityId = "", refunded = 0 }
+		return { outcome = "CannotAfford", towerId = "", rarityId = "", refunded = 0, pitied = false }
 	end
 
-	local result = Gacha.roll(rng, GachaFlow.towerPool())
+	-- The pity guarantee. Counted in ROLLS PAID FOR, so it advances on
+	-- duplicates too: a player who rolled forty duplicates has still had
+	-- forty rolls of bad luck, and telling them otherwise would be a lie
+	-- the counter is supposed to prevent.
+	local pitied = data.RollsSinceSecret >= Economy.GACHA_SECRET_PITY
+	local result = if pitied
+		then Gacha.rollWithinTier(rng, GachaFlow.towerPool(), SECRET_TIER)
+		else Gacha.roll(rng, GachaFlow.towerPool())
 
 	if result == nil then
 		-- Impossible while the roster is non-empty; refusing without charging
-		-- is the correct degradation if it ever is.
-		return { outcome = "CannotAfford", towerId = "", rarityId = "", refunded = 0 }
+		-- is the correct degradation if it ever is. Also covers an empty
+		-- Secret tier, where the guarantee simply has nothing to hand over.
+		result = Gacha.roll(rng, GachaFlow.towerPool())
+		pitied = false
+	end
+
+	if result == nil then
+		return { outcome = "CannotAfford", towerId = "", rarityId = "", refunded = 0, pitied = false }
 	end
 
 	data.Coins -= cost
+
+	-- Charged, so the streak advances - then resets if this was the Secret.
+	data.RollsSinceSecret += 1
+
+	if result.rarityId == SECRET_TIER then
+		data.RollsSinceSecret = 0
+	end
 
 	if table.find(data.UnlockedTowers, result.id) ~= nil then
 		local refund = math.floor(cost * Economy.GACHA_DUPLICATE_REFUND_RATE)
 		data.Coins += refund
 
-		return { outcome = "Duplicate", towerId = result.id, rarityId = result.rarityId, refunded = refund }
+		return {
+			outcome = "Duplicate",
+			towerId = result.id,
+			rarityId = result.rarityId,
+			refunded = refund,
+			pitied = pitied,
+		}
 	end
 
 	table.insert(data.UnlockedTowers, result.id)
 
-	return { outcome = "Rolled", towerId = result.id, rarityId = result.rarityId, refunded = 0 }
+	return { outcome = "Rolled", towerId = result.id, rarityId = result.rarityId, refunded = 0, pitied = pitied }
 end
 
 --- One trait reroll on an owned tower. Landing the same trait again is a

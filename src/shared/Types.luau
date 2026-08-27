@@ -51,6 +51,9 @@ export type PlayerData = {
 	Traits: { [string]: { string } },
 	--- Spent by trait rerolls. Earned at match end alongside Coins.
 	RerollTokens: number,
+	--- Tower rolls since the last Secret. Drives the pity guarantee, so a
+	--- long unlucky streak has an end the player can feel coming.
+	RollsSinceSecret: number,
 	--- The towers BROUGHT to a match - at most Loadouts.MAX of the owned
 	--- roster. The collection is UnlockedTowers; this is the deck.
 	Loadout: { string },

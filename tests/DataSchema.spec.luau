@@ -92,8 +92,12 @@ describe("DataSchema", function()
 		data.UnlockedTowers =
 			{ "Rifleman", "Ranger", "Mortar", "Marksman", "Flak", "Lacerator", "Scout", "Gunner", "Hexer" }
 
-		expect(DataSchema.migrate(data)).toBe(1)
-		expect(data.Version).toBe(4)
+		-- Walks every remaining rung, not just the one under test: this
+		-- assertion is about the DECK the v3 rung deals, so it is written
+		-- against CURRENT_VERSION rather than against whatever the top of
+		-- the ladder happened to be the day it was written.
+		expect(DataSchema.migrate(data)).toBe(DataSchema.CURRENT_VERSION - 3)
+		expect(data.Version).toBe(DataSchema.CURRENT_VERSION)
 		expect(#data.Loadout).toBe(6)
 		expect(data.Loadout[1]).toBe("Rifleman")
 		expect(data.Loadout[6]).toBe("Lacerator")

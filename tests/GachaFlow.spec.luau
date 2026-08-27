@@ -23,18 +23,86 @@ local it = JestGlobals.it
 
 local function freshData(coins: number, tokens: number): Types.PlayerData
 	return {
-		Version = 4,
+		Version = 5,
 		Coins = coins,
 		XP = 0,
 		Level = 1,
 		UnlockedTowers = { "Rifleman", "Ranger" },
 		Loadout = { "Rifleman", "Ranger" },
 		Traits = {},
+		RollsSinceSecret = 0,
 		RerollTokens = tokens,
 		Stats = { MatchesPlayed = 0, MatchesWon = 0, HighestWave = 0, EnemiesKilled = 0 },
 		Settings = { MusicEnabled = true, SfxEnabled = true },
 	}
 end
+
+describe("The Secret pity guarantee", function()
+	it("hands over a Secret once the streak reaches the threshold", function()
+		local data = freshData(Economy.GACHA_ROLL_COST * 4, 0)
+		data.RollsSinceSecret = Economy.GACHA_SECRET_PITY
+
+		local result = GachaFlow.rollTower(data, Random.new(1))
+
+		expect(result.rarityId).toBe("Secret")
+		expect(result.pitied).toBe(true)
+	end)
+
+	it("resets the streak on any Secret, granted or rolled", function()
+		local data = freshData(Economy.GACHA_ROLL_COST * 4, 0)
+		data.RollsSinceSecret = Economy.GACHA_SECRET_PITY
+
+		GachaFlow.rollTower(data, Random.new(2))
+
+		expect(data.RollsSinceSecret).toBe(0)
+	end)
+
+	it("counts duplicates as rolls, because they were paid for", function()
+		-- A player who rolled forty duplicates has had forty rolls of bad
+		-- luck. Advancing only on new towers would quietly make the
+		-- guarantee further away the unluckier you got.
+		local data = freshData(Economy.GACHA_ROLL_COST * 3, 0)
+		data.UnlockedTowers = table.clone(Towers.IDS)
+
+		local before = data.RollsSinceSecret
+		local result = GachaFlow.rollTower(data, Random.new(3))
+
+		expect(result.outcome).toBe("Duplicate")
+		expect(data.RollsSinceSecret > before or result.rarityId == "Secret").toBe(true)
+	end)
+
+	it("does not advance the streak on a refused roll", function()
+		-- Nothing was charged, so nothing was risked.
+		local data = freshData(0, 0)
+
+		local result = GachaFlow.rollTower(data, Random.new(4))
+
+		expect(result.outcome).toBe("CannotAfford")
+		expect(data.RollsSinceSecret).toBe(0)
+	end)
+
+	it("leaves the ordinary odds alone below the threshold", function()
+		-- The guarantee must be a tail-end backstop, not a second set of
+		-- odds. Well under the threshold, a long run of rolls should still
+		-- produce a spread of tiers rather than Secrets.
+		local data = freshData(Economy.GACHA_ROLL_COST * 400, 0)
+		local rng = Random.new(20)
+		local secrets = 0
+
+		for _ = 1, 40 do
+			data.RollsSinceSecret = 0
+			data.Coins = Economy.GACHA_ROLL_COST * 2
+
+			if GachaFlow.rollTower(data, rng).rarityId == "Secret" then
+				secrets += 1
+			end
+		end
+
+		-- Secret is the rarest tier; 40 rolls that all reset the counter
+		-- must not come back all-Secret.
+		expect(secrets < 40).toBe(true)
+	end)
+end)
 
 describe("GachaFlow.towerPool", function()
 	it("covers the whole roster with real rarities", function()

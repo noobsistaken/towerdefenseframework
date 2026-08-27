@@ -64,6 +64,35 @@ function Gacha.totalWeight(): number
 	return total
 end
 
+--- Rolls once from the entries of ONE tier, ignoring the ladder's weights.
+---
+--- This is the pity guarantee's draw, and it is deliberately a separate
+--- function rather than a flag on `roll`: the weighted ladder is the honest
+--- description of the odds, and a guarantee is not a roll at different odds
+--- but a different act entirely. Keeping them apart means nothing about the
+--- advertised weights has to be qualified.
+---
+--- Returns nil when the tier has no entries, which the caller must handle by
+--- falling back to a normal roll - an empty Secret tier must not eat a
+--- player's coins for nothing.
+function Gacha.rollWithinTier(rng: Random, pool: { PoolEntry }, rarityId: string): Result?
+	local bucket: { PoolEntry } = {}
+
+	for _, entry in pool do
+		if entry.rarityId == rarityId then
+			table.insert(bucket, entry)
+		end
+	end
+
+	if #bucket == 0 then
+		return nil
+	end
+
+	local entry = bucket[rng:NextInteger(1, #bucket)]
+
+	return { id = entry.id, rarityId = entry.rarityId }
+end
+
 --- Rolls once from `pool` using `rng`. Returns nil only for an empty pool.
 ---
 --- `rng` is a Random object the CALLER owns. The server passes a real one;

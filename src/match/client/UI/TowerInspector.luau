@@ -22,9 +22,11 @@ local Economy = require(ReplicatedStorage.Shared.Config.Economy)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Motion = require(script.Parent.Motion)
 local Net = require(ReplicatedStorage.Net)
+local Rarity = require(ReplicatedStorage.Shared.Config.Rarity)
 local React = require(ReplicatedStorage.Packages.React)
 local Targeting = require(ReplicatedStorage.Shared.Targeting)
 local Towers = require(ReplicatedStorage.Shared.Config.Towers)
+local Traits = require(ReplicatedStorage.Shared.Config.Traits)
 local UiArt = require(ReplicatedStorage.Shared.UiArt)
 local UiFx = require(ReplicatedStorage.Shared.UiFx)
 local Wire = require(ReplicatedStorage.Shared.Wire)
@@ -60,6 +62,10 @@ type TowerInfo = {
 	fireRate: number,
 	--- os.time() the ability comes off cooldown. 0 when ready or absent.
 	abilityReadyAt: number,
+	--- Trait ids this tower rolled, read off the same replicated attribute
+	--- the server writes. The stat numbers above already have them applied;
+	--- this is what NAMES the reason those numbers differ from the config.
+	traits: { string },
 }
 
 --- Finds a tower part by its replicated TowerId attribute.
@@ -90,6 +96,7 @@ local function readInfo(part: BasePart): TowerInfo?
 	local damage = part:GetAttribute("Damage")
 	local fireRate = part:GetAttribute("FireRate")
 	local abilityReadyAt = part:GetAttribute("AbilityReadyAt")
+	local traitList = part:GetAttribute("Traits")
 
 	if
 		typeof(towerId) ~= "number"
@@ -116,6 +123,10 @@ local function readInfo(part: BasePart): TowerInfo?
 		damage = damage,
 		fireRate = fireRate,
 		abilityReadyAt = if typeof(abilityReadyAt) == "number" then abilityReadyAt else 0,
+		-- Comma-joined on the server, empty string when the tower rolled
+		-- nothing. Split defensively: this is a replicated value and a
+		-- malformed one must not take the panel down.
+		traits = if typeof(traitList) == "string" and traitList ~= "" then string.split(traitList, ",") else {},
 	}
 end
 
@@ -176,7 +187,9 @@ local function useTowerInfo(towerId: number?): TowerInfo?
 
 		refresh()
 
-		for _, attribute in { "Level", "TargetingMode", "SellValue", "Range", "Damage", "FireRate", "AbilityReadyAt" } do
+		for _, attribute in
+			{ "Level", "TargetingMode", "SellValue", "Range", "Damage", "FireRate", "AbilityReadyAt", "Traits" }
+		do
 			table.insert(connections, part:GetAttributeChangedSignal(attribute):Connect(refresh))
 		end
 
@@ -707,6 +720,41 @@ local function useSelectionEntrance(towerId: number?): { current: CanvasGroup? }
 	return shellRef
 end
 
+--- The trait row. Rarity-coloured, because the colour is how a player
+--- reads "how good is this" at a glance everywhere else in the game.
+local function TraitLine(props: { traits: { string } })
+	local names: { string } = {}
+	local color = Theme.MUTED
+
+	for _, id in props.traits do
+		local definition = Traits.find(id)
+
+		if definition ~= nil then
+			table.insert(names, definition.displayName)
+
+			-- Traits.SLOTS is 1, so in practice this runs once; taking the
+			-- last tier's colour is a defensible answer if it ever grows.
+			local tier = Rarity.find(definition.rarity)
+			color = if tier ~= nil then tier.color else Theme.MUTED
+		end
+	end
+
+	if #names == 0 then
+		return nil
+	end
+
+	return e("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 16),
+		BackgroundTransparency = 1,
+		Font = Theme.FONT,
+		Text = table.concat(names, ", "),
+		TextColor3 = color,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		LayoutOrder = 2.5,
+	})
+end
+
 local function TowerInspector()
 	local selectedId = useAtom(atoms.selectedTowerId)
 	local cash = useAtom(atoms.cash)
@@ -793,6 +841,16 @@ local function TowerInspector()
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = 2,
 		}),
+
+		-- The rolled trait, in its rarity colour. Mounted only when there is
+		-- one, so an untraited tower shows no empty row.
+		--
+		-- This is the whole reason the reroll station exists, and until now
+		-- a match never mentioned it: you could spend tokens on Godslayer in
+		-- the lobby and then read a stat row that silently included it with
+		-- nothing saying why. The numbers above are ALREADY traited - this
+		-- names them.
+		trait = if #info.traits > 0 then e(TraitLine, { traits = info.traits }) else nil,
 
 		-- Damage, reach and rate. Shown for every tower, owned or not: they
 		-- describe the tower, and reading someone else's is not an action.

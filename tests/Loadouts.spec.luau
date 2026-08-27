@@ -27,6 +27,7 @@ local function freshData(): Types.PlayerData
 		Loadout = { "Rifleman", "Ranger" },
 		Traits = {},
 		RerollTokens = 0,
+		RollsSinceSecret = 0,
 		Stats = { MatchesPlayed = 0, MatchesWon = 0, HighestWave = 0, EnemiesKilled = 0 },
 		Settings = { MusicEnabled = true, SfxEnabled = true },
 	}

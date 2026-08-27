@@ -19,7 +19,7 @@ local Types = require(script.Parent.Types)
 
 local DataSchema = {}
 
-DataSchema.CURRENT_VERSION = 4
+DataSchema.CURRENT_VERSION = 5
 
 --- Towers every account owns from the start. Currently ALL of them, by
 --- request - the Coins sink this leaves behind is a design decision waiting
@@ -36,6 +36,7 @@ DataSchema.TEMPLATE = {
 	Loadout = STARTING_TOWERS,
 	Traits = {},
 	RerollTokens = 0,
+	RollsSinceSecret = 0,
 	Stats = {
 		MatchesPlayed = 0,
 		MatchesWon = 0,
@@ -89,6 +90,16 @@ local MIGRATIONS: { [number]: (Types.PlayerData) -> () } = {
 
 		data.Loadout = loadout
 		data.Version = 4
+	end,
+
+	-- v4 -> v5: the Secret pity counter. Existing accounts start at zero
+	-- rather than at their true lifetime roll count, which is not
+	-- recoverable - the rolls were never counted. Starting fresh is the
+	-- generous direction only in that it cannot mistakenly fire the
+	-- guarantee on someone who just had one.
+	[4] = function(data)
+		data.RollsSinceSecret = 0
+		data.Version = 5
 	end,
 }
 

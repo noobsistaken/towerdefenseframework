@@ -25,6 +25,16 @@ Economy.GACHA_ROLL_COST = 400
 --- slowly; above 0 so a duplicate stings rather than robs.
 Economy.GACHA_DUPLICATE_REFUND_RATE = 0.5
 
+--- Rolls after which the next tower roll is GUARANTEED to come from the
+--- Secret tier, counting from the last Secret.
+---
+--- A guarantee rather than a rising chance, because a hard number is the
+--- one a player can actually hold: "eighty more" is a plan, "your odds are
+--- creeping up" is a feeling. At the ladder's real Secret weight this
+--- triggers well inside the unlucky tail rather than replacing it - most
+--- Secrets are still rolled, not granted.
+Economy.GACHA_SECRET_PITY = 80
+
 --- One trait reroll, paid in RerollTokens (earned per match, not bought).
 Economy.TRAIT_REROLL_TOKEN_COST = 1
 
