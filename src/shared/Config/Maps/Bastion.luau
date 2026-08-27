@@ -3,13 +3,15 @@
 	Bastion - the surrounded one.
 
 	The base sits in the CENTRE, and two lanes close on it from opposite
-	edges like a pincer. Fork also runs two lanes, but both arrive from the
-	same side; here the two fronts face away from each other, so no single
-	killzone covers both and rotating attention is the whole game.
+	edges like a pincer, facing away from each other - so no single killzone
+	covers both fronts and rotating attention is the whole game. That is the
+	half of the design space Crossroads does not occupy: there a single
+	folded lane rewards one well-chosen overlap, here nothing covers
+	everything and the question is what you leave uncovered.
 
-	Lane lengths differ - 350 north, 415 south - for the same reason Fork's
-	do (ARCHITECTURE.md D8): distance REMAINING is what orders targeting,
-	and unequal lanes are what keep that honest rather than theoretical.
+	Lane lengths differ deliberately - 350 north, 415 south (ARCHITECTURE.md
+	D8): distance REMAINING is what orders targeting, and unequal lanes are
+	what keep that honest rather than theoretical.
 
 	The two plateaus sit just inside each approach, close enough to the
 	centre that a Hillside tower on one can lean across to help the other

@@ -27,8 +27,8 @@ local useAtom = require(ReplicatedStorage.Shared.useAtom)
 
 local e = React.createElement
 
-local BUTTON_WIDTH = 120
-local BUTTON_HEIGHT = 118
+local BUTTON_WIDTH = 104
+local BUTTON_HEIGHT = 106
 
 --- Short tag showing where a tower may stand, since that is the constraint
 --- players get wrong most often.
@@ -120,8 +120,8 @@ local function TowerButton(props: ButtonProps)
 			-- Centred stack, top to bottom: price, the unit itself,
 			-- placement type, name.
 			cost = e("TextLabel", {
-				Position = UDim2.fromOffset(0, 6),
-				Size = UDim2.new(1, 0, 0, 16),
+				Position = UDim2.fromOffset(0, 5),
+				Size = UDim2.new(1, 0, 0, 15),
 				BackgroundTransparency = 1,
 				Font = Theme.FONT,
 				Text = if props.unlocked then `${cost}` else "LOCKED",
@@ -129,20 +129,20 @@ local function TowerButton(props: ButtonProps)
 					then Theme.MUTED
 					elseif affordable then Theme.CASH
 					else Theme.NEGATIVE,
-				TextSize = 15,
+				TextSize = 14,
 			}),
 			viewport = e("ViewportFrame", {
 				ref = viewportRef,
-				Position = UDim2.fromOffset(16, 24),
-				Size = UDim2.new(1, -32, 0, 58),
+				Position = UDim2.fromOffset(12, 20),
+				Size = UDim2.new(1, -24, 0, 50),
 				BackgroundTransparency = 1,
 				Ambient = Color3.fromRGB(185, 185, 195),
 				LightColor = Color3.fromRGB(255, 250, 240),
 				LightDirection = Vector3.new(-0.4, -1, -0.6),
 			}),
 			category = e("TextLabel", {
-				Position = UDim2.fromOffset(0, 82),
-				Size = UDim2.new(1, 0, 0, 12),
+				Position = UDim2.fromOffset(0, 71),
+				Size = UDim2.new(1, 0, 0, 11),
 				BackgroundTransparency = 1,
 				Font = Theme.FONT_BODY,
 				Text = categoryTag(definition.category),
@@ -150,13 +150,13 @@ local function TowerButton(props: ButtonProps)
 				TextSize = 10,
 			}),
 			name = e("TextLabel", {
-				Position = UDim2.fromOffset(4, 94),
-				Size = UDim2.new(1, -8, 0, 18),
+				Position = UDim2.fromOffset(3, 83),
+				Size = UDim2.new(1, -6, 0, 17),
 				BackgroundTransparency = 1,
 				Font = Theme.FONT,
 				Text = definition.displayName,
 				TextColor3 = Theme.TEXT,
-				TextSize = 13,
+				TextSize = 12,
 				TextTruncate = Enum.TextTruncate.AtEnd,
 			}),
 		},

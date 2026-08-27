@@ -1140,7 +1140,7 @@ local function overlay(onClose: () -> (), size: UDim2, exiting: boolean, childre
 	})
 	-- Content sits at ZIndex 12, the shield at 11: 10 keeps the weave
 	-- behind both, and the corner rounds the whole composite.
-	children.texture = UiArt.texture("Hexmesh", 0.5, 0, 10)
+	children.texture = UiArt.texture("Hexmesh", 0.22, 0, 10)
 	children.corner = e("UICorner", { CornerRadius = Theme.CORNER })
 
 	return e("TextButton", {

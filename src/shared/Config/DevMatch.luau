@@ -17,7 +17,7 @@
 
 local DevMatch = {}
 
-DevMatch.MAP_ID = "Crossroads"
+DevMatch.MAP_ID = "Bastion"
 DevMatch.DIFFICULTY_ID = "Normal"
 
 --- Skip straight past the long first build phase when iterating in Studio.

@@ -11,19 +11,19 @@ local Types = require(script.Parent.Parent.Types)
 
 local Bastion = require(script.Parent.Maps.Bastion)
 local Crossroads = require(script.Parent.Maps.Crossroads)
-local Fork = require(script.Parent.Maps.Fork)
-local Gauntlet = require(script.Parent.Maps.Gauntlet)
-local Switchback = require(script.Parent.Maps.Switchback)
 
 local MapRegistry = {}
 
 MapRegistry.DEFAULT_ID = "Crossroads"
 
+--- Two maps, deliberately: one finished map beats five sketched ones, and
+--- these two are the pair that share no shape. Crossroads folds a single
+--- lane into an S past one broad apron; Bastion puts the base in the
+--- CENTRE and closes two lanes on it from opposite edges, so no killzone
+--- covers both fronts. Fork, Gauntlet and Switchback were variations on
+--- the first idea and were cut rather than finished.
 MapRegistry.MAPS = {
 	Crossroads = Crossroads,
-	Switchback = Switchback,
-	Fork = Fork,
-	Gauntlet = Gauntlet,
 	Bastion = Bastion,
 } :: { [string]: Types.MapConfig }
 

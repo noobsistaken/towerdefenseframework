@@ -26,7 +26,17 @@ HudArt.FRAME = RosterArt.FRAME
 HudArt.FRAME_SLICE = RosterArt.FRAME_SLICE
 
 --- The compact chip behind small HUD panels (health, wave, cash, wallet).
-HudArt.PLATE = "rbxassetid://136830143652126"
+---
+--- DELIBERATELY EMPTY. The generated plate is a 1024x613 bar whose 9-slice
+--- borders are 280px on each side - more than twice the width of the 220px
+--- chip they had to fit. Roblox crushes them to fit, and what survives is
+--- a thick grey bevel wrapped around a sliver of the actual steel: at chip
+--- size the art read as a grey band rather than a plate, which is what
+--- Alexei kept pointing at. The empty id takes the tolerance path every
+--- art slot in this file already has, so the chips render as the flat
+--- themed panel instead - the ornate frame stays where it has room to be
+--- ornate, on the big panels.
+HudArt.PLATE = ""
 HudArt.PLATE_SLICE = Rect.new(280, 240, 744, 400)
 
 --- The CTA bar. The roster's row plate again - a button and a roster row

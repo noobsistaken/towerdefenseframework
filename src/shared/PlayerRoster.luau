@@ -213,7 +213,7 @@ function PlayerRoster.Panel(props: Props)
 			BackgroundTransparency = 1,
 			Image = texture,
 			ScaleType = Enum.ScaleType.Crop,
-			ImageTransparency = 0.4,
+			ImageTransparency = 0.18,
 		})
 	end
 

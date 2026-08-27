@@ -134,6 +134,19 @@ local NO_OP: () -> () = function() end
 --- purpose: this is a confirmation the click landed, not an entrance.
 local PANEL_RISE = 14
 
+--- Pixels of clearance kept above the screen bottom, so the panel stands
+--- clear of the shop bar (BUTTON_HEIGHT 106 + 16 padding + its 16px
+--- margin) at every viewport width.
+---
+--- The panel is BOTTOM-anchored, and that is load-bearing rather than
+--- decorative: the upgrade preview mounts ABOVE the main panel inside an
+--- AutomaticSize shell, so with a centred anchor the shell grew in both
+--- directions and slid the UPGRADE button out from under the cursor -
+--- MouseLeave, unmount, shrink, MouseEnter, forever. Anchoring the bottom
+--- pins the main panel's edge, so the preview can only grow upward and
+--- the hover target never moves.
+local SHOP_CLEARANCE = 154
+
 --- Tracks one tower's attributes, re-reading whenever any of them changes and
 --- clearing the selection if the tower is sold out from under the panel.
 local function useTowerInfo(towerId: number?): TowerInfo?
@@ -251,6 +264,15 @@ end
 --- clicking through several towers never feels gated.
 local RANGE_DOME_SECONDS = 0.5
 
+--- Thickness of the floor disc. Thin enough to read as a marking on the
+--- ground rather than a slab, thick enough not to shimmer at distance.
+local DISC_THICKNESS = 0.2
+
+--- Segments in the boundary ring, and how thick each one is. 32 is where
+--- the circle stops looking like a polygon at the widest tower range.
+local RING_SEGMENTS = 32
+local RING_THICKNESS = 0.5
+
 --- Draws a half-sphere DOME showing the selected tower's range.
 ---
 --- A dome rather than the old flat disc, deliberately: range checks are
@@ -346,6 +368,71 @@ local function useRangeDisc(towerId: number?, range: number?, splashRadius: numb
 		local dome = ball(0.5, Theme.ACCENT, 0.92)
 		dome.CFrame = CFrame.new(part.Position.X, base, part.Position.Z)
 
+		-- Roblox back-face culls, so the Ball above vanishes the instant the
+		-- camera is INSIDE it - which, for a range dome, is most of the
+		-- time: the player usually stands well within their own tower's
+		-- radius, and the dome they asked to see disappears as they walk in.
+		--
+		-- MEASURED, not assumed: a second shell carrying a SpecialMesh with
+		-- a NEGATIVE scale does NOT fix it. Roblox takes the magnitude of
+		-- mesh scale, so the winding is never flipped - that shell rendered
+		-- identically to the first from OUTSIDE (194 studs away, bright
+		-- green, unmistakable) and remained invisible from within. There is
+		-- no two-sided flag on a Part and no inverted-sphere primitive.
+		--
+		-- So the inside view is carried by a FLOOR DISC instead: a flat
+		-- cylinder of the same radius lying on the tower's base plane. Its
+		-- top face points up, so it is visible from any camera above the
+		-- ground - inside the dome or outside it - and it states the one
+		-- number that matters, the reach on the ground. The dome keeps
+		-- showing the air coverage from outside; the two grow together, so
+		-- they can never disagree about where the range ends.
+		local disc = Instance.new("Part")
+		disc.Shape = Enum.PartType.Cylinder
+		disc.Size = Vector3.new(DISC_THICKNESS, 0.5, 0.5)
+		disc.Anchored = true
+		disc.CanCollide = false
+		disc.CanQuery = false
+		disc.CanTouch = false
+		disc.CastShadow = false
+		disc.Transparency = 0.93
+		disc.Material = Enum.Material.Neon
+		disc.Color = Theme.ACCENT
+		-- A Cylinder's axis runs along X, so a quarter turn about Z stands
+		-- it up as a horizontal plate. Lifted a hair off the base so it
+		-- cannot z-fight the pad it lies on.
+		disc.CFrame = CFrame.new(part.Position.X, base + 0.08, part.Position.Z) * CFrame.Angles(0, 0, math.rad(90))
+		disc.Parent = container
+
+		-- The boundary itself, as a ring of tangent segments. Blocks, not a
+		-- shell: a box shows a face in every direction, so the ring reads
+		-- from inside the dome, from outside it, and from directly above.
+		-- The fill alone was tried first and floods the screen at this
+		-- radius; the ring is the part that actually answers "how far".
+		local centre = Vector3.new(part.Position.X, base + 0.08, part.Position.Z)
+		local chord = 2 * range * math.sin(math.pi / RING_SEGMENTS)
+		local ringParts: { Part } = {}
+
+		for index = 1, RING_SEGMENTS do
+			local angle = (index / RING_SEGMENTS) * math.pi * 2
+			local at = centre + Vector3.new(math.cos(angle) * range, 0, math.sin(angle) * range)
+			local segment = Instance.new("Part")
+			segment.Size = Vector3.new(chord, RING_THICKNESS, RING_THICKNESS)
+			-- lookAt points -Z at the centre, which leaves the part's X axis
+			-- lying along the tangent - exactly how a segment must sit.
+			segment.CFrame = CFrame.lookAt(at, centre)
+			segment.Anchored = true
+			segment.CanCollide = false
+			segment.CanQuery = false
+			segment.CanTouch = false
+			segment.CastShadow = false
+			segment.Material = Enum.Material.Neon
+			segment.Color = Theme.ACCENT
+			segment.Transparency = 1
+			segment.Parent = container
+			table.insert(ringParts, segment)
+		end
+
 		local tweens: { Tween } = {}
 
 		local function grow(target: Part, diameter: number)
@@ -359,6 +446,27 @@ local function useRangeDisc(towerId: number?, range: number?, splashRadius: numb
 		end
 
 		grow(dome, range * 2)
+
+		local discTween = TweenService:Create(
+			disc,
+			TweenInfo.new(RANGE_DOME_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Size = Vector3.new(DISC_THICKNESS, range * 2, range * 2) }
+		)
+		table.insert(tweens, discTween)
+		discTween:Play()
+
+		-- The ring arrives by fading rather than growing: 32 segments each
+		-- sliding outward is 32 tweens of churn for an effect the dome's
+		-- own expansion already delivers.
+		for _, segment in ringParts do
+			local fade = TweenService:Create(
+				segment,
+				TweenInfo.new(RANGE_DOME_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Transparency = 0.25 }
+			)
+			table.insert(tweens, fade)
+			fade:Play()
+		end
 
 		-- The ATTACK TYPE. Single-target towers say it with silence; splash
 		-- towers show WHERE their shells land and HOW they get there (a
@@ -583,11 +691,11 @@ local function useSelectionEntrance(towerId: number?): { current: CanvasGroup? }
 		-- matters on a re-selection, where the shell is still sitting at its
 		-- resting values from the previous tower.
 		shell.GroupTransparency = 1
-		shell.Position = UDim2.new(1, -16, 0.5, PANEL_RISE)
+		shell.Position = UDim2.new(1, -16, 1, -SHOP_CLEARANCE + PANEL_RISE)
 
 		tween.current = Motion.retarget(nil, shell, Theme.MOTION_REVEAL, {
 			GroupTransparency = 0,
-			Position = UDim2.new(1, -16, 0.5, 0),
+			Position = UDim2.new(1, -16, 1, -SHOP_CLEARANCE),
 		})
 
 		return function()
@@ -895,14 +1003,10 @@ local function TowerInspector()
 	-- Transparent shell so the two panels stack with a real gap rather than
 	-- reading as one box with a line through it. AutomaticSize means neither
 	-- carries a hand-counted pixel height that goes stale when a row is added.
-	-- Middle-right, mirroring the base/cash stack on the middle-left. At
-	-- the old bottom-right slot the widened panel collided with the wider
-	-- shop bar on 1366- and 1280-wide viewports, with unspecified click
-	-- priority in the contested strip.
 	return e("CanvasGroup", {
 		ref = shellRef,
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -16, 0.5, 0),
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, -16, 1, -SHOP_CLEARANCE),
 		Size = UDim2.fromOffset(280, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,

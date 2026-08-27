@@ -51,6 +51,13 @@ local function surface(art: string, slice: Rect, props: SurfaceProps, sliceScale
 
 	local children: { [string]: any } = {
 		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		-- A hairline edge, so the flat panel still reads as a raised chip
+		-- against a bright map instead of a floating rectangle of colour.
+		edge = e("UIStroke", {
+			Color = Theme.RAISED,
+			Thickness = 1,
+			Transparency = 0.35,
+		}),
 	}
 
 	if props.children ~= nil then
@@ -95,7 +102,7 @@ function UiArt.texture(name: string, transparency: number?, inset: number?, zind
 		BackgroundTransparency = 1,
 		Image = id,
 		ScaleType = Enum.ScaleType.Crop,
-		ImageTransparency = transparency or 0.45,
+		ImageTransparency = transparency or 0.18,
 		ZIndex = zindex or 0,
 	})
 end
@@ -128,7 +135,7 @@ function UiArt.frameUnderlay(textureName: string?)
 		SliceScale = 0.18,
 		ZIndex = 0,
 	}, {
-		texture = if textureName ~= nil then UiArt.texture(textureName, 0.45, 14) else nil,
+		texture = if textureName ~= nil then UiArt.texture(textureName, 0.18, 14) else nil,
 	})
 end
 

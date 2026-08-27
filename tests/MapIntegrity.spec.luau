@@ -19,8 +19,8 @@ local expect = JestGlobals.expect
 local it = JestGlobals.it
 
 describe("MapRegistry", function()
-	it("holds five maps and a real default", function()
-		expect(#MapRegistry.IDS).toBe(5)
+	it("holds both maps and a real default", function()
+		expect(#MapRegistry.IDS).toBe(2)
 		expect(MapRegistry.find(MapRegistry.DEFAULT_ID)).never.toBeNil()
 	end)
 

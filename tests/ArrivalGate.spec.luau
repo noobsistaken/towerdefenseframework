@@ -31,17 +31,17 @@ local MALFORMED: { any } = {
 	false,
 	0,
 	"",
-	"mapId=Fork",
+	"mapId=Bastion",
 	{},
 	{ mapId = 42 },
 	{ mapId = {} },
 	{ mapId = false },
 	{ difficultyId = 42 },
-	{ mapId = "Fork", difficultyId = 42 },
+	{ mapId = "Bastion", difficultyId = 42 },
 	{ mapId = "", difficultyId = "" },
 	{ mapId = "NoSuchMap", difficultyId = "NoSuchDifficulty" },
 	{ mapId = "crossroads" },
-	{ nested = { mapId = "Fork" } },
+	{ nested = { mapId = "Bastion" } },
 }
 
 describe("ArrivalGate.parse: the security property", function()
@@ -77,7 +77,7 @@ describe("ArrivalGate.parse: defaults", function()
 
 	it("falls back when the payload is not a table", function()
 		-- Indexing a string would raise, which is the failure this guards.
-		expect(ArrivalGate.parse("Fork").mapId).toBe(MapRegistry.DEFAULT_ID)
+		expect(ArrivalGate.parse("Bastion").mapId).toBe(MapRegistry.DEFAULT_ID)
 		expect(ArrivalGate.parse(7).mapId).toBe(MapRegistry.DEFAULT_ID)
 	end)
 
@@ -112,17 +112,17 @@ describe("ArrivalGate.parse: legitimate payloads", function()
 	end)
 
 	it("takes both fields together", function()
-		local result = ArrivalGate.parse({ mapId = "Fork", difficultyId = "Nightmare" })
+		local result = ArrivalGate.parse({ mapId = "Bastion", difficultyId = "Nightmare" })
 
-		expect(result.mapId).toBe("Fork")
+		expect(result.mapId).toBe("Bastion")
 		expect(result.difficultyId).toBe("Nightmare")
 	end)
 
 	it("keeps a good field when the other is junk", function()
 		-- Partial corruption should not throw away the half that was fine.
-		local result = ArrivalGate.parse({ mapId = "Fork", difficultyId = 999 })
+		local result = ArrivalGate.parse({ mapId = "Bastion", difficultyId = 999 })
 
-		expect(result.mapId).toBe("Fork")
+		expect(result.mapId).toBe("Bastion")
 		expect(result.difficultyId).toBe(Difficulty.DEFAULT_ID)
 	end)
 end)
