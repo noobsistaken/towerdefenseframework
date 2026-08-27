@@ -70,8 +70,52 @@ local function surface(art: string, slice: Rect, props: SurfaceProps, sliceScale
 end
 
 --- A compact HUD chip (health, wave, cash, wallet).
+---
+--- The brushed weave runs the WHOLE bar rather than sitting inside a
+--- border. That is the lesson from the sliced plate this replaced: its
+--- 9-slice borders were 280px a side, and crushed into a 62px chip all
+--- that survived was a thick grey bevel wrapped around a sliver of metal.
+--- Stretched edge to edge there is no border left to crush - just metal
+--- under the numbers - and the rounded corner comes from clipping rather
+--- than from the art.
 function UiArt.Plate(props: SurfaceProps)
-	return surface(HudArt.PLATE, HudArt.PLATE_SLICE, props)
+	if HudArt.PLATE ~= "" then
+		return surface(HudArt.PLATE, HudArt.PLATE_SLICE, props)
+	end
+
+	local merged: { [string]: any } = table.clone(props.frame)
+
+	if merged.BackgroundColor3 == nil then
+		merged.BackgroundColor3 = Theme.PANEL
+	end
+
+	if merged.BackgroundTransparency == nil then
+		merged.BackgroundTransparency = Theme.PANEL_TRANSPARENCY
+	end
+
+	merged.BorderSizePixel = 0
+	-- The weave is a rectangle and the chip is rounded; clipping is what
+	-- keeps the corners once the texture reaches the edges.
+	merged.ClipsDescendants = true
+
+	local children: { [string]: any } = {
+		corner = e("UICorner", { CornerRadius = Theme.CORNER }),
+		edge = e("UIStroke", {
+			Color = Theme.RAISED,
+			Thickness = 1,
+			Transparency = 0.35,
+		}),
+		-- ZIndex 0, under everything: GuiObjects default to 1.
+		texture = UiArt.texture("Brushed", 0.25, 0, 0),
+	}
+
+	if props.children ~= nil then
+		for key, value in props.children do
+			children[key] = value
+		end
+	end
+
+	return e("Frame", merged, children)
 end
 
 --- The big riveted frame as the panel HOST rather than an underlay - for
