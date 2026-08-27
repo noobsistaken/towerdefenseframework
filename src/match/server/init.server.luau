@@ -375,6 +375,44 @@ end)
 --- overflows the u32 wire fields a few thousand matches later.
 local MAX_ADMIN_GRANT = 100000
 
+-- The console's sandbox verbs. Same gate as AdminGrant above, restated
+-- rather than shared: this is the trust boundary, and a reader should not
+-- have to trace a helper to see that it is checked.
+Net.AdminAction.SetCallback(function(
+	player: Player,
+	value: {
+		action: "SpawnEnemy" | "KillEnemies" | "SkipWave" | "HealBase" | "UnlockAll",
+		id: string,
+		amount: number,
+	}
+): { ok: boolean, message: string }
+	if not Admins.isAdmin(player.UserId, RunService:IsStudio()) then
+		return { ok = false, message = "Not an admin" }
+	end
+
+	if value.action == "SpawnEnemy" then
+		local ok, message = match:adminSpawn(value.id, math.clamp(value.amount, 1, 50))
+
+		return { ok = ok, message = message }
+	elseif value.action == "KillEnemies" then
+		local ok, message = match:adminKillEnemies()
+
+		return { ok = ok, message = message }
+	elseif value.action == "HealBase" then
+		local ok, message = match:adminHealBase()
+
+		return { ok = ok, message = message }
+	elseif value.action == "SkipWave" then
+		local ok, message = match:adminSkipWave()
+
+		return { ok = ok, message = message }
+	end
+
+	-- UnlockAll is the lobby's verb; the match place has no collection to
+	-- write. Answering plainly beats a silent no-op.
+	return { ok = false, message = "That action belongs in the lobby" }
+end)
+
 Net.AdminGrant.SetCallback(function(player: Player, value: { currency: "Cash" | "Coins" | "Tokens", amount: number })
 	-- The allowlist is THE check. The console not rendering for
 	-- non-admins is cosmetic; this line is the gate.

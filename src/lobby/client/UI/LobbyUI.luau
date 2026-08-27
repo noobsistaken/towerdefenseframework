@@ -1768,6 +1768,27 @@ local function LobbyUI()
 					atoms.rerollTokens(balance)
 				end
 			end,
+			-- UnlockAll rewrites the collection server-side, and the reply
+			-- carries only a message. Re-reading the profile is how the
+			-- shop, the loadout editor and the reroll picker all learn about
+			-- it at once, rather than three atoms being patched by hand from
+			-- a count.
+			onActed = function(action: AdminConsole.Action)
+				if action ~= "UnlockAll" then
+					return
+				end
+
+				task.spawn(function()
+					local ok, profile = pcall(function()
+						return Net.GetLobbyProfile.Call({})
+					end)
+
+					if ok and profile.loaded then
+						atoms.unlockedTowers(profile.unlockedTowers)
+						atoms.loadout(profile.loadout)
+					end
+				end)
+			end,
 		}),
 	})
 end

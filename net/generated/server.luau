@@ -253,6 +253,9 @@ if not RunService:IsRunning() then
 		AdminGrant = table.freeze({
 			SetCallback = noop
 		}),
+		AdminAction = table.freeze({
+			SetCallback = noop
+		}),
 		AbilityUsed = table.freeze({
 			Fire = noop,
 			FireAll = noop,
@@ -305,11 +308,11 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	player_map[player] = nil
 end)
-export type PollKind = ("Map" | "Difficulty")
-export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
-export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
 export type PlacementRejectReason = ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState")
 export type LobbyState = ("Gathering" | "Launching")
+export type PollKind = ("Map" | "Difficulty")
+export type MatchState = ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat")
+export type TargetingMode = ("First" | "Last" | "Strongest" | "Closest")
 
 local function SendEvents()
 	for player, outgoing in player_map do
@@ -329,7 +332,7 @@ end
 
 RunService.Heartbeat:Connect(SendEvents)
 
-local reliable_events = table.create(14)
+local reliable_events = table.create(15)
 reliable_events[1] = {}
 reliable_events[3] = {}
 reliable_events[2] = {}
@@ -763,6 +766,55 @@ reliable.OnServerEvent:Connect(function(player, buff, inst)
 					player_map[player_2] = save()
 				end, player, call_id, value)
 			end
+		elseif id == 14 then -- AdminAction
+			local call_id = buffer.readu8(buff, read(1))
+			local value
+			local bool_10 = buffer.readu8(incoming_buff, read(1))
+			value = {  }
+			if bit32.btest(bool_10, 0b0000000000000001) then
+				value["action"] = "SpawnEnemy"
+			elseif bit32.btest(bool_10, 0b0000000000000010) then
+				value["action"] = "KillEnemies"
+			elseif bit32.btest(bool_10, 0b0000000000000100) then
+				value["action"] = "SkipWave"
+			elseif bit32.btest(bool_10, 0b0000000000001000) then
+				value["action"] = "HealBase"
+			elseif bit32.btest(bool_10, 0b0000000000010000) then
+				value["action"] = "UnlockAll"
+			end
+			local len_24 = buffer.readu8(incoming_buff, read(1))
+			assert(len_24 >= 0, "value is less than 0!")
+			assert(len_24 <= 128, "value is more than 128!")
+			value["id"] = buffer.readstring(incoming_buff, read(len_24), len_24)
+			assert(utf8.len(value["id"]) ~= nil, "value is not valid utf-8")
+			value["amount"] = buffer.readu8(incoming_buff, read(1))
+			assert(value["amount"] >= 0, "value is less than 0!")
+			assert(value["amount"] <= 50, "value is more than 50!")
+			if reliable_events[14] then
+				task.spawn(function(player_2, call_id_2, value_1)
+					local ret_1 = reliable_events[14](player_2, value_1)
+					load_player(player_2)
+					alloc(1)
+					buffer.writeu8(outgoing_buff, outgoing_apos, 16)
+					alloc(1)
+					buffer.writeu8(outgoing_buff, outgoing_apos, call_id_2)
+					local bool_11 = 0
+					local bool_11_pos_1 = alloc(1)
+					if ret_1["ok"] then
+						bool_11 = bit32.bor(bool_11, 0b0000000000000001)
+					end
+					local len_25 = #ret_1["message"]
+					assert(len_25 >= 0, "value is less than 0!")
+					assert(len_25 <= 384, "value is more than 384!")
+					assert(utf8.len(ret_1["message"]) ~= nil, "value is not valid utf-8")
+					alloc(2)
+					buffer.writeu16(outgoing_buff, outgoing_apos, len_25)
+					alloc(len_25)
+					buffer.writestring(outgoing_buff, outgoing_apos, ret_1["message"], len_25)
+					buffer.writeu8(outgoing_buff, bool_11_pos_1, bool_11)
+					player_map[player_2] = save()
+				end, player, call_id, value)
+			end
 		else
 			error("Unknown event id")
 		end
@@ -789,54 +841,54 @@ local returns = {
 			load_player(Player)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
-			local len_24 = #Value["mapTallies"]
-			assert(len_24 >= 0, "value is less than 0!")
-			assert(len_24 <= 16, "value is more than 16!")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_24)
-			for i_8 = 1, len_24 do
-				local val_8 = Value["mapTallies"][i_8]
-				local len_25 = #val_8["option"]
-				assert(len_25 <= 96, "value is more than 96!")
-				assert(utf8.len(val_8["option"]) ~= nil, "value is not valid utf-8")
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_25)
-				alloc(len_25)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_8["option"], len_25)
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, val_8["votes"])
-			end
-			local len_26 = #Value["difficultyTallies"]
+			local len_26 = #Value["mapTallies"]
 			assert(len_26 >= 0, "value is less than 0!")
 			assert(len_26 <= 16, "value is more than 16!")
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_26)
-			for i_9 = 1, len_26 do
-				local val_9 = Value["difficultyTallies"][i_9]
-				local len_27 = #val_9["option"]
+			for i_8 = 1, len_26 do
+				local val_8 = Value["mapTallies"][i_8]
+				local len_27 = #val_8["option"]
 				assert(len_27 <= 96, "value is more than 96!")
-				assert(utf8.len(val_9["option"]) ~= nil, "value is not valid utf-8")
+				assert(utf8.len(val_8["option"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, len_27)
 				alloc(len_27)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_9["option"], len_27)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_8["option"], len_27)
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, val_8["votes"])
+			end
+			local len_28 = #Value["difficultyTallies"]
+			assert(len_28 >= 0, "value is less than 0!")
+			assert(len_28 <= 16, "value is more than 16!")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_28)
+			for i_9 = 1, len_28 do
+				local val_9 = Value["difficultyTallies"][i_9]
+				local len_29 = #val_9["option"]
+				assert(len_29 <= 96, "value is more than 96!")
+				assert(utf8.len(val_9["option"]) ~= nil, "value is not valid utf-8")
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_29)
+				alloc(len_29)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_9["option"], len_29)
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, val_9["votes"])
 			end
-			local len_28 = #Value["winningMapId"]
-			assert(len_28 <= 96, "value is more than 96!")
+			local len_30 = #Value["winningMapId"]
+			assert(len_30 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningMapId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_28)
-			alloc(len_28)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_28)
-			local len_29 = #Value["winningDifficultyId"]
-			assert(len_29 <= 96, "value is more than 96!")
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_30)
+			alloc(len_30)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_30)
+			local len_31 = #Value["winningDifficultyId"]
+			assert(len_31 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningDifficultyId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_29)
-			alloc(len_29)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_29)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_31)
+			alloc(len_31)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_31)
 			player_map[Player] = save()
 		end,
 		FireAll = function(Value: ({
@@ -854,54 +906,54 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
-			local len_30 = #Value["mapTallies"]
-			assert(len_30 >= 0, "value is less than 0!")
-			assert(len_30 <= 16, "value is more than 16!")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_30)
-			for i_10 = 1, len_30 do
-				local val_10 = Value["mapTallies"][i_10]
-				local len_31 = #val_10["option"]
-				assert(len_31 <= 96, "value is more than 96!")
-				assert(utf8.len(val_10["option"]) ~= nil, "value is not valid utf-8")
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_31)
-				alloc(len_31)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_10["option"], len_31)
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, val_10["votes"])
-			end
-			local len_32 = #Value["difficultyTallies"]
+			local len_32 = #Value["mapTallies"]
 			assert(len_32 >= 0, "value is less than 0!")
 			assert(len_32 <= 16, "value is more than 16!")
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_32)
-			for i_11 = 1, len_32 do
-				local val_11 = Value["difficultyTallies"][i_11]
-				local len_33 = #val_11["option"]
+			for i_10 = 1, len_32 do
+				local val_10 = Value["mapTallies"][i_10]
+				local len_33 = #val_10["option"]
 				assert(len_33 <= 96, "value is more than 96!")
-				assert(utf8.len(val_11["option"]) ~= nil, "value is not valid utf-8")
+				assert(utf8.len(val_10["option"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, len_33)
 				alloc(len_33)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_11["option"], len_33)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_10["option"], len_33)
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, val_10["votes"])
+			end
+			local len_34 = #Value["difficultyTallies"]
+			assert(len_34 >= 0, "value is less than 0!")
+			assert(len_34 <= 16, "value is more than 16!")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_34)
+			for i_11 = 1, len_34 do
+				local val_11 = Value["difficultyTallies"][i_11]
+				local len_35 = #val_11["option"]
+				assert(len_35 <= 96, "value is more than 96!")
+				assert(utf8.len(val_11["option"]) ~= nil, "value is not valid utf-8")
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_35)
+				alloc(len_35)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_11["option"], len_35)
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, val_11["votes"])
 			end
-			local len_34 = #Value["winningMapId"]
-			assert(len_34 <= 96, "value is more than 96!")
+			local len_36 = #Value["winningMapId"]
+			assert(len_36 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningMapId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_34)
-			alloc(len_34)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_34)
-			local len_35 = #Value["winningDifficultyId"]
-			assert(len_35 <= 96, "value is more than 96!")
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_36)
+			alloc(len_36)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_36)
+			local len_37 = #Value["winningDifficultyId"]
+			assert(len_37 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningDifficultyId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_35)
-			alloc(len_35)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_35)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_37)
+			alloc(len_37)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_37)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in Players:GetPlayers() do
 				load_player(player)
@@ -926,54 +978,54 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
-			local len_36 = #Value["mapTallies"]
-			assert(len_36 >= 0, "value is less than 0!")
-			assert(len_36 <= 16, "value is more than 16!")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_36)
-			for i_12 = 1, len_36 do
-				local val_12 = Value["mapTallies"][i_12]
-				local len_37 = #val_12["option"]
-				assert(len_37 <= 96, "value is more than 96!")
-				assert(utf8.len(val_12["option"]) ~= nil, "value is not valid utf-8")
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_37)
-				alloc(len_37)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_12["option"], len_37)
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, val_12["votes"])
-			end
-			local len_38 = #Value["difficultyTallies"]
+			local len_38 = #Value["mapTallies"]
 			assert(len_38 >= 0, "value is less than 0!")
 			assert(len_38 <= 16, "value is more than 16!")
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_38)
-			for i_13 = 1, len_38 do
-				local val_13 = Value["difficultyTallies"][i_13]
-				local len_39 = #val_13["option"]
+			for i_12 = 1, len_38 do
+				local val_12 = Value["mapTallies"][i_12]
+				local len_39 = #val_12["option"]
 				assert(len_39 <= 96, "value is more than 96!")
-				assert(utf8.len(val_13["option"]) ~= nil, "value is not valid utf-8")
+				assert(utf8.len(val_12["option"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, len_39)
 				alloc(len_39)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_13["option"], len_39)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_12["option"], len_39)
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, val_12["votes"])
+			end
+			local len_40 = #Value["difficultyTallies"]
+			assert(len_40 >= 0, "value is less than 0!")
+			assert(len_40 <= 16, "value is more than 16!")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_40)
+			for i_13 = 1, len_40 do
+				local val_13 = Value["difficultyTallies"][i_13]
+				local len_41 = #val_13["option"]
+				assert(len_41 <= 96, "value is more than 96!")
+				assert(utf8.len(val_13["option"]) ~= nil, "value is not valid utf-8")
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_41)
+				alloc(len_41)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_13["option"], len_41)
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, val_13["votes"])
 			end
-			local len_40 = #Value["winningMapId"]
-			assert(len_40 <= 96, "value is more than 96!")
+			local len_42 = #Value["winningMapId"]
+			assert(len_42 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningMapId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_40)
-			alloc(len_40)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_40)
-			local len_41 = #Value["winningDifficultyId"]
-			assert(len_41 <= 96, "value is more than 96!")
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_42)
+			alloc(len_42)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_42)
+			local len_43 = #Value["winningDifficultyId"]
+			assert(len_43 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningDifficultyId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_41)
-			alloc(len_41)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_41)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_43)
+			alloc(len_43)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_43)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in Players:GetPlayers() do
 				if player ~= Except then
@@ -1000,54 +1052,54 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
-			local len_42 = #Value["mapTallies"]
-			assert(len_42 >= 0, "value is less than 0!")
-			assert(len_42 <= 16, "value is more than 16!")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_42)
-			for i_14 = 1, len_42 do
-				local val_14 = Value["mapTallies"][i_14]
-				local len_43 = #val_14["option"]
-				assert(len_43 <= 96, "value is more than 96!")
-				assert(utf8.len(val_14["option"]) ~= nil, "value is not valid utf-8")
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_43)
-				alloc(len_43)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_14["option"], len_43)
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, val_14["votes"])
-			end
-			local len_44 = #Value["difficultyTallies"]
+			local len_44 = #Value["mapTallies"]
 			assert(len_44 >= 0, "value is less than 0!")
 			assert(len_44 <= 16, "value is more than 16!")
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_44)
-			for i_15 = 1, len_44 do
-				local val_15 = Value["difficultyTallies"][i_15]
-				local len_45 = #val_15["option"]
+			for i_14 = 1, len_44 do
+				local val_14 = Value["mapTallies"][i_14]
+				local len_45 = #val_14["option"]
 				assert(len_45 <= 96, "value is more than 96!")
-				assert(utf8.len(val_15["option"]) ~= nil, "value is not valid utf-8")
+				assert(utf8.len(val_14["option"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, len_45)
 				alloc(len_45)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_15["option"], len_45)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_14["option"], len_45)
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, val_14["votes"])
+			end
+			local len_46 = #Value["difficultyTallies"]
+			assert(len_46 >= 0, "value is less than 0!")
+			assert(len_46 <= 16, "value is more than 16!")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_46)
+			for i_15 = 1, len_46 do
+				local val_15 = Value["difficultyTallies"][i_15]
+				local len_47 = #val_15["option"]
+				assert(len_47 <= 96, "value is more than 96!")
+				assert(utf8.len(val_15["option"]) ~= nil, "value is not valid utf-8")
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_47)
+				alloc(len_47)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_15["option"], len_47)
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, val_15["votes"])
 			end
-			local len_46 = #Value["winningMapId"]
-			assert(len_46 <= 96, "value is more than 96!")
+			local len_48 = #Value["winningMapId"]
+			assert(len_48 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningMapId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_46)
-			alloc(len_46)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_46)
-			local len_47 = #Value["winningDifficultyId"]
-			assert(len_47 <= 96, "value is more than 96!")
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_48)
+			alloc(len_48)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_48)
+			local len_49 = #Value["winningDifficultyId"]
+			assert(len_49 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningDifficultyId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_47)
-			alloc(len_47)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_47)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_49)
+			alloc(len_49)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_49)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in List do
 				load_player(player)
@@ -1072,54 +1124,54 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 7)
-			local len_48 = #Value["mapTallies"]
-			assert(len_48 >= 0, "value is less than 0!")
-			assert(len_48 <= 16, "value is more than 16!")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_48)
-			for i_16 = 1, len_48 do
-				local val_16 = Value["mapTallies"][i_16]
-				local len_49 = #val_16["option"]
-				assert(len_49 <= 96, "value is more than 96!")
-				assert(utf8.len(val_16["option"]) ~= nil, "value is not valid utf-8")
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_49)
-				alloc(len_49)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_16["option"], len_49)
-				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, val_16["votes"])
-			end
-			local len_50 = #Value["difficultyTallies"]
+			local len_50 = #Value["mapTallies"]
 			assert(len_50 >= 0, "value is less than 0!")
 			assert(len_50 <= 16, "value is more than 16!")
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, len_50)
-			for i_17 = 1, len_50 do
-				local val_17 = Value["difficultyTallies"][i_17]
-				local len_51 = #val_17["option"]
+			for i_16 = 1, len_50 do
+				local val_16 = Value["mapTallies"][i_16]
+				local len_51 = #val_16["option"]
 				assert(len_51 <= 96, "value is more than 96!")
-				assert(utf8.len(val_17["option"]) ~= nil, "value is not valid utf-8")
+				assert(utf8.len(val_16["option"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, len_51)
 				alloc(len_51)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_17["option"], len_51)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_16["option"], len_51)
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, val_16["votes"])
+			end
+			local len_52 = #Value["difficultyTallies"]
+			assert(len_52 >= 0, "value is less than 0!")
+			assert(len_52 <= 16, "value is more than 16!")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_52)
+			for i_17 = 1, len_52 do
+				local val_17 = Value["difficultyTallies"][i_17]
+				local len_53 = #val_17["option"]
+				assert(len_53 <= 96, "value is more than 96!")
+				assert(utf8.len(val_17["option"]) ~= nil, "value is not valid utf-8")
+				alloc(1)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_53)
+				alloc(len_53)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_17["option"], len_53)
 				alloc(1)
 				buffer.writeu8(outgoing_buff, outgoing_apos, val_17["votes"])
 			end
-			local len_52 = #Value["winningMapId"]
-			assert(len_52 <= 96, "value is more than 96!")
+			local len_54 = #Value["winningMapId"]
+			assert(len_54 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningMapId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_52)
-			alloc(len_52)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_52)
-			local len_53 = #Value["winningDifficultyId"]
-			assert(len_53 <= 96, "value is more than 96!")
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_54)
+			alloc(len_54)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningMapId"], len_54)
+			local len_55 = #Value["winningDifficultyId"]
+			assert(len_55 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["winningDifficultyId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_53)
-			alloc(len_53)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_53)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_55)
+			alloc(len_55)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["winningDifficultyId"], len_55)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
 				load_player(player)
@@ -1249,22 +1301,22 @@ local returns = {
 			load_player(Player)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
-			local len_54 = #Value["entries"]
-			assert(len_54 >= 0, "value is less than 0!")
-			assert(len_54 <= 16, "value is more than 16!")
+			local len_56 = #Value["entries"]
+			assert(len_56 >= 0, "value is less than 0!")
+			assert(len_56 <= 16, "value is more than 16!")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_54)
-			for i_18 = 1, len_54 do
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_56)
+			for i_18 = 1, len_56 do
 				local val_18 = Value["entries"][i_18]
 				alloc(8)
 				buffer.writef64(outgoing_buff, outgoing_apos, val_18["userId"])
-				local len_55 = #val_18["name"]
-				assert(len_55 <= 128, "value is more than 128!")
+				local len_57 = #val_18["name"]
+				assert(len_57 <= 128, "value is more than 128!")
 				assert(utf8.len(val_18["name"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_55)
-				alloc(len_55)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_18["name"], len_55)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_57)
+				alloc(len_57)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_18["name"], len_57)
 				alloc(2)
 				buffer.writeu16(outgoing_buff, outgoing_apos, val_18["level"])
 			end
@@ -1280,22 +1332,22 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
-			local len_56 = #Value["entries"]
-			assert(len_56 >= 0, "value is less than 0!")
-			assert(len_56 <= 16, "value is more than 16!")
+			local len_58 = #Value["entries"]
+			assert(len_58 >= 0, "value is less than 0!")
+			assert(len_58 <= 16, "value is more than 16!")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_56)
-			for i_19 = 1, len_56 do
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_58)
+			for i_19 = 1, len_58 do
 				local val_19 = Value["entries"][i_19]
 				alloc(8)
 				buffer.writef64(outgoing_buff, outgoing_apos, val_19["userId"])
-				local len_57 = #val_19["name"]
-				assert(len_57 <= 128, "value is more than 128!")
+				local len_59 = #val_19["name"]
+				assert(len_59 <= 128, "value is more than 128!")
 				assert(utf8.len(val_19["name"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_57)
-				alloc(len_57)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_19["name"], len_57)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_59)
+				alloc(len_59)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_19["name"], len_59)
 				alloc(2)
 				buffer.writeu16(outgoing_buff, outgoing_apos, val_19["level"])
 			end
@@ -1318,22 +1370,22 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
-			local len_58 = #Value["entries"]
-			assert(len_58 >= 0, "value is less than 0!")
-			assert(len_58 <= 16, "value is more than 16!")
+			local len_60 = #Value["entries"]
+			assert(len_60 >= 0, "value is less than 0!")
+			assert(len_60 <= 16, "value is more than 16!")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_58)
-			for i_20 = 1, len_58 do
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_60)
+			for i_20 = 1, len_60 do
 				local val_20 = Value["entries"][i_20]
 				alloc(8)
 				buffer.writef64(outgoing_buff, outgoing_apos, val_20["userId"])
-				local len_59 = #val_20["name"]
-				assert(len_59 <= 128, "value is more than 128!")
+				local len_61 = #val_20["name"]
+				assert(len_61 <= 128, "value is more than 128!")
 				assert(utf8.len(val_20["name"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_59)
-				alloc(len_59)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_20["name"], len_59)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_61)
+				alloc(len_61)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_20["name"], len_61)
 				alloc(2)
 				buffer.writeu16(outgoing_buff, outgoing_apos, val_20["level"])
 			end
@@ -1358,22 +1410,22 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
-			local len_60 = #Value["entries"]
-			assert(len_60 >= 0, "value is less than 0!")
-			assert(len_60 <= 16, "value is more than 16!")
+			local len_62 = #Value["entries"]
+			assert(len_62 >= 0, "value is less than 0!")
+			assert(len_62 <= 16, "value is more than 16!")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_60)
-			for i_21 = 1, len_60 do
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_62)
+			for i_21 = 1, len_62 do
 				local val_21 = Value["entries"][i_21]
 				alloc(8)
 				buffer.writef64(outgoing_buff, outgoing_apos, val_21["userId"])
-				local len_61 = #val_21["name"]
-				assert(len_61 <= 128, "value is more than 128!")
+				local len_63 = #val_21["name"]
+				assert(len_63 <= 128, "value is more than 128!")
 				assert(utf8.len(val_21["name"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_61)
-				alloc(len_61)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_21["name"], len_61)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_63)
+				alloc(len_63)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_21["name"], len_63)
 				alloc(2)
 				buffer.writeu16(outgoing_buff, outgoing_apos, val_21["level"])
 			end
@@ -1396,22 +1448,22 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 8)
-			local len_62 = #Value["entries"]
-			assert(len_62 >= 0, "value is less than 0!")
-			assert(len_62 <= 16, "value is more than 16!")
+			local len_64 = #Value["entries"]
+			assert(len_64 >= 0, "value is less than 0!")
+			assert(len_64 <= 16, "value is more than 16!")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_62)
-			for i_22 = 1, len_62 do
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_64)
+			for i_22 = 1, len_64 do
 				local val_22 = Value["entries"][i_22]
 				alloc(8)
 				buffer.writef64(outgoing_buff, outgoing_apos, val_22["userId"])
-				local len_63 = #val_22["name"]
-				assert(len_63 <= 128, "value is more than 128!")
+				local len_65 = #val_22["name"]
+				assert(len_65 <= 128, "value is more than 128!")
 				assert(utf8.len(val_22["name"]) ~= nil, "value is not valid utf-8")
 				alloc(1)
-				buffer.writeu8(outgoing_buff, outgoing_apos, len_63)
-				alloc(len_63)
-				buffer.writestring(outgoing_buff, outgoing_apos, val_22["name"], len_63)
+				buffer.writeu8(outgoing_buff, outgoing_apos, len_65)
+				alloc(len_65)
+				buffer.writestring(outgoing_buff, outgoing_apos, val_22["name"], len_65)
 				alloc(2)
 				buffer.writeu16(outgoing_buff, outgoing_apos, val_22["level"])
 			end
@@ -1530,62 +1582,6 @@ local returns = {
 			["position"]: ((vector)?),
 		}))
 			load_empty()
-			local bool_10 = 0
-			local bool_10_pos_1 = alloc(1)
-			local len_64 = #Value["soundKey"]
-			assert(len_64 <= 128, "value is more than 128!")
-			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_64)
-			alloc(len_64)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_64)
-			if Value["position"] ~= nil then
-				bool_10 = bit32.bor(bool_10, 0b0000000000000001)
-				alloc(4)
-				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
-				alloc(4)
-				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
-				alloc(4)
-				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
-			end
-			buffer.writeu8(outgoing_buff, bool_10_pos_1, bool_10)
-			local buff = buffer.create(outgoing_used)
-			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
-			unreliable[2]:FireClient(Player, buff, outgoing_inst)
-		end,
-		FireAll = function(Value: ({
-			["soundKey"]: (string),
-			["position"]: ((vector)?),
-		}))
-			load_empty()
-			local bool_11 = 0
-			local bool_11_pos_1 = alloc(1)
-			local len_65 = #Value["soundKey"]
-			assert(len_65 <= 128, "value is more than 128!")
-			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_65)
-			alloc(len_65)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_65)
-			if Value["position"] ~= nil then
-				bool_11 = bit32.bor(bool_11, 0b0000000000000001)
-				alloc(4)
-				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
-				alloc(4)
-				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
-				alloc(4)
-				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
-			end
-			buffer.writeu8(outgoing_buff, bool_11_pos_1, bool_11)
-			local buff = buffer.create(outgoing_used)
-			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
-			unreliable[2]:FireAllClients(buff, outgoing_inst)
-		end,
-		FireExcept = function(Except: Player, Value: ({
-			["soundKey"]: (string),
-			["position"]: ((vector)?),
-		}))
-			load_empty()
 			local bool_12 = 0
 			local bool_12_pos_1 = alloc(1)
 			local len_66 = #Value["soundKey"]
@@ -1607,13 +1603,9 @@ local returns = {
 			buffer.writeu8(outgoing_buff, bool_12_pos_1, bool_12)
 			local buff = buffer.create(outgoing_used)
 			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
-			for _, player in Players:GetPlayers() do
-				if player ~= Except then
-					unreliable[2]:FireClient(player, buff, outgoing_inst)
-				end
-			end
+			unreliable[2]:FireClient(Player, buff, outgoing_inst)
 		end,
-		FireList = function(List: { [unknown]: Player }, Value: ({
+		FireAll = function(Value: ({
 			["soundKey"]: (string),
 			["position"]: ((vector)?),
 		}))
@@ -1639,11 +1631,9 @@ local returns = {
 			buffer.writeu8(outgoing_buff, bool_13_pos_1, bool_13)
 			local buff = buffer.create(outgoing_used)
 			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
-			for _, player in List do
-				unreliable[2]:FireClient(player, buff, outgoing_inst)
-			end
+			unreliable[2]:FireAllClients(buff, outgoing_inst)
 		end,
-		FireSet = function(Set: { [Player]: any }, Value: ({
+		FireExcept = function(Except: Player, Value: ({
 			["soundKey"]: (string),
 			["position"]: ((vector)?),
 		}))
@@ -1669,6 +1659,68 @@ local returns = {
 			buffer.writeu8(outgoing_buff, bool_14_pos_1, bool_14)
 			local buff = buffer.create(outgoing_used)
 			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
+			for _, player in Players:GetPlayers() do
+				if player ~= Except then
+					unreliable[2]:FireClient(player, buff, outgoing_inst)
+				end
+			end
+		end,
+		FireList = function(List: { [unknown]: Player }, Value: ({
+			["soundKey"]: (string),
+			["position"]: ((vector)?),
+		}))
+			load_empty()
+			local bool_15 = 0
+			local bool_15_pos_1 = alloc(1)
+			local len_69 = #Value["soundKey"]
+			assert(len_69 <= 128, "value is more than 128!")
+			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_69)
+			alloc(len_69)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_69)
+			if Value["position"] ~= nil then
+				bool_15 = bit32.bor(bool_15, 0b0000000000000001)
+				alloc(4)
+				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+				alloc(4)
+				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+				alloc(4)
+				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			end
+			buffer.writeu8(outgoing_buff, bool_15_pos_1, bool_15)
+			local buff = buffer.create(outgoing_used)
+			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
+			for _, player in List do
+				unreliable[2]:FireClient(player, buff, outgoing_inst)
+			end
+		end,
+		FireSet = function(Set: { [Player]: any }, Value: ({
+			["soundKey"]: (string),
+			["position"]: ((vector)?),
+		}))
+			load_empty()
+			local bool_16 = 0
+			local bool_16_pos_1 = alloc(1)
+			local len_70 = #Value["soundKey"]
+			assert(len_70 <= 128, "value is more than 128!")
+			assert(utf8.len(Value["soundKey"]) ~= nil, "value is not valid utf-8")
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_70)
+			alloc(len_70)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["soundKey"], len_70)
+			if Value["position"] ~= nil then
+				bool_16 = bit32.bor(bool_16, 0b0000000000000001)
+				alloc(4)
+				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
+				alloc(4)
+				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].y)
+				alloc(4)
+				buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].z)
+			end
+			buffer.writeu8(outgoing_buff, bool_16_pos_1, bool_16)
+			local buff = buffer.create(outgoing_used)
+			buffer.copy(buff, 0, outgoing_buff, 0, outgoing_used)
 			for player in Set do
 				unreliable[2]:FireClient(player, buff, outgoing_inst)
 			end
@@ -1679,85 +1731,6 @@ local returns = {
 			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
 		}))
 			load_player(Player)
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
-			local bool_15 = 0
-			local bool_15_pos_1 = alloc(2)
-			if Value["reason"] == "UnknownTower" then
-				bool_15 = bit32.bor(bool_15, 0b0000000000000001)
-			elseif Value["reason"] == "NotUnlocked" then
-				bool_15 = bit32.bor(bool_15, 0b0000000000000010)
-			elseif Value["reason"] == "CannotAfford" then
-				bool_15 = bit32.bor(bool_15, 0b0000000000000100)
-			elseif Value["reason"] == "OutOfBounds" then
-				bool_15 = bit32.bor(bool_15, 0b0000000000001000)
-			elseif Value["reason"] == "NotBuildable" then
-				bool_15 = bit32.bor(bool_15, 0b0000000000010000)
-			elseif Value["reason"] == "WrongSurface" then
-				bool_15 = bit32.bor(bool_15, 0b0000000000100000)
-			elseif Value["reason"] == "OverlapsTower" then
-				bool_15 = bit32.bor(bool_15, 0b0000000001000000)
-			elseif Value["reason"] == "BlocksPath" then
-				bool_15 = bit32.bor(bool_15, 0b0000000010000000)
-			elseif Value["reason"] == "NotInLoadout" then
-				bool_15 = bit32.bor(bool_15, 0b0000000100000000)
-			elseif Value["reason"] == "TowerCapReached" then
-				bool_15 = bit32.bor(bool_15, 0b0000001000000000)
-			elseif Value["reason"] == "WrongMatchState" then
-				bool_15 = bit32.bor(bool_15, 0b0000010000000000)
-			else
-				error("Invalid enumerator")
-			end
-			buffer.writeu16(outgoing_buff, bool_15_pos_1, bool_15)
-			player_map[Player] = save()
-		end,
-		FireAll = function(Value: ({
-			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
-		}))
-			load_empty()
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
-			local bool_16 = 0
-			local bool_16_pos_1 = alloc(2)
-			if Value["reason"] == "UnknownTower" then
-				bool_16 = bit32.bor(bool_16, 0b0000000000000001)
-			elseif Value["reason"] == "NotUnlocked" then
-				bool_16 = bit32.bor(bool_16, 0b0000000000000010)
-			elseif Value["reason"] == "CannotAfford" then
-				bool_16 = bit32.bor(bool_16, 0b0000000000000100)
-			elseif Value["reason"] == "OutOfBounds" then
-				bool_16 = bit32.bor(bool_16, 0b0000000000001000)
-			elseif Value["reason"] == "NotBuildable" then
-				bool_16 = bit32.bor(bool_16, 0b0000000000010000)
-			elseif Value["reason"] == "WrongSurface" then
-				bool_16 = bit32.bor(bool_16, 0b0000000000100000)
-			elseif Value["reason"] == "OverlapsTower" then
-				bool_16 = bit32.bor(bool_16, 0b0000000001000000)
-			elseif Value["reason"] == "BlocksPath" then
-				bool_16 = bit32.bor(bool_16, 0b0000000010000000)
-			elseif Value["reason"] == "NotInLoadout" then
-				bool_16 = bit32.bor(bool_16, 0b0000000100000000)
-			elseif Value["reason"] == "TowerCapReached" then
-				bool_16 = bit32.bor(bool_16, 0b0000001000000000)
-			elseif Value["reason"] == "WrongMatchState" then
-				bool_16 = bit32.bor(bool_16, 0b0000010000000000)
-			else
-				error("Invalid enumerator")
-			end
-			buffer.writeu16(outgoing_buff, bool_16_pos_1, bool_16)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				load_player(player)
-				alloc(used)
-				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-				player_map[player] = save()
-			end
-		end,
-		FireExcept = function(Except: Player, Value: ({
-			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
-		}))
-			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
 			local bool_17 = 0
@@ -1788,18 +1761,9 @@ local returns = {
 				error("Invalid enumerator")
 			end
 			buffer.writeu16(outgoing_buff, bool_17_pos_1, bool_17)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				if player ~= Except then
-					load_player(player)
-					alloc(used)
-					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-					player_map[player] = save()
-				end
-			end
+			player_map[Player] = save()
 		end,
-		FireList = function(List: { [unknown]: Player }, Value: ({
+		FireAll = function(Value: ({
 			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
 		}))
 			load_empty()
@@ -1834,7 +1798,7 @@ local returns = {
 			end
 			buffer.writeu16(outgoing_buff, bool_18_pos_1, bool_18)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in List do
+			for _, player in Players:GetPlayers() do
 				load_player(player)
 				alloc(used)
 				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
@@ -1842,7 +1806,7 @@ local returns = {
 				player_map[player] = save()
 			end
 		end,
-		FireSet = function(Set: { [Player]: any }, Value: ({
+		FireExcept = function(Except: Player, Value: ({
 			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
 		}))
 			load_empty()
@@ -1877,6 +1841,94 @@ local returns = {
 			end
 			buffer.writeu16(outgoing_buff, bool_19_pos_1, bool_19)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in Players:GetPlayers() do
+				if player ~= Except then
+					load_player(player)
+					alloc(used)
+					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+					player_map[player] = save()
+				end
+			end
+		end,
+		FireList = function(List: { [unknown]: Player }, Value: ({
+			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
+			local bool_20 = 0
+			local bool_20_pos_1 = alloc(2)
+			if Value["reason"] == "UnknownTower" then
+				bool_20 = bit32.bor(bool_20, 0b0000000000000001)
+			elseif Value["reason"] == "NotUnlocked" then
+				bool_20 = bit32.bor(bool_20, 0b0000000000000010)
+			elseif Value["reason"] == "CannotAfford" then
+				bool_20 = bit32.bor(bool_20, 0b0000000000000100)
+			elseif Value["reason"] == "OutOfBounds" then
+				bool_20 = bit32.bor(bool_20, 0b0000000000001000)
+			elseif Value["reason"] == "NotBuildable" then
+				bool_20 = bit32.bor(bool_20, 0b0000000000010000)
+			elseif Value["reason"] == "WrongSurface" then
+				bool_20 = bit32.bor(bool_20, 0b0000000000100000)
+			elseif Value["reason"] == "OverlapsTower" then
+				bool_20 = bit32.bor(bool_20, 0b0000000001000000)
+			elseif Value["reason"] == "BlocksPath" then
+				bool_20 = bit32.bor(bool_20, 0b0000000010000000)
+			elseif Value["reason"] == "NotInLoadout" then
+				bool_20 = bit32.bor(bool_20, 0b0000000100000000)
+			elseif Value["reason"] == "TowerCapReached" then
+				bool_20 = bit32.bor(bool_20, 0b0000001000000000)
+			elseif Value["reason"] == "WrongMatchState" then
+				bool_20 = bit32.bor(bool_20, 0b0000010000000000)
+			else
+				error("Invalid enumerator")
+			end
+			buffer.writeu16(outgoing_buff, bool_20_pos_1, bool_20)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in List do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
+			end
+		end,
+		FireSet = function(Set: { [Player]: any }, Value: ({
+			["reason"]: ("UnknownTower" | "NotUnlocked" | "CannotAfford" | "OutOfBounds" | "NotBuildable" | "WrongSurface" | "OverlapsTower" | "BlocksPath" | "NotInLoadout" | "TowerCapReached" | "WrongMatchState"),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 3)
+			local bool_21 = 0
+			local bool_21_pos_1 = alloc(2)
+			if Value["reason"] == "UnknownTower" then
+				bool_21 = bit32.bor(bool_21, 0b0000000000000001)
+			elseif Value["reason"] == "NotUnlocked" then
+				bool_21 = bit32.bor(bool_21, 0b0000000000000010)
+			elseif Value["reason"] == "CannotAfford" then
+				bool_21 = bit32.bor(bool_21, 0b0000000000000100)
+			elseif Value["reason"] == "OutOfBounds" then
+				bool_21 = bit32.bor(bool_21, 0b0000000000001000)
+			elseif Value["reason"] == "NotBuildable" then
+				bool_21 = bit32.bor(bool_21, 0b0000000000010000)
+			elseif Value["reason"] == "WrongSurface" then
+				bool_21 = bit32.bor(bool_21, 0b0000000000100000)
+			elseif Value["reason"] == "OverlapsTower" then
+				bool_21 = bit32.bor(bool_21, 0b0000000001000000)
+			elseif Value["reason"] == "BlocksPath" then
+				bool_21 = bit32.bor(bool_21, 0b0000000010000000)
+			elseif Value["reason"] == "NotInLoadout" then
+				bool_21 = bit32.bor(bool_21, 0b0000000100000000)
+			elseif Value["reason"] == "TowerCapReached" then
+				bool_21 = bit32.bor(bool_21, 0b0000001000000000)
+			elseif Value["reason"] == "WrongMatchState" then
+				bool_21 = bit32.bor(bool_21, 0b0000010000000000)
+			else
+				error("Invalid enumerator")
+			end
+			buffer.writeu16(outgoing_buff, bool_21_pos_1, bool_21)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
 				load_player(player)
 				alloc(used)
@@ -1893,13 +1945,13 @@ local returns = {
 			load_player(Player)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 9)
-			local len_69 = #Value["reason"]
-			assert(len_69 <= 480, "value is more than 480!")
+			local len_71 = #Value["reason"]
+			assert(len_71 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_69)
-			alloc(len_69)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_69)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_71)
+			alloc(len_71)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_71)
 			player_map[Player] = save()
 		end,
 		FireAll = function(Value: ({
@@ -1908,13 +1960,13 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 9)
-			local len_70 = #Value["reason"]
-			assert(len_70 <= 480, "value is more than 480!")
+			local len_72 = #Value["reason"]
+			assert(len_72 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_70)
-			alloc(len_70)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_70)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_72)
+			alloc(len_72)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_72)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in Players:GetPlayers() do
 				load_player(player)
@@ -1930,13 +1982,13 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 9)
-			local len_71 = #Value["reason"]
-			assert(len_71 <= 480, "value is more than 480!")
+			local len_73 = #Value["reason"]
+			assert(len_73 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_71)
-			alloc(len_71)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_71)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_73)
+			alloc(len_73)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_73)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in Players:GetPlayers() do
 				if player ~= Except then
@@ -1954,13 +2006,13 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 9)
-			local len_72 = #Value["reason"]
-			assert(len_72 <= 480, "value is more than 480!")
+			local len_74 = #Value["reason"]
+			assert(len_74 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_72)
-			alloc(len_72)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_72)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_74)
+			alloc(len_74)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_74)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for _, player in List do
 				load_player(player)
@@ -1976,13 +2028,13 @@ local returns = {
 			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 9)
-			local len_73 = #Value["reason"]
-			assert(len_73 <= 480, "value is more than 480!")
+			local len_75 = #Value["reason"]
+			assert(len_75 <= 480, "value is more than 480!")
 			assert(utf8.len(Value["reason"]) ~= nil, "value is not valid utf-8")
 			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, len_73)
-			alloc(len_73)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_73)
+			buffer.writeu16(outgoing_buff, outgoing_apos, len_75)
+			alloc(len_75)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["reason"], len_75)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
 				load_player(player)
@@ -2001,85 +2053,6 @@ local returns = {
 			["endless"]: (boolean),
 		}))
 			load_player(Player)
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
-			local bool_20 = 0
-			local bool_20_pos_1 = alloc(1)
-			if Value["state"] == "Loading" then
-				bool_20 = bit32.bor(bool_20, 0b0000000000000001)
-			elseif Value["state"] == "Preparing" then
-				bool_20 = bit32.bor(bool_20, 0b0000000000000010)
-			elseif Value["state"] == "WaveActive" then
-				bool_20 = bit32.bor(bool_20, 0b0000000000000100)
-			elseif Value["state"] == "Intermission" then
-				bool_20 = bit32.bor(bool_20, 0b0000000000001000)
-			elseif Value["state"] == "Victory" then
-				bool_20 = bit32.bor(bool_20, 0b0000000000010000)
-			elseif Value["state"] == "Defeat" then
-				bool_20 = bit32.bor(bool_20, 0b0000000000100000)
-			else
-				error("Invalid enumerator")
-			end
-			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
-			alloc(8)
-			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
-			if Value["endless"] then
-				bool_20 = bit32.bor(bool_20, 0b0000000001000000)
-			end
-			buffer.writeu8(outgoing_buff, bool_20_pos_1, bool_20)
-			player_map[Player] = save()
-		end,
-		FireAll = function(Value: ({
-			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
-			["waveNumber"]: (number),
-			["phaseEndsAt"]: (number),
-			["endless"]: (boolean),
-		}))
-			load_empty()
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
-			local bool_21 = 0
-			local bool_21_pos_1 = alloc(1)
-			if Value["state"] == "Loading" then
-				bool_21 = bit32.bor(bool_21, 0b0000000000000001)
-			elseif Value["state"] == "Preparing" then
-				bool_21 = bit32.bor(bool_21, 0b0000000000000010)
-			elseif Value["state"] == "WaveActive" then
-				bool_21 = bit32.bor(bool_21, 0b0000000000000100)
-			elseif Value["state"] == "Intermission" then
-				bool_21 = bit32.bor(bool_21, 0b0000000000001000)
-			elseif Value["state"] == "Victory" then
-				bool_21 = bit32.bor(bool_21, 0b0000000000010000)
-			elseif Value["state"] == "Defeat" then
-				bool_21 = bit32.bor(bool_21, 0b0000000000100000)
-			else
-				error("Invalid enumerator")
-			end
-			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
-			alloc(8)
-			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
-			if Value["endless"] then
-				bool_21 = bit32.bor(bool_21, 0b0000000001000000)
-			end
-			buffer.writeu8(outgoing_buff, bool_21_pos_1, bool_21)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				load_player(player)
-				alloc(used)
-				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-				player_map[player] = save()
-			end
-		end,
-		FireExcept = function(Except: Player, Value: ({
-			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
-			["waveNumber"]: (number),
-			["phaseEndsAt"]: (number),
-			["endless"]: (boolean),
-		}))
-			load_empty()
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
 			local bool_22 = 0
@@ -2107,18 +2080,9 @@ local returns = {
 				bool_22 = bit32.bor(bool_22, 0b0000000001000000)
 			end
 			buffer.writeu8(outgoing_buff, bool_22_pos_1, bool_22)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				if player ~= Except then
-					load_player(player)
-					alloc(used)
-					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-					player_map[player] = save()
-				end
-			end
+			player_map[Player] = save()
 		end,
-		FireList = function(List: { [unknown]: Player }, Value: ({
+		FireAll = function(Value: ({
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
@@ -2153,7 +2117,7 @@ local returns = {
 			end
 			buffer.writeu8(outgoing_buff, bool_23_pos_1, bool_23)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in List do
+			for _, player in Players:GetPlayers() do
 				load_player(player)
 				alloc(used)
 				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
@@ -2161,7 +2125,7 @@ local returns = {
 				player_map[player] = save()
 			end
 		end,
-		FireSet = function(Set: { [Player]: any }, Value: ({
+		FireExcept = function(Except: Player, Value: ({
 			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
 			["waveNumber"]: (number),
 			["phaseEndsAt"]: (number),
@@ -2196,6 +2160,94 @@ local returns = {
 			end
 			buffer.writeu8(outgoing_buff, bool_24_pos_1, bool_24)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in Players:GetPlayers() do
+				if player ~= Except then
+					load_player(player)
+					alloc(used)
+					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+					player_map[player] = save()
+				end
+			end
+		end,
+		FireList = function(List: { [unknown]: Player }, Value: ({
+			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
+			["waveNumber"]: (number),
+			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
+			local bool_25 = 0
+			local bool_25_pos_1 = alloc(1)
+			if Value["state"] == "Loading" then
+				bool_25 = bit32.bor(bool_25, 0b0000000000000001)
+			elseif Value["state"] == "Preparing" then
+				bool_25 = bit32.bor(bool_25, 0b0000000000000010)
+			elseif Value["state"] == "WaveActive" then
+				bool_25 = bit32.bor(bool_25, 0b0000000000000100)
+			elseif Value["state"] == "Intermission" then
+				bool_25 = bit32.bor(bool_25, 0b0000000000001000)
+			elseif Value["state"] == "Victory" then
+				bool_25 = bit32.bor(bool_25, 0b0000000000010000)
+			elseif Value["state"] == "Defeat" then
+				bool_25 = bit32.bor(bool_25, 0b0000000000100000)
+			else
+				error("Invalid enumerator")
+			end
+			alloc(2)
+			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
+			alloc(8)
+			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_25 = bit32.bor(bool_25, 0b0000000001000000)
+			end
+			buffer.writeu8(outgoing_buff, bool_25_pos_1, bool_25)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in List do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
+			end
+		end,
+		FireSet = function(Set: { [Player]: any }, Value: ({
+			["state"]: ("Loading" | "Preparing" | "WaveActive" | "Intermission" | "Victory" | "Defeat"),
+			["waveNumber"]: (number),
+			["phaseEndsAt"]: (number),
+			["endless"]: (boolean),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 0)
+			local bool_26 = 0
+			local bool_26_pos_1 = alloc(1)
+			if Value["state"] == "Loading" then
+				bool_26 = bit32.bor(bool_26, 0b0000000000000001)
+			elseif Value["state"] == "Preparing" then
+				bool_26 = bit32.bor(bool_26, 0b0000000000000010)
+			elseif Value["state"] == "WaveActive" then
+				bool_26 = bit32.bor(bool_26, 0b0000000000000100)
+			elseif Value["state"] == "Intermission" then
+				bool_26 = bit32.bor(bool_26, 0b0000000000001000)
+			elseif Value["state"] == "Victory" then
+				bool_26 = bit32.bor(bool_26, 0b0000000000010000)
+			elseif Value["state"] == "Defeat" then
+				bool_26 = bit32.bor(bool_26, 0b0000000000100000)
+			else
+				error("Invalid enumerator")
+			end
+			alloc(2)
+			buffer.writeu16(outgoing_buff, outgoing_apos, Value["waveNumber"])
+			alloc(8)
+			buffer.writef64(outgoing_buff, outgoing_apos, Value["phaseEndsAt"])
+			if Value["endless"] then
+				bool_26 = bit32.bor(bool_26, 0b0000000001000000)
+			end
+			buffer.writeu8(outgoing_buff, bool_26_pos_1, bool_26)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
 				load_player(player)
 				alloc(used)
@@ -2216,65 +2268,6 @@ local returns = {
 			load_player(Player)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 4)
-			local bool_25 = 0
-			local bool_25_pos_1 = alloc(1)
-			if Value["won"] then
-				bool_25 = bit32.bor(bool_25, 0b0000000000000001)
-			end
-			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, Value["wavesCleared"])
-			alloc(4)
-			buffer.writeu32(outgoing_buff, outgoing_apos, Value["coinsAwarded"])
-			alloc(4)
-			buffer.writeu32(outgoing_buff, outgoing_apos, Value["xpAwarded"])
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
-			buffer.writeu8(outgoing_buff, bool_25_pos_1, bool_25)
-			player_map[Player] = save()
-		end,
-		FireAll = function(Value: ({
-			["won"]: (boolean),
-			["wavesCleared"]: (number),
-			["coinsAwarded"]: (number),
-			["xpAwarded"]: (number),
-			["tokensAwarded"]: (number),
-		}))
-			load_empty()
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 4)
-			local bool_26 = 0
-			local bool_26_pos_1 = alloc(1)
-			if Value["won"] then
-				bool_26 = bit32.bor(bool_26, 0b0000000000000001)
-			end
-			alloc(2)
-			buffer.writeu16(outgoing_buff, outgoing_apos, Value["wavesCleared"])
-			alloc(4)
-			buffer.writeu32(outgoing_buff, outgoing_apos, Value["coinsAwarded"])
-			alloc(4)
-			buffer.writeu32(outgoing_buff, outgoing_apos, Value["xpAwarded"])
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
-			buffer.writeu8(outgoing_buff, bool_26_pos_1, bool_26)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				load_player(player)
-				alloc(used)
-				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-				player_map[player] = save()
-			end
-		end,
-		FireExcept = function(Except: Player, Value: ({
-			["won"]: (boolean),
-			["wavesCleared"]: (number),
-			["coinsAwarded"]: (number),
-			["xpAwarded"]: (number),
-			["tokensAwarded"]: (number),
-		}))
-			load_empty()
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 4)
 			local bool_27 = 0
 			local bool_27_pos_1 = alloc(1)
 			if Value["won"] then
@@ -2289,18 +2282,9 @@ local returns = {
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
 			buffer.writeu8(outgoing_buff, bool_27_pos_1, bool_27)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				if player ~= Except then
-					load_player(player)
-					alloc(used)
-					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-					player_map[player] = save()
-				end
-			end
+			player_map[Player] = save()
 		end,
-		FireList = function(List: { [unknown]: Player }, Value: ({
+		FireAll = function(Value: ({
 			["won"]: (boolean),
 			["wavesCleared"]: (number),
 			["coinsAwarded"]: (number),
@@ -2325,7 +2309,7 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
 			buffer.writeu8(outgoing_buff, bool_28_pos_1, bool_28)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in List do
+			for _, player in Players:GetPlayers() do
 				load_player(player)
 				alloc(used)
 				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
@@ -2333,7 +2317,7 @@ local returns = {
 				player_map[player] = save()
 			end
 		end,
-		FireSet = function(Set: { [Player]: any }, Value: ({
+		FireExcept = function(Except: Player, Value: ({
 			["won"]: (boolean),
 			["wavesCleared"]: (number),
 			["coinsAwarded"]: (number),
@@ -2358,6 +2342,74 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
 			buffer.writeu8(outgoing_buff, bool_29_pos_1, bool_29)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in Players:GetPlayers() do
+				if player ~= Except then
+					load_player(player)
+					alloc(used)
+					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+					player_map[player] = save()
+				end
+			end
+		end,
+		FireList = function(List: { [unknown]: Player }, Value: ({
+			["won"]: (boolean),
+			["wavesCleared"]: (number),
+			["coinsAwarded"]: (number),
+			["xpAwarded"]: (number),
+			["tokensAwarded"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 4)
+			local bool_30 = 0
+			local bool_30_pos_1 = alloc(1)
+			if Value["won"] then
+				bool_30 = bit32.bor(bool_30, 0b0000000000000001)
+			end
+			alloc(2)
+			buffer.writeu16(outgoing_buff, outgoing_apos, Value["wavesCleared"])
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["coinsAwarded"])
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["xpAwarded"])
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
+			buffer.writeu8(outgoing_buff, bool_30_pos_1, bool_30)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in List do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
+			end
+		end,
+		FireSet = function(Set: { [Player]: any }, Value: ({
+			["won"]: (boolean),
+			["wavesCleared"]: (number),
+			["coinsAwarded"]: (number),
+			["xpAwarded"]: (number),
+			["tokensAwarded"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 4)
+			local bool_31 = 0
+			local bool_31_pos_1 = alloc(1)
+			if Value["won"] then
+				bool_31 = bit32.bor(bool_31, 0b0000000000000001)
+			end
+			alloc(2)
+			buffer.writeu16(outgoing_buff, outgoing_apos, Value["wavesCleared"])
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["coinsAwarded"])
+			alloc(4)
+			buffer.writeu32(outgoing_buff, outgoing_apos, Value["xpAwarded"])
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, Value["tokensAwarded"])
+			buffer.writeu8(outgoing_buff, bool_31_pos_1, bool_31)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
 				load_player(player)
 				alloc(used)
@@ -2375,55 +2427,6 @@ local returns = {
 			load_player(Player)
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
-			local bool_30 = 0
-			local bool_30_pos_1 = alloc(1)
-			if Value["state"] == "Gathering" then
-				bool_30 = bit32.bor(bool_30, 0b0000000000000001)
-			elseif Value["state"] == "Launching" then
-				local _
-			else
-				error("Invalid enumerator")
-			end
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
-			buffer.writeu8(outgoing_buff, bool_30_pos_1, bool_30)
-			player_map[Player] = save()
-		end,
-		FireAll = function(Value: ({
-			["state"]: ("Gathering" | "Launching"),
-			["playerCount"]: (number),
-		}))
-			load_empty()
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
-			local bool_31 = 0
-			local bool_31_pos_1 = alloc(1)
-			if Value["state"] == "Gathering" then
-				bool_31 = bit32.bor(bool_31, 0b0000000000000001)
-			elseif Value["state"] == "Launching" then
-				local _
-			else
-				error("Invalid enumerator")
-			end
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
-			buffer.writeu8(outgoing_buff, bool_31_pos_1, bool_31)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				load_player(player)
-				alloc(used)
-				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-				player_map[player] = save()
-			end
-		end,
-		FireExcept = function(Except: Player, Value: ({
-			["state"]: ("Gathering" | "Launching"),
-			["playerCount"]: (number),
-		}))
-			load_empty()
-			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
 			local bool_32 = 0
 			local bool_32_pos_1 = alloc(1)
 			if Value["state"] == "Gathering" then
@@ -2436,18 +2439,9 @@ local returns = {
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
 			buffer.writeu8(outgoing_buff, bool_32_pos_1, bool_32)
-			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in Players:GetPlayers() do
-				if player ~= Except then
-					load_player(player)
-					alloc(used)
-					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
-					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
-					player_map[player] = save()
-				end
-			end
+			player_map[Player] = save()
 		end,
-		FireList = function(List: { [unknown]: Player }, Value: ({
+		FireAll = function(Value: ({
 			["state"]: ("Gathering" | "Launching"),
 			["playerCount"]: (number),
 		}))
@@ -2467,7 +2461,7 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
 			buffer.writeu8(outgoing_buff, bool_33_pos_1, bool_33)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
-			for _, player in List do
+			for _, player in Players:GetPlayers() do
 				load_player(player)
 				alloc(used)
 				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
@@ -2475,7 +2469,7 @@ local returns = {
 				player_map[player] = save()
 			end
 		end,
-		FireSet = function(Set: { [Player]: any }, Value: ({
+		FireExcept = function(Except: Player, Value: ({
 			["state"]: ("Gathering" | "Launching"),
 			["playerCount"]: (number),
 		}))
@@ -2494,6 +2488,64 @@ local returns = {
 			alloc(1)
 			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
 			buffer.writeu8(outgoing_buff, bool_34_pos_1, bool_34)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in Players:GetPlayers() do
+				if player ~= Except then
+					load_player(player)
+					alloc(used)
+					buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+					table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+					player_map[player] = save()
+				end
+			end
+		end,
+		FireList = function(List: { [unknown]: Player }, Value: ({
+			["state"]: ("Gathering" | "Launching"),
+			["playerCount"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			local bool_35 = 0
+			local bool_35_pos_1 = alloc(1)
+			if Value["state"] == "Gathering" then
+				bool_35 = bit32.bor(bool_35, 0b0000000000000001)
+			elseif Value["state"] == "Launching" then
+				local _
+			else
+				error("Invalid enumerator")
+			end
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
+			buffer.writeu8(outgoing_buff, bool_35_pos_1, bool_35)
+			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
+			for _, player in List do
+				load_player(player)
+				alloc(used)
+				buffer.copy(outgoing_buff, outgoing_apos, buff, 0, used)
+				table.move(inst, 1, #inst, #outgoing_inst + 1, outgoing_inst)
+				player_map[player] = save()
+			end
+		end,
+		FireSet = function(Set: { [Player]: any }, Value: ({
+			["state"]: ("Gathering" | "Launching"),
+			["playerCount"]: (number),
+		}))
+			load_empty()
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, 6)
+			local bool_36 = 0
+			local bool_36_pos_1 = alloc(1)
+			if Value["state"] == "Gathering" then
+				bool_36 = bit32.bor(bool_36, 0b0000000000000001)
+			elseif Value["state"] == "Launching" then
+				local _
+			else
+				error("Invalid enumerator")
+			end
+			alloc(1)
+			buffer.writeu8(outgoing_buff, outgoing_apos, Value["playerCount"])
+			buffer.writeu8(outgoing_buff, bool_36_pos_1, bool_36)
 			local buff, used, inst = outgoing_buff, outgoing_used, outgoing_inst
 			for player in Set do
 				load_player(player)
@@ -2750,6 +2802,21 @@ local returns = {
 			end
 		end,
 	},
+	AdminAction = {
+		SetCallback = function(Callback: (Player: Player, Value: ({
+			["action"]: ("SpawnEnemy" | "KillEnemies" | "SkipWave" | "HealBase" | "UnlockAll"),
+			["id"]: (string),
+			["amount"]: (number),
+		})) -> (({
+			["ok"]: (boolean),
+			["message"]: (string),
+		}))): () -> ()
+			reliable_events[14] = Callback
+			return function()
+				reliable_events[14] = nil
+			end
+		end,
+	},
 	AbilityUsed = {
 		Fire = function(Player: Player, Value: ({
 			["towerId"]: (number),
@@ -2762,13 +2829,13 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
-			local len_74 = #Value["abilityId"]
-			assert(len_74 <= 96, "value is more than 96!")
+			local len_76 = #Value["abilityId"]
+			assert(len_76 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_74)
-			alloc(len_74)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_74)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_76)
+			alloc(len_76)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_76)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)
@@ -2790,13 +2857,13 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
-			local len_75 = #Value["abilityId"]
-			assert(len_75 <= 96, "value is more than 96!")
+			local len_77 = #Value["abilityId"]
+			assert(len_77 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_75)
-			alloc(len_75)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_75)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_77)
+			alloc(len_77)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_77)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)
@@ -2825,13 +2892,13 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
-			local len_76 = #Value["abilityId"]
-			assert(len_76 <= 96, "value is more than 96!")
+			local len_78 = #Value["abilityId"]
+			assert(len_78 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_76)
-			alloc(len_76)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_76)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_78)
+			alloc(len_78)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_78)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)
@@ -2862,13 +2929,13 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
-			local len_77 = #Value["abilityId"]
-			assert(len_77 <= 96, "value is more than 96!")
+			local len_79 = #Value["abilityId"]
+			assert(len_79 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_77)
-			alloc(len_77)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_77)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_79)
+			alloc(len_79)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_79)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)
@@ -2897,13 +2964,13 @@ local returns = {
 			buffer.writeu8(outgoing_buff, outgoing_apos, 5)
 			alloc(4)
 			buffer.writeu32(outgoing_buff, outgoing_apos, Value["towerId"])
-			local len_78 = #Value["abilityId"]
-			assert(len_78 <= 96, "value is more than 96!")
+			local len_80 = #Value["abilityId"]
+			assert(len_80 <= 96, "value is more than 96!")
 			assert(utf8.len(Value["abilityId"]) ~= nil, "value is not valid utf-8")
 			alloc(1)
-			buffer.writeu8(outgoing_buff, outgoing_apos, len_78)
-			alloc(len_78)
-			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_78)
+			buffer.writeu8(outgoing_buff, outgoing_apos, len_80)
+			alloc(len_80)
+			buffer.writestring(outgoing_buff, outgoing_apos, Value["abilityId"], len_80)
 			alloc(4)
 			buffer.writef32(outgoing_buff, outgoing_apos, Value["position"].x)
 			alloc(4)

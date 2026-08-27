@@ -36,6 +36,7 @@ local Constants = require(ReplicatedStorage.Shared.Constants)
 local DevMatch = require(ReplicatedStorage.Shared.Config.DevMatch)
 local Difficulty = require(ReplicatedStorage.Shared.Config.Difficulty)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
+local Enemies = require(ReplicatedStorage.Shared.Config.Enemies)
 local Footprint = require(ReplicatedStorage.Shared.Footprint)
 local MapRegistry = require(ReplicatedStorage.Shared.Config.MapRegistry)
 local Net = require(ServerScriptService.Net)
@@ -51,6 +52,7 @@ local ArrivalGate = require(script.Parent.ArrivalGate)
 local BaseEnemy = require(script.Parent.Parent.Entities.BaseEnemy)
 local BaseHealth = require(script.Parent.Parent.Systems.BaseHealth)
 local EconomyService = require(script.Parent.Parent.Systems.EconomyService)
+local EnemyBehaviors = require(script.Parent.Parent.Entities.EnemyBehaviors)
 local EnemySimulation = require(script.Parent.Parent.Simulation.EnemySimulation)
 local EnemyView = require(script.Parent.Parent.Simulation.EnemyView)
 local MapBuilder = require(script.Parent.MapBuilder)
@@ -584,6 +586,109 @@ function MatchController.grantCash(self: Controller, player: Player, amount: num
 	self.economy:credit(player, amount)
 
 	return math.floor(self.economy:balance(player))
+end
+
+-- ---------------------------------------------------------------------------
+-- Admin sandbox
+--
+-- Every function below is a DEBUG affordance, reachable only through the
+-- admin console and gated by Config/Admins.luau at the network handler. They
+-- deliberately route through the same systems ordinary play uses - the
+-- simulation's spawn, the director's beginWave, the same BaseHealth - rather
+-- than writing state directly, so what the console produces is a real match
+-- state and not a lookalike that behaves differently the moment it is
+-- touched.
+-- ---------------------------------------------------------------------------
+
+--- Spawns `count` of an enemy onto a live lane, scaled to the current wave.
+---
+--- Scaled rather than at base values on purpose: a Zombie summoned at wave
+--- 30 with wave-1 health would evaporate and teach nothing about wave 30.
+--- Returns a message for the console either way.
+function MatchController.adminSpawn(self: Controller, enemyId: string, count: number): (boolean, string)
+	local definition = Enemies.find(enemyId)
+
+	if definition == nil then
+		return false, `No enemy called "{enemyId}"`
+	end
+
+	if self.state ~= "Preparing" and self.state ~= "WaveActive" and self.state ~= "Intermission" then
+		return false, "The match is not running"
+	end
+
+	local laneCount = #self.map.paths
+
+	if laneCount < 1 then
+		return false, "This map has no lanes"
+	end
+
+	local relativeWave = math.max(1, self.waveNumber - definition.introducesAtWave + 1)
+	local endless = Scaling.endlessFactor(self.waveNumber, self.difficulty.finalWave)
+	local health = Scaling.enemyHealth(definition.baseHealth, relativeWave, self.difficulty.healthMultiplier * endless)
+	local bounty = Scaling.bounty(definition.baseBounty, relativeWave, self.difficulty.rewardMultiplier)
+
+	for index = 1, count do
+		self.simulation:spawn({
+			definition = definition,
+			behavior = EnemyBehaviors.find(enemyId),
+			-- Spread across lanes, so spawning six on Bastion exercises both
+			-- pincers rather than stacking one.
+			pathIndex = ((index - 1) % laneCount) + 1,
+			health = health,
+			speed = definition.baseSpeed,
+			bounty = bounty,
+		})
+	end
+
+	return true, `Spawned {count} x {definition.displayName}`
+end
+
+--- Kills everything currently walking, paying no bounty.
+---
+--- Damage rather than a silent removal, so death listeners, rewards
+--- bookkeeping and the view all see exactly what they see in play.
+function MatchController.adminKillEnemies(self: Controller): (boolean, string)
+	local ids = self.simulation:liveIds()
+
+	for _, id in ids do
+		self.simulation:damage(id, math.huge, nil)
+	end
+
+	return true, `Killed {#ids} enem{if #ids == 1 then "y" else "ies"}`
+end
+
+--- Ends the current wave and moves to the next build phase.
+---
+--- Clears the field first: a skipped wave that left its enemies walking
+--- would pile them into the next one, which is a different bug wearing the
+--- console's clothes.
+function MatchController.adminSkipWave(self: Controller): (boolean, string)
+	if self.state == "Victory" or self.state == "Defeat" then
+		return false, "The match is already over"
+	end
+
+	for _, id in self.simulation:liveIds() do
+		self.simulation:damage(id, math.huge, nil)
+	end
+
+	local from = self.waveNumber
+
+	-- Exactly the transition a natural completion makes at the end of an
+	-- intermission, rather than a bespoke one.
+	self.waveNumber += 1
+	beginPreparing(self)
+
+	return true, `Wave {from} -> {self.waveNumber}`
+end
+
+--- Refills the base.
+function MatchController.adminHealBase(self: Controller): (boolean, string)
+	local restored = math.floor(self.health.max - self.health.current)
+
+	self.health.current = self.health.max
+	broadcastHealth(self)
+
+	return true, `Base restored (+{restored})`
 end
 
 --- Fires a tower's active ability. Ownership, existence, match state and

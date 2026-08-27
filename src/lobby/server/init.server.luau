@@ -32,6 +32,7 @@ local Loadouts = require(ReplicatedStorage.Shared.Loadouts)
 local Net = require(ServerScriptService.Net)
 local Places = require(ReplicatedStorage.Shared.Config.Places)
 local ProfileStore = require(ServerScriptService.ServerPackages.ProfileStore)
+local Towers = require(ReplicatedStorage.Shared.Config.Towers)
 
 -- `script` IS ServerScriptService.Lobby: Rojo turns src/lobby/server's
 -- init.server.luau into the Script at that path, so the other modules in this
@@ -218,6 +219,44 @@ end)
 
 --- Same cap and same gate as the match entry's handler.
 local MAX_ADMIN_GRANT = 100000
+
+-- The lobby half of the console's sandbox verbs. Only UnlockAll means
+-- anything here - there is no match to spawn into - and the gate is
+-- restated rather than shared, because this is the trust boundary and a
+-- reader should not have to trace a helper to see it checked.
+Net.AdminAction.SetCallback(function(
+	player: Player,
+	value: {
+		action: "SpawnEnemy" | "KillEnemies" | "SkipWave" | "HealBase" | "UnlockAll",
+		id: string,
+		amount: number,
+	}
+): { ok: boolean, message: string }
+	if not Admins.isAdmin(player.UserId, RunService:IsStudio()) then
+		return { ok = false, message = "Not an admin" }
+	end
+
+	if value.action ~= "UnlockAll" then
+		return { ok = false, message = "That action belongs in a match" }
+	end
+
+	local profile = profiles[player]
+
+	if profile == nil then
+		return { ok = false, message = "Your profile is still loading" }
+	end
+
+	local added = 0
+
+	for _, towerId in Towers.IDS do
+		if table.find(profile.Data.UnlockedTowers, towerId) == nil then
+			table.insert(profile.Data.UnlockedTowers, towerId)
+			added += 1
+		end
+	end
+
+	return { ok = true, message = `Unlocked {added} new tower{if added == 1 then "" else "s"}` }
+end)
 
 Net.AdminGrant.SetCallback(function(player: Player, value: { currency: "Cash" | "Coins" | "Tokens", amount: number })
 	if not Admins.isAdmin(player.UserId, RunService:IsStudio()) then

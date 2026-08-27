@@ -461,6 +461,45 @@ funct AdminGrant = {
 	},
 }
 
+-- The admin console's sandbox actions, beyond granting currency.
+--
+-- ONE message with an action enum rather than one message per verb. Each of
+-- these is the same shape of request - a verb, a subject, a quantity - and
+-- the trust boundary is easier to review as one door with a guard than as
+-- six doors that must each be remembered.
+--
+-- EVERY field here is untrusted, exactly like the rest of this file, and the
+-- server re-checks admin rights on every call. An enum a non-admin cannot
+-- use is not security; the isAdmin check in the handler is.
+funct AdminAction = {
+	call: Async,
+	args: struct {
+		action: enum {
+			-- Match place. Spawns `amount` of `id` onto a live lane.
+			SpawnEnemy,
+			-- Match place. Clears everything currently walking.
+			KillEnemies,
+			-- Match place. Jumps the wave counter forward.
+			SkipWave,
+			-- Match place. Refills the base to full.
+			HealBase,
+			-- Lobby place. Grants the whole tower roster.
+			UnlockAll,
+		},
+		-- Enemy id for SpawnEnemy; unused ("") by every other action.
+		id: string.utf8 (0..32),
+		-- Count for SpawnEnemy, bounded well under a wave's ceiling so the
+		-- console cannot be used to melt the server it is debugging.
+		amount: u8 (0..50),
+	},
+	rets: struct {
+		ok: boolean,
+		-- Human-readable, shown in the console. Says what happened, or why
+		-- nothing did.
+		message: string.utf8 (0..96),
+	},
+}
+
 -- Everyone on this server, for the custom player list. Fired by BOTH
 -- places on join, leave, and when a late-loading profile brings its level.
 -- Whole-list rather than deltas, same reasoning as the vote tallies: a

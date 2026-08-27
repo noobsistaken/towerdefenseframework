@@ -61,21 +61,45 @@ invisible at build time.
 
 | Message | Direction | Reliability | Purpose |
 |---|---|---|---|
-| `PlayerScoreChanged` | S→C | reliable | {{ replace }} |
-| `RequestPurchase` | C→S | reliable | {{ replace }} |
-| `ReportInput` | C→S | unreliable | {{ replace }} |
-| `GetLeaderboard` | C→S→C | funct | {{ replace }} |
+| `RequestPlaceTower` | C→S | reliable | Place a tower (server re-validates surface, cost, loadout) |
+| `RequestUpgradeTower` | C→S | reliable | Upgrade a tower |
+| `RequestSellTower` | C→S | reliable | Sell a tower |
+| `RequestSetTargeting` | C→S | reliable | Cycle a tower's targeting mode |
+| `RequestAbility` | C→S | reliable | Fire a tower's active ability |
+| `RequestEarlyStart` | C→S | reliable | Start the next wave before the timer |
+| `MatchStateChanged` | S→C | reliable | Phase, wave number and phase deadline |
+| `CashChanged` | S→C | reliable | This player's in-match cash |
+| `BaseHealthChanged` | S→C | reliable | Shared base health |
+| `PlacementRejected` | S→C | reliable | Why the last placement was refused |
+| `MatchEnded` | S→C | reliable | Final result and the payout actually persisted |
+| `AbilityUsed` | S→C | reliable |An ability fired, for its burst effect |
+| `TowerFired` | S→C | unreliable | One shot, for tracers and the live splash preview |
+| `PlaySound` | S→C | unreliable |A one-shot sound cue at a world position |
+| `GetMatchSnapshot` | C→S→C | funct |Full match state for a joining or rejoining player |
+| `CastVote` | C→S | reliable | Cast a map or difficulty vote |
+| `RequestLaunch` | C→S | reliable | Start the match (server re-checks area occupancy) |
+| `SetLoadout` | C→S→C | funct | Save the six-tower deck |
+| `LobbyStateChanged` | S→C | reliable | Gathering vs Launching, and the head count |
+| `VoteTallyChanged` | S→C | reliable | Map and difficulty vote tallies |
+| `RollTower` | C→S→C | funct | One gacha roll |
+| `RerollTrait` | C→S→C | funct | One trait reroll on an owned tower |
+| `GetLobbyProfile` | C→S→C | funct | Fetch coins, level, collection, loadout and traits |
+| `AdminGrant` | C→S→C | funct | Admin: grant currency |
+| `AdminAction` | C→S→C | funct | Admin: spawn an enemy, clear the field, skip a wave, heal the base, unlock the roster |
+| `RosterChanged` | S→C | reliable | Everyone on the server, for the custom player list |
+| `MatchmakingFailed` | S→C | reliable | Why a launch did not happen |
 
-{{ Keep this table current. It is the fastest way for a reviewer to see the
-entire trust boundary at once. }}
+The table below is generated from the schema; regenerate it whenever a
+message is added or removed. It is the fastest way for a reviewer to see
+the entire trust boundary at once.
 
 ---
 
 ## 4. Data schema and versioning
 
 **Schema:** [`src/shared/DataSchema.luau`](src/shared/DataSchema.luau)
-**Store:** ProfileStore, store name `{{ PlayerData_v1 }}`
-**Current version:** `{{ 1 }}`
+**Store:** ProfileStore, store name `PlayerData_v1`
+**Current version:** `5`
 
 Versioning contract:
 

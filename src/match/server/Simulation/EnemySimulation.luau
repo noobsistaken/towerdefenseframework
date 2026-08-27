@@ -206,6 +206,21 @@ function EnemySimulation.spawn(self: Simulation, request: SpawnRequest): BaseEne
 	return enemy
 end
 
+--- Every live enemy's id, as a fresh array.
+---
+--- A COPY, deliberately: the caller's whole reason for wanting this list is
+--- usually to act on each one, and acting on an enemy can remove it from the
+--- simulation's own array mid-iteration.
+function EnemySimulation.liveIds(self: Simulation): { Types.EnemyId }
+	local ids: { Types.EnemyId } = {}
+
+	for _, enemy in self.enemies do
+		table.insert(ids, enemy.id)
+	end
+
+	return ids
+end
+
 --- Applies damage from outside the step - a tower firing, or a
 --- damage-over-time tick. Fires the death listeners exactly once.
 --- Returns true if this call killed the enemy.
