@@ -207,10 +207,26 @@ function LobbyController.requestLaunch(self: Controller, player: Player): boolea
 
 		if outcome.simulated then
 			-- Studio. Nobody actually went anywhere, so reopen the hub
-			-- rather than wedging in Launching.
+			-- rather than wedging in Launching - and SAY SO. Silence here
+			-- reads exactly like the vote being broken: the button is
+			-- pressed, the hub comes back, and the map never changes, so
+			-- the natural conclusion is that picking a map does nothing.
+			-- It does; TeleportService simply cannot run in Studio. The
+			-- reason names the pair that WOULD have loaded, which is also
+			-- the fastest way to see the vote is being counted.
 			task.wait(Constants.LOBBY_RELAUNCH_SECONDS)
 			self.state = "Gathering"
 			broadcastState(self)
+
+			-- AFTER the state broadcast, deliberately. The client clears a
+			-- stale failure whenever the lobby leaves Launching, so sending
+			-- this first would have it wiped by the very message that ends
+			-- the simulated launch - which is how the first attempt at this
+			-- notice managed to fire twice and never appear on screen.
+			Net.MatchmakingFailed.FireAll({
+				reason = `Studio cannot teleport - {launch.mapId} / {launch.difficultyId} would have loaded. `
+					.. `Press Play in the Game place to test the match itself.`,
+			})
 		else
 			-- The occupants are gone; whoever stayed gets their hub back.
 			self.state = "Gathering"

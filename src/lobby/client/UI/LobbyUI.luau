@@ -381,7 +381,10 @@ local function FailureToast()
 		frame = {
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -72),
-			Size = UDim2.fromOffset(520, 32),
+			-- Wide and two lines tall: these reasons are sentences, not
+			-- codes, and the Studio teleport notice was clipped at both
+			-- ends on one 520px line.
+			Size = UDim2.fromOffset(680, 46),
 			BackgroundColor3 = Theme.NEGATIVE,
 			BackgroundTransparency = 0.1,
 		},
@@ -389,9 +392,11 @@ local function FailureToast()
 		children = {
 			corner = e("UICorner", { CornerRadius = Theme.CORNER_SMALL }),
 			text = label({
-				Size = UDim2.fromScale(1, 1),
+				Size = UDim2.new(1, -20, 1, -8),
+				Position = UDim2.fromOffset(10, 4),
 				Font = Theme.FONT_BODY,
 				Text = reason,
+				TextWrapped = true,
 				TextSize = 13,
 			}),
 		},
