@@ -107,6 +107,85 @@ local function compositionFor(wave: number): { CompositionEntry }
 end
 
 --- Builds the plan for `wave`.
+--- Shares a capped wave budget across the regular types.
+---
+--- THE CEILING USED TO BE FIRST-COME. Every type emitted against one shared
+--- counter in `Enemies.IDS` order - which is ALPHABETICAL - so whoever
+--- sorted first spent the budget and whoever sorted last got whatever was
+--- left, which past a certain wave is nothing. Measured on the real config
+--- before this fix: wave 66 emitted zero Zombies, wave 80 zero Tanks, and
+--- wave 100 was 214 Drifters and 6 Titans - 97% air, forever, because
+--- "Drifter" happens to sort before "Zombie". Endless mode had quietly
+--- become an all-air mode, and an enemy's NAME decided whether it existed.
+---
+--- Now every type keeps its share of the ceiling. Largest-remainder
+--- rounding distributes the seats that division leaves over, so the total
+--- is exact rather than approximately right, and one seat is reserved per
+--- type first: a type that asked to appear at all appears, even when the
+--- budget is tight.
+local function allocateRegulars(regulars: { CompositionEntry }, budget: number): { number }
+	local allocation: { number } = {}
+	local requested = 0
+
+	for index, entry in regulars do
+		allocation[index] = entry.count
+		requested += entry.count
+	end
+
+	-- The common case, including every authored wave: nothing is over the
+	-- ceiling, so nothing is scaled.
+	if requested <= budget or requested == 0 then
+		return allocation
+	end
+
+	local count = #regulars
+	local reserved = math.min(count, budget)
+
+	for index = 1, count do
+		allocation[index] = if index <= reserved then 1 else 0
+	end
+
+	local pool = budget - reserved
+
+	if pool <= 0 then
+		return allocation
+	end
+
+	type Remainder = { index: number, fraction: number }
+
+	local remainders: { Remainder } = {}
+	local handed = 0
+
+	for index, entry in regulars do
+		local exact = entry.count / requested * pool
+		local whole = math.floor(exact)
+
+		allocation[index] += whole
+		handed += whole
+		table.insert(remainders, { index = index, fraction = exact - whole })
+	end
+
+	table.sort(remainders, function(a: Remainder, b: Remainder): boolean
+		if a.fraction ~= b.fraction then
+			return a.fraction > b.fraction
+		end
+
+		return a.index < b.index
+	end)
+
+	for seat = 1, pool - handed do
+		allocation[remainders[seat].index] += 1
+	end
+
+	-- Never hand a type more than it asked for; the ceiling is a cap, not a
+	-- quota to fill.
+	for index, entry in regulars do
+		allocation[index] = math.min(allocation[index], entry.count)
+	end
+
+	return allocation
+end
+
 function WaveGenerator.generate(wave: number, difficulty: Types.DifficultyConfig, laneCount: number): { PlanEntry }
 	if laneCount < 1 then
 		error(`WaveGenerator.generate: laneCount must be at least 1, got {laneCount}`)
@@ -145,64 +224,125 @@ function WaveGenerator.generate(wave: number, difficulty: Types.DifficultyConfig
 	-- silently dropped its boss because the chaff filled the budget would be
 	-- the worst possible failure mode.
 	local regularBudget = math.max(0, Scaling.MAX_ENEMIES_PER_WAVE - bossTotal)
+	local allocation = allocateRegulars(regulars, regularBudget)
 
 	local plan: { PlanEntry } = {}
 	local clock = 0
 	local lane = 0
 	local ordinal = 0
-	local regularsEmitted = 0
 
-	local function emit(definition: Types.EnemyDefinition, count: number, interval: number, budget: number?)
+	--- One scheduled spawn, before it has a time. `fraction` is where in the
+	--- wave it belongs, which is what lets types interleave.
+	type Slot = {
+		entryIndex: number,
+		order: number,
+		fraction: number,
+	}
+
+	-- Every allocated spawn gets a position in [0, 1) spread EVENLY across
+	-- its own type: four Drifters sit at 1/8, 3/8, 5/8, 7/8 rather than in
+	-- one clump. Sorting those positions is what actually interleaves the
+	-- types.
+	--
+	-- The previous code walked one type to exhaustion at a time against a
+	-- shared, never-reset clock, so every wave arrived as one block per
+	-- type - despite the comment below promising the opposite. Sorting
+	-- afterwards could not fix it: the times were already monotonic, so
+	-- there was nothing left for the sort to reorder.
+	local slots: { Slot } = {}
+
+	for index, count in allocation do
+		for order = 1, count do
+			table.insert(slots, {
+				entryIndex = index,
+				order = order,
+				fraction = (order - 0.5) / count,
+			})
+		end
+	end
+
+	table.sort(slots, function(a: Slot, b: Slot): boolean
+		if a.fraction ~= b.fraction then
+			return a.fraction < b.fraction
+		end
+
+		-- Ties resolve by config order then by index, so the plan is
+		-- byte-identical on every server that generates it.
+		if a.entryIndex ~= b.entryIndex then
+			return a.entryIndex < b.entryIndex
+		end
+
+		return a.order < b.order
+	end)
+
+	--- Health and bounty depend only on the TYPE, so they are computed once
+	--- per type rather than once per spawn.
+	local stats: { { health: number, bounty: number, interval: number } } = {}
+
+	for index, entry in regulars do
+		local definition = Enemies.get(entry.id)
 		-- Clamped at 1: an authored wave may legitimately include an enemy
 		-- before its own introducesAtWave, and a negative exponent there
 		-- would scale its health DOWN below the values in config.
 		local relativeWave = math.max(1, wave - definition.introducesAtWave + 1)
 
-		local health = Scaling.enemyHealth(definition.baseHealth, relativeWave, healthMultiplier)
-		local bounty = Scaling.bounty(definition.baseBounty, relativeWave, difficulty.rewardMultiplier)
-
-		for _ = 1, count do
-			if budget ~= nil and regularsEmitted >= budget then
-				break
-			end
-
-			lane = (lane % laneCount) + 1
-			ordinal += 1
-
-			table.insert(plan, {
-				enemyId = definition.id,
-				at = clock,
-				pathIndex = lane,
-				health = health,
-				bounty = bounty,
-				speed = definition.baseSpeed,
-				ordinal = ordinal,
-			})
-
-			if budget ~= nil then
-				regularsEmitted += 1
-			end
-
-			clock += interval
-		end
+		stats[index] = {
+			health = Scaling.enemyHealth(definition.baseHealth, relativeWave, healthMultiplier),
+			bounty = Scaling.bounty(definition.baseBounty, relativeWave, difficulty.rewardMultiplier),
+			interval = if WavesConfig.BURST_TYPES[entry.id]
+				then WavesConfig.BURST_INTERVAL
+				else WavesConfig.SPAWN_INTERVAL,
+		}
 	end
 
-	for _, entry in regulars do
-		local definition = Enemies.get(entry.id)
-		local interval = if WavesConfig.BURST_TYPES[entry.id]
-			then WavesConfig.BURST_INTERVAL
-			else WavesConfig.SPAWN_INTERVAL
+	for _, slot in slots do
+		local entry = regulars[slot.entryIndex]
+		local stat = stats[slot.entryIndex]
 
-		emit(definition, entry.count, interval, regularBudget)
+		lane = (lane % laneCount) + 1
+		ordinal += 1
+
+		table.insert(plan, {
+			enemyId = entry.id,
+			at = clock,
+			pathIndex = lane,
+			health = stat.health,
+			bounty = stat.bounty,
+			speed = Enemies.get(entry.id).baseSpeed,
+			ordinal = ordinal,
+		})
+
+		clock += stat.interval
 	end
 
 	-- Bosses last and held back, so they arrive behind the chaff rather than
 	-- leading it and getting focused down before anything else shows up.
+	-- They are not budgeted, having been reserved out of it above.
 	if #bosses > 0 then
 		clock += WavesConfig.BOSS_LEAD_IN
 
 		for _, entry in bosses do
-			emit(Enemies.get(entry.id), entry.count, WavesConfig.SPAWN_INTERVAL, nil)
+			local definition = Enemies.get(entry.id)
+			local relativeWave = math.max(1, wave - definition.introducesAtWave + 1)
+			local health = Scaling.enemyHealth(definition.baseHealth, relativeWave, healthMultiplier)
+			local bounty = Scaling.bounty(definition.baseBounty, relativeWave, difficulty.rewardMultiplier)
+
+			for _ = 1, entry.count do
+				lane = (lane % laneCount) + 1
+				ordinal += 1
+
+				table.insert(plan, {
+					enemyId = definition.id,
+					at = clock,
+					pathIndex = lane,
+					health = health,
+					bounty = bounty,
+					speed = definition.baseSpeed,
+					ordinal = ordinal,
+				})
+
+				clock += WavesConfig.SPAWN_INTERVAL
+			end
 		end
 	end
 

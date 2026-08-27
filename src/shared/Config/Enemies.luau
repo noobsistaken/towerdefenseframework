@@ -62,9 +62,9 @@ Enemies.DEFINITIONS = {
 	Drifter = {
 		id = "Drifter",
 		displayName = "Drifter",
-		-- The only Air enemy, and the entire reason the Hillside category
-		-- exists. Ground-only towers cannot touch it, so a player who built
-		-- nothing but Riflemen has to react.
+		-- The FIRST air enemy, and the reason anti-air towers exist.
+		-- Ground-only towers cannot touch it, so a player who built nothing
+		-- but Riflemen has to react. Wisp and Zeppelin follow it.
 		category = "Air" :: Types.EnemyCategory,
 		baseHealth = 70,
 		baseSpeed = 16,
@@ -81,6 +81,60 @@ Enemies.DEFINITIONS = {
 		-- Well clear of the ground so it reads as flying at a glance.
 		hoverHeight = 14,
 		resistances = {},
+	},
+
+	-- Air, fast and fragile: the flying answer to Runner. Where Drifter
+	-- asks whether you own any anti-air at all, Wisp asks whether you own
+	-- enough of it - a single slow-firing Marksman cannot clear a flock
+	-- before it crosses. Cheap to kill, punishing to ignore.
+	Wisp = {
+		id = "Wisp",
+		displayName = "Wisp",
+		category = "Air" :: Types.EnemyCategory,
+		baseHealth = 40,
+		baseSpeed = 27,
+		baseBounty = 9,
+		leakDamage = 1,
+		isBoss = false,
+		-- Four waves after Drifter: long enough to have bought anti-air,
+		-- short enough that one token turret is not yet enough.
+		introducesAtWave = 12,
+		hitboxSize = Vector3.new(1.8, 1.8, 1.8),
+		color = Color3.fromRGB(198, 236, 246),
+		-- Below Drifter, so the two read as different altitudes rather than
+		-- as one flock.
+		hoverHeight = 10,
+		resistances = {
+			-- Small and quick, the same reason Runner shrugs off bleed.
+			Bleed = 0.6,
+		},
+	},
+
+	-- Air, slow and armoured: the flying Tank. Sustained anti-air DPS is
+	-- the only answer - a burst tower that clears Wisps will not finish
+	-- this before it crosses, and it takes the most base health of any
+	-- non-boss when it leaks.
+	Zeppelin = {
+		id = "Zeppelin",
+		displayName = "Zeppelin",
+		category = "Air" :: Types.EnemyCategory,
+		baseHealth = 340,
+		baseSpeed = 7,
+		-- Priced like Tank for the same reason Drifter is priced above its
+		-- health: the towers that answer it cost more.
+		baseBounty = 34,
+		leakDamage = 4,
+		isBoss = false,
+		introducesAtWave = 18,
+		hitboxSize = Vector3.new(4.2, 3.2, 4.2),
+		color = Color3.fromRGB(120, 138, 170),
+		-- The highest thing in the game, and deliberately: it should be
+		-- obvious from the ground that only real anti-air reaches it.
+		hoverHeight = 19,
+		resistances = {
+			-- Envelope rather than plating, but there is a lot of it.
+			Concuss = 0.5,
+		},
 	},
 
 	Tank = {

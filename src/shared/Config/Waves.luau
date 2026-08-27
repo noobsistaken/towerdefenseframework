@@ -33,6 +33,8 @@ local BASE_COUNTS: { [string]: number } = {
 	Runner = 4,
 	Tank = 2,
 	Drifter = 3,
+	Wisp = 4,
+	Zeppelin = 2,
 	Titan = 1,
 }
 
@@ -57,6 +59,9 @@ export type AuthoredEntry = {
 ---   7     Tanks. First thing that punishes low DPS.
 ---   8     Drifters. First thing ground-only towers cannot touch at all.
 ---   10    Titan. Boss, on the boss-wave interval.
+---   12    Wisps. Air again, but fast and in numbers - one turret is no
+---         longer enough. Volume of everything else drops to make room.
+---   18    Zeppelins, from the rules path. Slow, armoured air.
 ---
 --- Past the last entry the rules path takes over, so extending this table is
 --- always optional and never load-bearing.
@@ -98,11 +103,21 @@ local AUTHORED: { [number]: { AuthoredEntry } } = {
 		{ id = "Tank", count = 4 },
 		{ id = "Drifter", count = 5 },
 	},
+	-- Wisps arrive. Ground volume drops so the new thing is the story, the
+	-- same shape as the Titan's wave.
 	[12] = {
-		{ id = "Zombie", count = 22 },
-		{ id = "Runner", count = 12 },
+		{ id = "Zombie", count = 14 },
+		{ id = "Runner", count = 8 },
+		{ id = "Tank", count = 3 },
+		{ id = "Drifter", count = 4 },
+		{ id = "Wisp", count = 6 },
+	},
+	[13] = {
+		{ id = "Zombie", count = 20 },
+		{ id = "Runner", count = 11 },
 		{ id = "Tank", count = 4 },
-		{ id = "Drifter", count = 6 },
+		{ id = "Drifter", count = 5 },
+		{ id = "Wisp", count = 8 },
 	},
 }
 

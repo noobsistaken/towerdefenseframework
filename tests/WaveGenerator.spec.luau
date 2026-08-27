@@ -268,3 +268,149 @@ describe("WaveGenerator: the per-wave ceiling", function()
 		expect(bosses > 0).toBe(true)
 	end)
 end)
+describe("Air arrives in three escalating shapes", function()
+	it("introduces each flyer on the wave its config claims", function()
+		-- Waves 1-13 are hand-authored and OVERRIDE the rules path entirely,
+		-- so an air type with introducesAtWave = 12 appears then only because
+		-- wave 12 authors it. Getting this wrong fails silently as "the
+		-- config says 12 but I never see one until 14".
+		expect(countOf(WaveGenerator.generate(8, DIFFICULTY, 1), "Drifter") > 0).toBe(true)
+		expect(countOf(WaveGenerator.generate(12, DIFFICULTY, 1), "Wisp") > 0).toBe(true)
+		expect(countOf(WaveGenerator.generate(18, DIFFICULTY, 1), "Zeppelin") > 0).toBe(true)
+	end)
+
+	it("holds each flyer back until its own wave", function()
+		expect(countOf(WaveGenerator.generate(7, DIFFICULTY, 1), "Drifter")).toBe(0)
+		expect(countOf(WaveGenerator.generate(11, DIFFICULTY, 1), "Wisp")).toBe(0)
+		expect(countOf(WaveGenerator.generate(17, DIFFICULTY, 1), "Zeppelin")).toBe(0)
+	end)
+
+	it("never lets air take over a wave outright", function()
+		-- Air is pressure, not the whole game. Before the budget was shared
+		-- proportionally this reached 97% by wave 100.
+		for _, wave in { 20, 40, 66, 100, 140 } do
+			local plan = WaveGenerator.generate(wave, DIFFICULTY, 1)
+			local air = 0
+
+			for _, entry in plan do
+				if Enemies.get(entry.enemyId).category == "Air" then
+					air += 1
+				end
+			end
+
+			expect(air < #plan * 0.6).toBe(true)
+		end
+	end)
+end)
+
+describe("The per-wave ceiling shares out, rather than going first-come", function()
+	-- Every assertion here FAILED before the budget was made proportional.
+	-- The ceiling used to be spent by whichever type came first in
+	-- Enemies.IDS, which is alphabetical: measured on the real config,
+	-- wave 66 emitted zero Zombies, wave 80 zero Tanks, and wave 100 was
+	-- 214 Drifters and 6 Titans - 97% air - purely because "Drifter" sorts
+	-- before "Zombie". An enemy's NAME decided whether it existed.
+	local CAPPED_WAVES = { 66, 80, 100, 140 }
+
+	it("never starves a type out of a capped wave", function()
+		for _, wave in CAPPED_WAVES do
+			local plan = WaveGenerator.generate(wave, DIFFICULTY, 1)
+
+			for _, id in Enemies.IDS do
+				local definition = Enemies.get(id)
+
+				-- Bosses are reserved out of the budget separately, and only
+				-- appear on boss waves.
+				if definition.isBoss or WavesConfig.BASE_COUNTS[id] == nil then
+					continue
+				end
+
+				if wave >= definition.introducesAtWave then
+					expect(countOf(plan, id) > 0).toBe(true)
+				end
+			end
+		end
+	end)
+
+	it("lets no single type run away with the wave", function()
+		-- Drifter reached 97% before the fix. Half is far looser than the
+		-- proportional split actually produces, and still catches a
+		-- runaway.
+		for _, wave in CAPPED_WAVES do
+			local plan = WaveGenerator.generate(wave, DIFFICULTY, 1)
+
+			for _, id in Enemies.IDS do
+				if not Enemies.get(id).isBoss then
+					expect(countOf(plan, id) <= #plan * 0.5).toBe(true)
+				end
+			end
+		end
+	end)
+
+	it("still respects the ceiling it is sharing out", function()
+		for _, wave in CAPPED_WAVES do
+			local plan = WaveGenerator.generate(wave, DIFFICULTY, 1)
+
+			expect(#plan <= Scaling.MAX_ENEMIES_PER_WAVE + Scaling.MAX_BOSSES_PER_WAVE).toBe(true)
+		end
+	end)
+
+	it("keeps the bigger request bigger", function()
+		-- The point of proportional sharing: scaling down must not reorder
+		-- who is most numerous. Zombie has grown since wave 1 and Drifter
+		-- only since wave 8, so Zombie asks for more and must stay ahead.
+		--
+		-- Wave 66 rather than 100 deliberately. Scaling.enemyCount clamps
+		-- EACH type at MAX_ENEMIES_PER_WAVE, so deep enough into endless
+		-- every type asks for the same 220 and an even split is the correct
+		-- answer - there is no "bigger request" left to preserve. Asserting
+		-- this at wave 100 would be asserting a tie-break, not a property.
+		local plan = WaveGenerator.generate(66, DIFFICULTY, 1)
+
+		expect(countOf(plan, "Zombie") > countOf(plan, "Drifter")).toBe(true)
+	end)
+end)
+
+describe("A wave arrives mixed, not in blocks", function()
+	it("interleaves its types instead of emptying one at a time", function()
+		-- The module always claimed to interleave, and never did: types were
+		-- emitted one at a time against a clock that only moved forward, so
+		-- the sort afterwards had nothing left to reorder. Every wave came
+		-- as one block per type - all the Drifters, then all the Runners.
+		local plan = WaveGenerator.generate(40, DIFFICULTY, 1)
+		local seen: { [string]: boolean } = {}
+		local distinct = 0
+
+		for index = 1, math.min(12, #plan) do
+			local id = plan[index].enemyId
+
+			if not seen[id] then
+				seen[id] = true
+				distinct += 1
+			end
+		end
+
+		expect(distinct >= 2).toBe(true)
+	end)
+
+	it("spreads a type across the wave rather than clumping it at the front", function()
+		local plan = WaveGenerator.generate(40, DIFFICULTY, 1)
+		local total = countOf(plan, "Drifter")
+
+		expect(total > 0).toBe(true)
+
+		-- With an even spread, roughly half of any type lands in the back
+		-- half of the wave. Before the fix every Drifter was in the first
+		-- block, so the back half held none at all.
+		local half = math.floor(#plan / 2)
+		local late = 0
+
+		for index = half + 1, #plan do
+			if plan[index].enemyId == "Drifter" then
+				late += 1
+			end
+		end
+
+		expect(late > 0).toBe(true)
+	end)
+end)
