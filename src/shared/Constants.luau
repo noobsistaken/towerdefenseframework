@@ -69,6 +69,14 @@ Constants.BUILDABLE_TAG = "TDBuildable"
 --- the lobby would wedge in Launching forever during a Studio playtest.
 Constants.LOBBY_RELAUNCH_SECONDS = 6
 
+--- How long a booting match server waits for its teleporting party to
+--- arrive with the lobby's vote. A reserved server's scripts run before
+--- anyone has joined, so this window is the difference between reading the
+--- vote and silently defaulting. Generous because the cost of waiting is a
+--- few seconds on the loading screen, and the cost of not waiting is the
+--- map vote appearing not to work at all.
+Constants.ARRIVAL_WAIT_SECONDS = 10
+
 -- ===========================================================================
 -- Placement
 -- ===========================================================================

@@ -123,6 +123,11 @@ function TeleportGate.send(players: { Player }, launch: Types.MatchLaunchData): 
 	-- than a bare call because a raised teleport error would otherwise kill
 	-- the lobby's state machine and leave everyone stuck in a launching
 	-- state with no way out.
+	print(
+		`[td-launch] lobby teleporting {#players} player(s) to place {Places.MATCH_PLACE_ID} `
+			.. `mapId="{launch.mapId}" difficultyId="{launch.difficultyId}"`
+	)
+
 	local ok, err = pcall(function()
 		TeleportService:TeleportAsync(Places.MATCH_PLACE_ID, players, options)
 	end)

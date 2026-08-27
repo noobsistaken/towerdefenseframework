@@ -161,7 +161,12 @@ local function resolveMatchConfig(): (Types.MapConfig, Types.DifficultyConfig)
 		-- ArrivalGate validates it against the same allowlists the lobby
 		-- voted over and falls back to defaults, so the ids below are always
 		-- real and the `find` calls that follow always succeed.
-		local launch = ArrivalGate.resolveFrom(Players:GetPlayers())
+		--
+		-- resolveOnArrival, not resolveFrom: this runs at server boot, which
+		-- on a reserved server happens BEFORE the teleporting party joins.
+		-- Reading the player list here found it empty every time and quietly
+		-- took the default map.
+		local launch = ArrivalGate.resolveOnArrival(Constants.ARRIVAL_WAIT_SECONDS)
 		mapId = launch.mapId
 		difficultyId = launch.difficultyId
 	end

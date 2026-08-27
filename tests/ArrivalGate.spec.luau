@@ -96,6 +96,27 @@ describe("ArrivalGate.parse: defaults", function()
 	end)
 end)
 
+describe("ArrivalGate.tryResolveFrom: the property the arrival wait rests on", function()
+	it("reports nil when nobody is carrying data, rather than a default", function()
+		-- This distinction is the whole fix for the map vote. A booting
+		-- reserved server sees an EMPTY player list - its party has not
+		-- finished joining yet - and the old resolveFrom answered that with
+		-- the default map, indistinguishable from a real vote for it. The
+		-- match then built that map every time, whatever the lobby chose.
+		-- Returning nil is what lets the caller tell "no data yet" from "the
+		-- data says default" and wait for the party instead.
+		expect(ArrivalGate.tryResolveFrom({})).toBeNil()
+	end)
+
+	it("still hands resolveFrom its default when the list is empty", function()
+		-- The old contract, unchanged, for callers that cannot wait.
+		local result = ArrivalGate.resolveFrom({})
+
+		expect(result.mapId).toBe(MapRegistry.DEFAULT_ID)
+		expect(result.difficultyId).toBe(Difficulty.DEFAULT_ID)
+	end)
+end)
+
 describe("ArrivalGate.parse: legitimate payloads", function()
 	it("accepts every map the lobby could have voted for", function()
 		-- If this ever fails, the lobby can send something the match refuses,
