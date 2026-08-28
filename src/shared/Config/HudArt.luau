@@ -60,10 +60,18 @@ end
 --- Near-uniform dark textures for the flat interiors of panels, applied
 --- as inset Crop ImageLabels so no surface reads as an empty black void.
 --- Different rooms wear different weaves; all read as one material family.
+--- Regenerated once, because the first set was prompted for "extremely low
+--- contrast, near-uniform" and delivered exactly that: measured standard
+--- deviation of 1.7 on the brushed tile, which is a flat colour with a
+--- rumour of a pattern. It read as nothing on screen at any transparency
+--- worth using. This set asks for a pattern that is VISIBLE while staying
+--- dark, and measures 20.0 / 27.2 / 22.0 - between five and twelve times
+--- the contrast - at a mean luminance of 40-48, still dark enough for white
+--- text to sit on.
 HudArt.TEXTURES = {
-	Brushed = "rbxassetid://119105817559960",
-	Carbon = "rbxassetid://73947478563284",
-	Hexmesh = "rbxassetid://81371512190088",
+	Brushed = "rbxassetid://132122291275194",
+	Carbon = "rbxassetid://121799022617636",
+	Hexmesh = "rbxassetid://90274878629327",
 } :: { [string]: string }
 
 function HudArt.texture(name: string): string

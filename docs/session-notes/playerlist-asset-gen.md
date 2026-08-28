@@ -107,3 +107,24 @@ it inflates the auto-size into a screen-height void. Hit three times
 (shop bar, roster, tower inspector). For auto-sized panels the fix is
 UiArt.Frame: the sliced image IS the host, so it tracks the resolved
 height and needs no scale child at all.
+
+## Run 4 - the textures, regenerated (3 assets, 0 retries)
+
+The first texture set was prompted for "extremely low contrast,
+near-uniform" and delivered precisely that. Measured standard deviation
+on the brushed tile: 1.7. That is a flat colour with a rumour of a
+pattern, and no transparency setting can rescue it - at 0.45 it was
+invisible and at 0.18 it was still invisible, because there was nothing
+there to see.
+
+Reprompted for a pattern that is VISIBLE while staying dark - "defined
+highlights and shadow in the grooves, medium contrast" - and measured
+the result rather than judging it: stddev 20.0 / 27.2 / 22.0, between
+five and twelve times the old set, at a mean luminance of 40-48 so white
+text still sits on it comfortably.
+
+LESSON: "subtle" is a rendering decision, not a generation one. Generate
+the pattern with real contrast and dial it back with ImageTransparency,
+because you can always hide a texture you have and never reveal one you
+do not. Measure stddev before and after; the eye cannot judge a 1.7
+against a 20 in a thumbnail.
