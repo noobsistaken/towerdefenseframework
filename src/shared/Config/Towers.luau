@@ -634,7 +634,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(7, 7),
 		defaultTargeting = "First" :: Types.TargetingMode,
 		perPlayerCap = 8,
-		rig = "SciFiRobot",
+		rig = "Cat6Heavy",
 		levels = {
 			makeLevel(700, 20, 1.8, 58, 8, {}, Vector3.new(6, 6, 6), Color3.fromRGB(96, 108, 122)),
 			makeLevel(600, 33, 2.0, 62, 9, {}, Vector3.new(6.5, 6.5, 6.5), Color3.fromRGB(106, 120, 136)),
@@ -695,7 +695,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(6, 6),
 		defaultTargeting = "Strongest" :: Types.TargetingMode,
 		perPlayerCap = 0,
-		rig = "ArmySoldier2",
+		rig = "InsurgentRaider",
 		levels = {
 			makeLevel(600, 34, 1.6, 48, 0, {}, Vector3.new(5, 7, 5), Color3.fromRGB(132, 106, 84)),
 			makeLevel(500, 55, 1.7, 52, 0, {}, Vector3.new(5.5, 8, 5.5), Color3.fromRGB(146, 116, 92)),
@@ -777,7 +777,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(7, 7),
 		defaultTargeting = "Strongest" :: Types.TargetingMode,
 		perPlayerCap = 6,
-		rig = "SciFiRobot",
+		rig = "Cat6Sniper",
 		ability = {
 			id = "CoilSurge",
 			displayName = "Coil Surge",
@@ -930,7 +930,7 @@ local DEFINITIONS: { [string]: Types.TowerDefinition } = {
 		footprint = Vector2.new(9, 9),
 		defaultTargeting = "Last" :: Types.TargetingMode,
 		perPlayerCap = 4,
-		rig = "SciFiRobot",
+		rig = "Cat6Specialist",
 		levels = {
 			makeLevel(
 				2200,
