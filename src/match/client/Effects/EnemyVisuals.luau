@@ -35,10 +35,31 @@ local EnemyVisuals = {}
 
 --- Bars stop rendering past this. A bar 400 studs away is a pixel, and at 200
 --- enemies the ones you cannot read are most of the cost.
-local BAR_MAX_DISTANCE = 260
+--- How far a bar or a damage number stays visible.
+---
+--- Raised from 260 after measuring what it actually culled: with the camera
+--- a normal 232 studs back, NINE of eleven live enemies were already past
+--- it and their bars were simply not drawn. A tower defence is watched from
+--- across the field, so the old figure was tuned for a camera this game
+--- never uses. The map is 340 studs corner to corner; this covers it from
+--- anywhere a player can stand.
+local BAR_MAX_DISTANCE = 520
 
-local BAR_WIDTH = 4
-local BAR_HEIGHT = 0.9
+--- Bar size in PIXELS, not studs.
+---
+--- This is the actual fix for "the bars don't show". A BillboardGui sized
+--- in Scale is sized in STUDS, so it shrinks with distance: a 4-stud bar
+--- measured 0x0 on screen at 232 studs, which is what a player sees for
+--- most of a wave. Sizing in offset pins it to a constant on-screen size,
+--- which is what every game with a far camera does - the bar has to be
+--- readable at the distance the game is PLAYED from, not at the distance
+--- it was authored from.
+local BAR_WIDTH = 64
+local BAR_HEIGHT = 11
+
+--- Damage numbers had the same defect and the same fix.
+local NUMBER_WIDTH = 64
+local NUMBER_HEIGHT = 22
 
 --- The bar's drain colour by remaining fraction: full is green, half is
 --- yellow, empty is red - one hue sweep, so the colour IS the reading and
@@ -296,7 +317,7 @@ local function buildBar(part: BasePart): (BillboardGui, Frame, TextLabel)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "HealthBar"
 	gui.Adornee = part
-	gui.Size = UDim2.fromScale(BAR_WIDTH, BAR_HEIGHT)
+	gui.Size = UDim2.fromOffset(BAR_WIDTH, BAR_HEIGHT)
 	gui.SizeOffset = Vector2.zero
 	gui.StudsOffsetWorldSpace = Vector3.new(0, part.Size.Y / 2 + 1.6, 0)
 	gui.AlwaysOnTop = false
@@ -367,7 +388,7 @@ local function spawnNumber(position: Vector3, amount: number)
 	anchor.Parent = workspace
 
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromScale(4, 1.4)
+	gui.Size = UDim2.fromOffset(NUMBER_WIDTH, NUMBER_HEIGHT)
 	gui.AlwaysOnTop = true
 	gui.MaxDistance = BAR_MAX_DISTANCE
 	gui.Parent = anchor
